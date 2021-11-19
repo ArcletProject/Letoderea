@@ -5,7 +5,7 @@
 ## 安装
 ### 从 PyPI 安装
 ``` bash
-pip install arclet-lotoderea
+pip install arclet-letoderea
 ```
 
 ## 样例
