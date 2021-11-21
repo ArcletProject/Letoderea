@@ -14,15 +14,19 @@ class ArgumentPackage:
     annotation: Any
     value: Any
 
-    __slots__ = "name", "value", "annotation"
+    __slots__ = ("name", "value", "annotation")
 
     def __init__(self, name, annotation, value):
         self.name = name
         self.annotation = annotation
         self.value = value
 
-    def parse(self):
-        return {self.name: self.value}
+    def __repr__(self):
+        return (
+            "<ArgumentPackage name={0} annotation={1} value={2}".format(
+                self.name, self.annotation, self.value
+            )
+        )
 
 
 async def run_always_await(callable_target, *args, **kwargs):
