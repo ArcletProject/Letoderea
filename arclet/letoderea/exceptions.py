@@ -6,14 +6,6 @@ class UndefinedRequirement(Exception):
     pass
 
 
-class DecoratorTargetError(Exception):
-    pass
-
-
-class DecoratorSupplementError(Exception):
-    pass
-
-
 class MultipleInserter(Exception):
     pass
 
