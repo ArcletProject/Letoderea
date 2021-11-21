@@ -2,9 +2,8 @@ import traceback
 from typing import Tuple, Dict, Type, Any, Union, Callable
 from .entities.subscriber import Subscriber
 from .entities.event import Insertable, ParamRet
-from .exceptions import UndefinedRequirement, UnexpectedArgument, DecoratorSupplementError, MultipleInserter, \
-    RepeatedInserter
-from .utils import argument_analysis, run_always_await, ArgumentPackage
+from .exceptions import UndefinedRequirement, UnexpectedArgument, MultipleInserter, RepeatedInserter
+from .utils import argument_analysis, run_always_await
 from .entities.decorator import TemplateDecorator
 
 
@@ -35,15 +34,11 @@ async def await_exec_target(
 def decorator_before_handler(decorator: TemplateDecorator, event_args):
     if "before_parser" not in decorator.__disable__:
         for k, v in event_args.items():
-            result = decorator.before_parser(ArgumentPackage(k, v.__class__, v))
-            if result.__class__ != decorator.supplement_type:
-                raise DecoratorSupplementError(
-                    f"result's type: {result.__class__} doesnt same as {decorator.supplement_type}"
-                )
-            if not decorator.keep:
-                event_args[k] = result
-            else:
-                event_args[decorator.supplement_type.__name__] = result
+            if not decorator.may_target_type or (decorator.may_target_type and type(v) is decorator.may_target_type):
+                result = decorator.supply_wrapper(k, v)
+                if result is None:
+                    continue
+                event_args.update(result)
     return event_args
 
 
@@ -66,12 +61,12 @@ def before_parser(decorators, event_data_handler):
     try:
         if event_inserter:
             event_args.update(inserter_handler(event_inserter))
+    except (RepeatedInserter, MultipleInserter):
+        traceback.print_exc()
+    finally:
         if decorators:
             for decorator in decorators:
                 event_args = decorator_before_handler(decorator, event_args)
-    except DecoratorSupplementError:
-        traceback.print_exc()
-    finally:
         return event_args
 
 
@@ -95,8 +90,10 @@ def param_parser(params, event_args):
             arguments_dict.setdefault(name, event_args.get(annotation.__name__))
         elif name in event_args:
             arguments_dict.setdefault(name, event_args[name])
-        elif default:
+        elif default is not None:
             arguments_dict[name] = default
+            if isinstance(default, Callable):
+                arguments_dict[name] = default()
         if name not in arguments_dict:
             raise UnexpectedArgument(f"a unexpected extra argument: {{{annotation} {name}: {default}}}")
 
@@ -104,23 +101,17 @@ def param_parser(params, event_args):
 
 
 def decorator_after_handler(decorator: TemplateDecorator, argument):
-    if 'after_parser' not in decorator.__disable__:
+    if "after_parser" not in decorator.__disable__:
         for k, v in argument.items():
-            result = decorator.after_parser(ArgumentPackage(k, v.__class__, v))
-            if result.__class__ != decorator.supplement_type:
-                raise DecoratorSupplementError(
-                    f"result's type: {result.__class__} doesnt same as {decorator.supplement_type}"
-                )
-            argument[k] = result
+            result = decorator.supply_wrapper(k, v)
+            if result is None:
+                continue
+            argument.update(result)
     return argument
 
 
 def after_parser(decorators, argument):
-    try:
-        if decorators:
-            for decorator in decorators:
-                argument = decorator_after_handler(decorator, argument)
-    except DecoratorSupplementError:
-        traceback.print_exc()
-    finally:
-        return argument
+    if decorators:
+        for decorator in decorators:
+            argument = decorator_after_handler(decorator, argument)
+    return argument
