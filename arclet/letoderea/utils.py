@@ -50,3 +50,16 @@ def argument_analysis(callable_target: Callable):
 @lru_cache(4096)
 def iscoroutinefunction(o):
     return inspect.iscoroutinefunction(o)
+
+
+def event_class_generator(target=TemplateEvent):
+    for i in target.__subclasses__():
+        yield i
+        if i.__subclasses__():
+            yield from event_class_generator(i)
+
+
+def search_event(name: str):
+    for i in event_class_generator():
+        if i.__name__ == name:
+            return i
