@@ -38,6 +38,9 @@ class TemplateEvent:
         return self.param_export(
         )
 
+    def get(self, attr_name: str):
+        return getattr(self, attr_name, None)
+
 
 class StructuredEvent(TemplateEvent):
     """
