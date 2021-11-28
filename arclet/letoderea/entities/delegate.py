@@ -1,6 +1,7 @@
 import asyncio
 from typing import List, Union, Dict, Any
 from .subscriber import Subscriber
+from ..exceptions import PropagationCancelled
 from ..handler import await_exec_target
 from ..utils import Event_T
 
@@ -47,7 +48,7 @@ class EventDelegate:
     async def executor(self, event: Event_T = None):
         current_event = getattr(self, "wait_event", event)
         event_params = current_event.get_params
-        self.subscribers.sort(key=lambda x: x.priority)
+        # self.subscribers.sort(key=lambda x: x.priority)
         coroutine = [
             await_exec_target(
                 target,
@@ -56,6 +57,6 @@ class EventDelegate:
             for target in self.subscribers
         ]
         (results, _) = await asyncio.wait(coroutine)
-        for result in results:
-            if result.exception() == "PropagationCancelled":
+        for task in results:
+            if task.exception().__class__ is PropagationCancelled:
                 break
