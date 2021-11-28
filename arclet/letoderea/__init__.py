@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import List, Union, Callable, Type, Dict, Any
+from typing import List, Union, Type, Dict, Any
 from .entities.delegate import EventDelegate
 from .entities.event import TemplateEvent
 from .entities.publisher import Publisher
@@ -14,6 +14,7 @@ class EventSystem:
     publisher_list: List[Publisher]
     safety_interval: float
     last_run: datetime
+    current_event: Union[TemplateEvent, Dict[str, Any]]
 
     def __init__(
             self,
@@ -28,23 +29,25 @@ class EventSystem:
 
     def event_spread(self, target: Union[TemplateEvent, Dict[str, Any]]):
         if (datetime.now() - self.last_run).total_seconds() >= self.safety_interval:
+            self.current_event = target
             try:
-                for pub in self.publisher_generator(target):
-                    if pub.on_event(target):
-                        self.loop.create_task(pub.current_executor)
+                for pub in self.publisher_generator():
+                    pub.on_event(self)
             except asyncio.CancelledError:
                 return
         self.last_run = datetime.now()
 
-    def publisher_generator(self, current_event):
-        return list(
+    def publisher_generator(self):
+        able_pubs = list(
             filter(
-                lambda x: all([condition.judge(current_event) for condition in x.external_conditions]),
-                self.publisher_list,
+                lambda x: all([condition.judge(self.current_event) for condition in x.external_conditions]),
+                self.publisher_list
             )
         )
+        able_pubs.sort(key=lambda x: x.priority)
+        return able_pubs
 
-    def get_publisher(self, target: Type[TemplateEvent]):
+    def get_publisher(self, target: Union[Type[TemplateEvent], Condition_T]):
         p_list = []
         for publisher in self.publisher_list:
             if target in publisher:
@@ -53,7 +56,7 @@ class EventSystem:
             return p_list
         return False
 
-    def remove_publisher(self, target):
+    def remove_publisher(self, target: Publisher):
         self.publisher_list.remove(target)
 
     def register(
@@ -76,10 +79,9 @@ class EventSystem:
         decorators = decorators or []
 
         def register_wrapper(exec_target):
-            if isinstance(exec_target, Callable):
+            if not isinstance(exec_target, Subscriber):
                 exec_target = Subscriber(
                     callable_target=exec_target,
-                    priority=priority,
                     decorators=decorators
                 )
             for e in events:
@@ -87,14 +89,14 @@ class EventSystem:
                 _event_handler = EventDelegate(event=e)
                 _event_handler += exec_target
                 if not may_publishers:
-                    self.publisher_list.append(Publisher(conditions, _event_handler))
+                    self.publisher_list.append(Publisher(priority, conditions, _event_handler))
                 else:
                     for m_publisher in may_publishers:
                         if m_publisher.equal_conditions(conditions):
                             m_publisher += _event_handler
                             break
                     else:
-                        self.publisher_list.append(Publisher(conditions, _event_handler))
+                        self.publisher_list.append(Publisher(priority, conditions, _event_handler))
 
             return exec_target
 
