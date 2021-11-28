@@ -12,3 +12,7 @@ class MultipleInserter(Exception):
 
 class RepeatedInserter(Exception):
     pass
+
+
+class PropagationCancelled(Exception):
+    pass
