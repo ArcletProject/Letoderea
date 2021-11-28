@@ -16,7 +16,7 @@ class TestCondition(TemplateCondition):
         self.hour = hour
         self.minute = minute
 
-    def judge(self) -> bool:
+    def judge(self, *args, **kwargs) -> bool:
         now = datetime.now()
         return now > datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
 
