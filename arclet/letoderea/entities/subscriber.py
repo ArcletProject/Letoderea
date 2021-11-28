@@ -5,7 +5,6 @@ from ..utils import argument_analysis
 
 class SubscriberInterface:
     callable_target: Callable
-    priority: int = 16
 
 
 class Subscriber(SubscriberInterface):
@@ -14,11 +13,9 @@ class Subscriber(SubscriberInterface):
             callable_target: Callable,
             *,
             subscriber_name: Optional[str] = None,
-            priority: Optional[int] = 16,
             decorators: Optional[List[TemplateDecorator]] = None
     ) -> None:
         self.callable_target = callable_target
-        self.priority = priority
         self.subscriber_name = subscriber_name or callable_target.__name__
         self.decorators = decorators
 
@@ -71,7 +68,6 @@ class Subscriber(SubscriberInterface):
             subscriber = Subscriber(
                 func,
                 subscriber_name=subscriber_name,
-                priority=priority,
                 decorators=decorators
             )
             return subscriber
