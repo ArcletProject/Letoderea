@@ -1,18 +1,27 @@
-from typing import Union, Dict, Optional, List, Any, Coroutine
+from typing import Union, Dict, Optional, List, Any, TYPE_CHECKING
 from .delegate import EventDelegate, Subscriber
 from ..utils import Condition_T, Event_T
 from .event import TemplateEvent
 from .condition import TemplateCondition
 
+if TYPE_CHECKING:
+    from .. import EventSystem
+
 
 class Publisher:
     external_conditions: List[Condition_T]
     internal_delegate: Dict[str, EventDelegate]
-    current_executor: Coroutine
+    priority: int
 
-    def __init__(self, conditions: Optional[List[Condition_T]] = None, *delegates: Optional[EventDelegate]):
+    def __init__(
+            self,
+            priority: int = 16,
+            conditions: Optional[List[Condition_T]] = None,
+            *delegates: Optional[EventDelegate]
+    ):
         self.external_conditions = conditions or []
         self.internal_delegate = {}
+        self.priority = priority
         if delegates:
             for delegate in delegates:
                 self.__iadd__(delegate)
@@ -51,16 +60,16 @@ class Publisher:
         self.external_conditions.sort(key=lambda x: id(x))
         return cl == self.external_conditions
 
-    def on_event(self, target: Union[TemplateEvent, Dict[str, Any]]):
+    def on_event(self, event_system: "EventSystem"):
+        target: Union[TemplateEvent, Dict[str, Any]] = event_system.current_event
         event_name = target.__class__.__name__
         if isinstance(target, dict):
             event_name = target.get('type')
         if event_name in self.internal_delegate.keys():
             if isinstance(target, TemplateEvent):
-                self.current_executor = self.internal_delegate[event_name].executor(target)
+                event_system.loop.create_task(self.internal_delegate[event_name].executor(target))
             else:
-                self.current_executor = self.internal_delegate[event_name].parse_to_event(target).executor()
-            return True
+                event_system.loop.create_task(self.internal_delegate[event_name].parse_to_event(target).executor())
 
     def remove_delegate(self, target: Union[str, Event_T]):
         if isinstance(target, str):
