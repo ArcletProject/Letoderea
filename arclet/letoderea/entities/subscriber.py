@@ -18,6 +18,7 @@ class Subscriber(SubscriberInterface):
         self.callable_target = callable_target
         self.subscriber_name = subscriber_name or callable_target.__name__
         self.decorators = decorators
+        self.params = argument_analysis(self.callable_target)
 
     def __call__(self, *args, **kwargs):
         return self.callable_target(*args, **kwargs)
@@ -41,10 +42,6 @@ class Subscriber(SubscriberInterface):
     @name.setter
     def name(self, new_name):
         self.subscriber_name = new_name
-
-    @property
-    def params(self):
-        return argument_analysis(self.callable_target)
 
     @staticmethod
     def set(
