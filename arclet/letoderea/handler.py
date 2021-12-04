@@ -16,7 +16,7 @@ async def await_exec_target(
         is_subscriber = True
     decorators = target.decorators if is_subscriber else []
     callable_target = target.callable_target if is_subscriber else target
-    target_param = argument_analysis(callable_target)
+    target_param = target.params if is_subscriber else argument_analysis(callable_target)
     try:
         event_args = before_parser(decorators, event_data_handler)
         arguments = param_parser(target_param, event_args)
@@ -33,7 +33,7 @@ async def await_exec_target(
 
 def decorator_before_handler(decorator: TemplateDecorator, event_args):
     if "before_parser" not in decorator.__disable__:
-        for k, v in event_args.items():
+        for k, v in event_args.copy().items():
             if not decorator.may_target_type or (decorator.may_target_type and type(v) is decorator.may_target_type):
                 result = decorator.supply_wrapper(k, v)
                 if result is None:
@@ -102,7 +102,7 @@ def param_parser(params, event_args):
 
 def decorator_after_handler(decorator: TemplateDecorator, argument):
     if "after_parser" not in decorator.__disable__:
-        for k, v in argument.items():
+        for k, v in argument.copy().items():
             result = decorator.supply_wrapper(k, v)
             if result is None:
                 continue
