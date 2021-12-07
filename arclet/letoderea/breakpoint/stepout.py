@@ -3,10 +3,10 @@ from typing import Type, Union, Callable, Optional
 from ..handler import await_exec_target
 from ..utils import search_event
 from ..entities.event import TemplateEvent, ParamRet
-from ..entities.condition import TemplateCondition
+from ..entities.condition import EventCondition
 
 
-class StepOut(TemplateCondition):
+class StepOut(EventCondition):
     event_type: Type[TemplateEvent]
     handler: Callable
     target_args_handler: Union[Callable[[], ParamRet], ParamRet]
