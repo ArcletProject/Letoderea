@@ -2,7 +2,8 @@ import traceback
 from typing import Tuple, Dict, Type, Any, Union, Callable
 from .entities.subscriber import Subscriber
 from .entities.event import Insertable, ParamRet
-from .exceptions import UndefinedRequirement, UnexpectedArgument, MultipleInserter, RepeatedInserter
+from .exceptions import UndefinedRequirement, UnexpectedArgument, MultipleInserter, RepeatedInserter, ExecutionStop, \
+    PropagationCancelled
 from .utils import argument_analysis, run_always_await
 from .entities.decorator import TemplateDecorator
 
@@ -17,6 +18,7 @@ async def await_exec_target(
     decorators = target.decorators if is_subscriber else []
     callable_target = target.callable_target if is_subscriber else target
     target_param = target.params if is_subscriber else argument_analysis(callable_target)
+
     try:
         event_args = before_parser(decorators, event_data_handler)
         arguments = param_parser(target_param, event_args)
@@ -24,6 +26,8 @@ async def await_exec_target(
         result = await run_always_await(callable_target, **real_arguments)
     except (UnexpectedArgument, UndefinedRequirement):
         traceback.print_exc()
+        raise
+    except (ExecutionStop, PropagationCancelled):
         raise
     except Exception as e:
         traceback.print_exc()
