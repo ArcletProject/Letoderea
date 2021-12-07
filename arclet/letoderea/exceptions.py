@@ -16,3 +16,7 @@ class RepeatedInserter(Exception):
 
 class PropagationCancelled(Exception):
     pass
+
+
+class ExecutionStop(Exception):
+    pass
