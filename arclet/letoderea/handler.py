@@ -10,7 +10,7 @@ from .entities.decorator import TemplateDecorator
 
 async def await_exec_target(
         target: Union[Subscriber, Callable],
-        event_data_handler: Union[Callable[[], ParamRet], ParamRet]
+        event_data_handler: Union[Callable[[], ParamRet], Dict] = None
 ):
     is_subscriber = False
     if isinstance(target, Subscriber):
@@ -18,9 +18,12 @@ async def await_exec_target(
     decorators = target.decorators if is_subscriber else []
     callable_target = target.callable_target if is_subscriber else target
     target_param = target.params if is_subscriber else argument_analysis(callable_target)
-
+    if event_data_handler:
+        event_data = event_data_handler() if isinstance(event_data_handler, Callable) else ((), event_data_handler)
+    else:
+        event_data = ((), {})
     try:
-        event_args = before_parser(decorators, event_data_handler)
+        event_args = before_parser(decorators, event_data)
         arguments = param_parser(target_param, event_args)
         real_arguments = after_parser(decorators, arguments)
         result = await run_always_await(callable_target, **real_arguments)
@@ -60,8 +63,8 @@ def inserter_handler(inserters: Tuple[Union[Type[Insertable], Insertable]]) -> D
     return extra
 
 
-def before_parser(decorators, event_data_handler):
-    (event_inserter, event_args) = event_data_handler()
+def before_parser(decorators, event_data):
+    event_inserter, event_args = event_data
     try:
         if event_inserter:
             event_args.update(inserter_handler(event_inserter))
