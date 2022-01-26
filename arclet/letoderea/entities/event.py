@@ -47,7 +47,7 @@ class StructuredEvent(TemplateEvent):
     可结构化的事件类
     """
     def __init__(self, **kwargs):
-        for k, v in kwargs:
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
 

@@ -101,6 +101,8 @@ def param_parser(params, event_args):
             arguments_dict[name] = default
             if isinstance(default, Callable):
                 arguments_dict[name] = default()
+        elif values := list(filter(lambda x: isinstance(x, annotation), event_args.values())):
+            arguments_dict[name] = values[0]
         if name not in arguments_dict:
             raise UnexpectedArgument(f"a unexpected extra argument: {{{annotation} {name}: {default}}}")
 

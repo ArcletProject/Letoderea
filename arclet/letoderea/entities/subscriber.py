@@ -46,7 +46,6 @@ class Subscriber(SubscriberInterface):
     @staticmethod
     def set(
             subscriber_name: Optional[str] = None,
-            priority: int = 16,
             decorators: List[TemplateDecorator] = None
     ):
         """该方法生成一个订阅器实例，该订阅器负责调控装饰的可执行函数
