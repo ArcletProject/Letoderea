@@ -31,16 +31,19 @@ class ExampleEvent(TemplateEvent):
         )
 
 
-@es.register(ExampleEvent, conditions=[TestCondition(23, 30)])
+@es.register(ExampleEvent, conditions=[TestCondition(22, 30)])
 async def test(a: str = "hello"):
-    for i in range(5):
-        await asyncio.sleep(0.1)
-        print(a)
-    loop.stop()
+    print(a)
 
 
 b = ExampleEvent()
 b.msg = 1
-es.event_spread(b)
-loop.run_forever()
+
+
+async def main():
+    for i in range(5):
+        await asyncio.sleep(0.1)
+        es.event_spread(b)
+
+loop.run_until_complete(main())
 

@@ -27,10 +27,10 @@ delegate += Subscriber.set()(test)
 
 async def main():
     a = ExampleEvent()
-    for i in range(10000):
+    for i in range(20000):
         await delegate.executor(a)
 
 start = time.time()
 loop.run_until_complete(main())
 
-print(min(test_stack[0], 10000) / (time.time() - start), 'o/s')
+print(min(test_stack[0], 20000) / (time.time() - start), 'o/s')

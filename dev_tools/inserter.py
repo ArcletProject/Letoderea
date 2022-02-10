@@ -23,15 +23,16 @@ class ExampleEvent(TemplateEvent):
     def get_params(self):
         return self.param_export(
             TestInserter,
+            ExampleEvent=self,
             int=self.msg
         )
 
 
 @es.register(ExampleEvent)
-async def test(m: int, a: str):
+async def test(m: int, a: str, e: ExampleEvent):
     for i in range(5):
         await asyncio.sleep(0.1)
-        print(m, a)
+        print(m, a, e)
     loop.stop()
 
 

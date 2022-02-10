@@ -18,5 +18,5 @@ class PropagationCancelled(Exception):
     pass
 
 
-class ExecutionStop(Exception):
+class ParsingStop(Exception):
     pass

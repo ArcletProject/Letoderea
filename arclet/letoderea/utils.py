@@ -5,6 +5,7 @@ from typing import Type, Union, Callable, Any
 from .entities.condition import TemplateCondition
 from .entities.event import TemplateEvent
 
+Empty = inspect.Signature.empty
 Event_T = Union[Type[TemplateEvent], TemplateEvent]
 Condition_T = Union[Type[TemplateCondition], TemplateCondition]
 
@@ -41,7 +42,7 @@ def argument_analysis(callable_target: Callable):
         (
             name,
             param.annotation if param.annotation is not inspect.Signature.empty else None,
-            param.default if param.default is not inspect.Signature.empty else None,
+            param.default  # if param.default is not inspect.Signature.empty else None,
         )
         for name, param in inspect.signature(callable_target).parameters.items()
     ]

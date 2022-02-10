@@ -1,10 +1,10 @@
 import traceback
-from typing import Tuple, Dict, Type, Any, Union, Callable
+from typing import Tuple, Dict, Type, Any, Union, Callable, List
 from .entities.subscriber import Subscriber
 from .entities.event import Insertable, ParamRet
-from .exceptions import UndefinedRequirement, UnexpectedArgument, MultipleInserter, RepeatedInserter, ExecutionStop, \
+from .exceptions import UndefinedRequirement, UnexpectedArgument, MultipleInserter, RepeatedInserter, ParsingStop, \
     PropagationCancelled
-from .utils import argument_analysis, run_always_await
+from .utils import argument_analysis, run_always_await, Empty
 from .entities.decorator import TemplateDecorator
 
 
@@ -24,13 +24,13 @@ async def await_exec_target(
         event_data = ((), {})
     try:
         event_args = before_parser(decorators, event_data)
-        arguments = param_parser(target_param, event_args)
+        arguments = await param_parser(target_param, event_args)
         real_arguments = after_parser(decorators, arguments)
         result = await run_always_await(callable_target, **real_arguments)
     except (UnexpectedArgument, UndefinedRequirement):
         traceback.print_exc()
         raise
-    except (ExecutionStop, PropagationCancelled):
+    except (ParsingStop, PropagationCancelled):
         raise
     except Exception as e:
         traceback.print_exc()
@@ -77,12 +77,15 @@ def before_parser(decorators, event_data):
         return event_args
 
 
-def param_parser(params, event_args):
+async def param_parser(
+        params: List[Tuple[str, Any, Any]],
+        event_args: Dict[str, Any],
+) -> Dict[str, Any]:
     """
     将调用函数提供的参数字典与事件提供的参数字典进行比对，并返回正确的参数字典
 
     Args:
-        params: 调用的函数的参数字典
+        params: 调用的函数的参数列表
         event_args: 函数可返回的参数字典
     Returns:
         函数需要的参数字典
@@ -97,10 +100,13 @@ def param_parser(params, event_args):
             arguments_dict.setdefault(name, event_args.get(annotation.__name__))
         elif name in event_args:
             arguments_dict.setdefault(name, event_args[name])
-        elif default is not None:
+        elif default is not Empty:
             arguments_dict[name] = default
             if isinstance(default, Callable):
                 arguments_dict[name] = default()
+            elif isinstance(default, TemplateDecorator) and default.__class__.__name__ == "Depend":
+                __depend_result = default.supply_wrapper("event_data", event_args)
+                arguments_dict[name] = await __depend_result['event_data']
         elif values := list(filter(lambda x: isinstance(x, annotation), event_args.values())):
             arguments_dict[name] = values[0]
         if name not in arguments_dict:

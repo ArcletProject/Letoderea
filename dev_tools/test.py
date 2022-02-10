@@ -29,10 +29,7 @@ for _ in range(count):
     tasks.append(await_exec_target(test, a.get_params))
 
 start = time.time()
-try:
-    loop.run_until_complete(asyncio.gather(*tasks))
-except:
-    pass
+loop.run_until_complete(asyncio.gather(*tasks))
 end = time.time()
 n = end - start
 print(f"used {n}, {count/n} o/s")
