@@ -13,6 +13,13 @@ judge = Callable[..., bool]
 
 
 class _AuxHandler:
+    """
+    参数辅助器基类，用于修饰参数, 或者判断条件
+
+    Args:
+        keep: 是否保留未装饰的参数,若为False则会覆盖原有参数
+    """
+
     scope: scopes
     aux_type: aux_types
     handler: Union[supply, judge]
@@ -30,6 +37,18 @@ class _AuxHandler:
         self.handler = handler
         self.keep = keep
 
+    async def supply_wrapper_keep(self, arg_type: type, args: Dict[str, Any]):
+        h: supply = self.handler
+        result = {}
+        for k, v in args.items():
+            arg = await run_always_await(h, ArgumentPackage(k, arg_type, v))
+            if arg is None:
+                continue
+            type_arg = type(arg)
+            if type_arg is not arg_type:
+                result[arg.__class__] = {k: arg}
+        return result
+
     async def supply_wrapper(self, arg_type: type, args: Dict[str, Any]):
         h: supply = self.handler
         result = {}
@@ -37,10 +56,7 @@ class _AuxHandler:
             arg = await run_always_await(h, ArgumentPackage(k, arg_type, v))
             if arg is None:
                 continue
-            if not self.keep:
-                result[k] = arg
-            else:
-                result[arg.__class__.__name__] = arg
+            result[k] = arg
         return result or args
 
     async def judge_wrapper(self, event: TemplateEvent):

@@ -68,7 +68,10 @@ async def before_parse(
             await handler.judge_wrapper(event_ctx.get())
         if handler.aux_type == 'supply':
             for k, v in event_data.copy().items():
-                event_data[k].update(await handler.supply_wrapper(k, v))
+                if handler.keep:
+                    event_data.update(await handler.supply_wrapper_keep(k, v))
+                else:
+                    event_data[k].update(await handler.supply_wrapper(k, v))
 
 
 async def after_parse(
@@ -87,7 +90,11 @@ async def after_parse(
     for handler in decorator.aux_handlers['after_parse']:
         if handler.aux_type == 'supply':
             for k, v in event_data.copy().items():
-                event_data[k].update(await handler.supply_wrapper(type(v), {k: v}))
+                if handler.keep:
+                    r = await handler.supply_wrapper_keep(type(v), {k: v})
+                    event_data.update(r.popitem()[1])
+                else:
+                    event_data[k].update(await handler.supply_wrapper(type(v), {k: v}))
 
 
 async def execution_complete(decorator: BaseAuxiliary,):
