@@ -18,8 +18,9 @@ class TemplateEvent:
         """该函数用于包装参数"""
         result: ParamRet = {}
         for k, v in kwargs.items():
-            if not result.get(type(v)):
-                result[type(v)] = {}
+            type_v = type(v)
+            if not result.get(type_v):
+                result[type_v] = {}
             result[v.__class__][k] = v
         return result
 

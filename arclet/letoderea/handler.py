@@ -1,5 +1,6 @@
 import traceback
-from typing import Tuple, Dict, Any, Union, Callable, List, Optional
+from inspect import isclass
+from typing import Tuple, Dict, Any, Union, Callable, List
 from .entities.subscriber import Subscriber
 from .entities.event import TemplateEvent, ParamRet
 from .exceptions import UndefinedRequirement, UnexpectedArgument, ParsingStop, PropagationCancelled, JudgementError
@@ -30,9 +31,9 @@ async def await_exec_target(
     try:
         for aux in auxiliaries:
             await before_parse(aux, event_data)
-        arguments, fixed = await param_parser(target_param, event_data, revise)
+        arguments = await param_parser(target_param, event_data, revise)
         if is_subscriber:
-            target.revise_dispatches = fixed
+            target.revise_dispatches = revise
         for aux in auxiliaries:
             await after_parse(aux, arguments)
         result = await run_always_await(callable_target, **arguments)
@@ -106,7 +107,7 @@ async def execution_complete(decorator: BaseAuxiliary,):
 async def param_parser(
         params: List[Tuple[str, Any, Any]],
         event_args: Dict[type, Dict[str, Any]],
-        revise: Optional[Dict[str, Any]] = None,
+        revise: Dict[str, Any],
 ):
     """
     将调用函数提供的参数字典与事件提供的参数字典进行比对，并返回正确的参数字典
@@ -118,22 +119,29 @@ async def param_parser(
     Returns:
         函数需要的参数字典
     """
-    revise = revise or {}
     arguments_dict = {}
     for name, annotation, default in params:
         if not annotation:
             raise UndefinedRequirement(f"a argument: {{<{annotation}> {name}: {default}}} without annotation")
+        kwarg = event_args.get(annotation, {})
+        if not kwarg:
+            for t in event_args.keys():
+                if isclass(annotation) and issubclass(t, annotation):
+                    kwarg = event_args[t]
+                    break
+        try:
+            annotation_name = annotation.__name__
+        except AttributeError:
+            annotation_name = annotation
         if name in revise:
             real_name = revise[name]
-            kwarg = event_args.get(annotation, {})
             arguments_dict[name] = kwarg[real_name]
         else:
-            kwarg = event_args.get(annotation, {})
             if arg := kwarg.get(name):
                 arguments_dict[name] = arg
-            elif arg := kwarg.get(annotation.__name__):
+            elif arg := kwarg.get(annotation_name):
                 arguments_dict[name] = arg
-                revise[name] = annotation.__name__
+                revise[name] = annotation_name
             elif arg := kwarg.get(str(default)):
                 arguments_dict[name] = arg
                 revise[name] = str(default)
@@ -156,4 +164,4 @@ async def param_parser(
                 arguments_dict[name] = __deco_result.get(name)
         if name not in arguments_dict:
             raise UnexpectedArgument(f"a argument: {{{annotation} {name}}} without value")
-    return arguments_dict, revise
+    return arguments_dict

@@ -17,20 +17,22 @@ class ExampleEvent(TemplateEvent):
         )
 
 
-def test(msg: str):
+def test(sr: str):
     pass
 
 
 test = Subscriber(test)
 
 e = ExampleEvent()
+revise = {}
 
 
 async def main():
     for i in range(100000):
-        await param_parser(test.params, e.get_params())
+        await param_parser(test.params, e.get_params(), revise)
         test_stack[0] += 1
 
 start = time.time()
 loop.run_until_complete(main())
 print(round(test_stack[0] / (time.time() - start), 6), 'o/s')
+print(revise)
