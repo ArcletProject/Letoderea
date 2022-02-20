@@ -3,19 +3,13 @@ from typing import Type, Union, Callable, Optional
 from ..handler import await_exec_target
 from ..utils import search_event
 from ..entities.event import TemplateEvent, ParamRet
-from ..entities.condition import EventCondition
+from ..entities.auxiliary import BaseAuxiliary
 
 
-class StepOut(EventCondition):
+class StepOut(BaseAuxiliary):
     event_type: Type[TemplateEvent]
     handler: Callable
-    target_args_handler: Union[Callable[[], ParamRet], ParamRet]
-
-    def judge(self, event: TemplateEvent) -> bool:
-        if type(event) is self.event_type:
-            self.target_args_handler = event.get_params
-            return True
-        return False
+    target_args: ParamRet
 
     def __init__(self, event: Union[Type[TemplateEvent], str]):
         if isinstance(event, str):
@@ -26,6 +20,13 @@ class StepOut(EventCondition):
         self.event_type = event
         self._future: Optional[asyncio.Future] = None
         self._waited: bool = False
+
+        @self.set_aux("before_parse", "judge")
+        def judge(j_event: TemplateEvent) -> bool:
+            if type(j_event) is self.event_type:
+                self.target_args = j_event.get_params()
+                return True
+            return False
 
     def __del__(self):
         if self._future:
@@ -53,7 +54,7 @@ class StepOut(EventCondition):
         try:
             result = await await_exec_target(
                 self.handler,
-                self.target_args_handler
+                self.target_args
             )
             if result is not None and not self._future.done():
                 self._future.set_result(result)

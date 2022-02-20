@@ -13,7 +13,7 @@ class ExampleEvent(TemplateEvent):
 
     def get_params(self):
         return self.param_export(
-            str='aa'
+            m='aa'
         )
 
 
@@ -26,7 +26,7 @@ async def main():
     a = ExampleEvent()
     for i in range(10000):
         await asyncio.sleep(0.0)
-        es.event_spread(a)
+        es.event_publish(a)
 
 start = time.time()
 loop.run_until_complete(main())

@@ -47,10 +47,10 @@ async def main():
     for i in range(0, 4):
         if i % 2 == 0:
             print('>>> event posted with msg: "hello"')
-            es.event_spread(a)
+            es.event_publish(a)
         else:
             print('>>> event posted with msg: "continue!"')
-            es.event_spread(b)
+            es.event_publish(b)
         await asyncio.sleep(1)
 
 

@@ -6,11 +6,7 @@ class UndefinedRequirement(Exception):
     pass
 
 
-class MultipleInserter(Exception):
-    pass
-
-
-class RepeatedInserter(Exception):
+class JudgementError(Exception):
     pass
 
 

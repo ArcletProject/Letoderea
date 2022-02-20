@@ -22,17 +22,17 @@ from arclet.letoderea.entities.event import TemplateEvent
 class ExampleEvent(TemplateEvent):
     def get_params(self):
         return self.param_export(
-            str="I'm here!"
+            msg="I'm here!"
         )
  
 loop = asyncio.get_event_loop()
 es = EventSystem(loop=loop)
 @es.register(ExampleEvent)
-async def test(this_str: str):
-    print(this_str)
+async def test(msg: str):
+    print(msg)
 
 async def main():
-    es.event_spread(ExampleEvent())
+    es.event_publish(ExampleEvent())
     await asyncio.sleep(0.1)
 loop.run_until_complete(main())
 ```

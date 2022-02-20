@@ -1,20 +1,22 @@
 from typing import Type, Dict, List
+from ..builtin.publisher import TemplatePublisher
 from ..entities.subscriber import Subscriber
 from .. import EventSystem, TemplateEvent
 from .stepout import StepOut
-from ..entities.publisher import Publisher
 from ..entities.delegate import EventDelegate
 
 
 class Breakpoint:
     event_system: EventSystem
-    step_publishers: List[Publisher]
+    step_out_publisher: TemplatePublisher
+    step_delegates: List[EventDelegate]
 
     def __init__(self, event_system: EventSystem, priority: int = 15):
         self.event_system = event_system
+        self.step_out_publisher = TemplatePublisher()
         self._step_outs: Dict[Type[TemplateEvent], List[StepOut]] = {}
         self.priority = priority
-        self.step_publishers = []
+        self.step_delegates = []
 
     async def wait(
             self,
@@ -30,15 +32,14 @@ class Breakpoint:
         try:
             return await step_out_condition.wait(timeout)
         finally:
-            for pub in self.event_system.get_publisher(step_out_condition):
-                self.event_system.remove_publisher(pub)
+            self.event_system.publishers.remove(self.step_out_publisher)
             if step_out_condition.done():
                 for step in self._step_outs[event_type]:
                     step.future.cancel()
                 self._step_outs[event_type].clear()
             else:
-                for pub in self.step_publishers:
-                    self.event_system.remove_publisher(pub)
+                for delegate in self.step_delegates:
+                    self.step_out_publisher.remove_delegate(delegate)
 
     def new_subscriber(self, event_type, step_out_condition):
         async def _():
@@ -46,13 +47,12 @@ class Breakpoint:
                 if await step.make_done():
                     break
 
-        subscriber = Subscriber.set()(_)
-        delegate = EventDelegate(event_type)
+        subscriber = Subscriber(_, auxiliaries=[step_out_condition])
+        delegate = EventDelegate(event_type, priority=15)
         delegate += subscriber
-        publisher = Publisher(15, [step_out_condition], delegate)
-        self.event_system.publisher_list.append(publisher)
-        self.step_publishers.append(publisher)
+        self.step_out_publisher.add_delegate(delegate)
+        self.step_delegates.append(delegate)
+        self.event_system.publishers.append(self.step_out_publisher)
 
     def __call__(self, step_out_condition: StepOut, timeout: float = 0.):
         return self.wait(step_out_condition, timeout)
-

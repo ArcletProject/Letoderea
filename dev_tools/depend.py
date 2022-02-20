@@ -1,4 +1,4 @@
-from arclet.letoderea.depend import Depend
+from arclet.letoderea.builtin.depend import Depend
 from arclet.letoderea.handler import await_exec_target
 import asyncio
 from arclet.letoderea.entities.event import TemplateEvent
@@ -16,7 +16,7 @@ class ExampleEvent(TemplateEvent):
 
 def test_depend(m: str):
     if m == 'aa':
-        return True
+        return False
 
 
 def test(m: bool = Depend(test_depend)):
@@ -25,7 +25,7 @@ def test(m: bool = Depend(test_depend)):
 
 async def main():
     a = ExampleEvent()
-    await await_exec_target(test, a.get_params)
+    await await_exec_target(test, [a])
 
 loop.run_until_complete(main())
 

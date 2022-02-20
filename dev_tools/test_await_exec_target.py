@@ -2,6 +2,7 @@ import asyncio
 import time
 from arclet.letoderea.entities.event import TemplateEvent
 from arclet.letoderea.handler import await_exec_target
+from arclet.letoderea.entities.subscriber import Subscriber
 
 loop = asyncio.get_event_loop()
 test_stack = [0]
@@ -15,14 +16,15 @@ class ExampleEvent(TemplateEvent):
         )
 
 
-def test(m: str):
+@Subscriber
+def test():
     test_stack[0] += 1
 
 
 async def main():
     a = ExampleEvent()
     for i in range(100000):
-        await await_exec_target(test, a.get_params)
+        await await_exec_target(test, [a])
 
 
 start = time.time()
