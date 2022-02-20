@@ -41,7 +41,7 @@ class EventSystem:
         publishers = [publisher] if publisher else self.publishers
         delegates = []
         for publisher in publishers:
-            delegates.extend(publisher.require(event.__class__))
+            delegates.extend(publisher.require(event.__class__) or [])
         if (datetime.now() - self.last_run).total_seconds() >= self.safety_interval:
             self.loop.create_task(
                 self.delegate_exec(delegates, event)

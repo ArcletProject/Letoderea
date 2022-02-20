@@ -26,7 +26,7 @@ class Subscriber:
         elif hasattr(self, 'auxiliaries'):
             self.auxiliaries = self.auxiliaries + (auxiliaries or [])
         else:
-            self.auxiliaries = auxiliaries
+            self.auxiliaries = auxiliaries or []
         self.params = argument_analysis(self.callable_target)
         self.internal_arguments = TemplateEvent.param_export(**kwargs)
         self.revise_dispatches = {}
