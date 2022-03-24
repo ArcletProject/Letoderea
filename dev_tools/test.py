@@ -1,5 +1,7 @@
 import asyncio
 import time
+from typing import Union
+
 from arclet.letoderea.handler import await_exec_target
 from arclet.letoderea import EventSystem
 from arclet.letoderea.utils import gather_inserts
@@ -14,13 +16,13 @@ class ExampleEvent(TemplateEvent):
 
     def get_params(self):
         return self.param_export(
-            str='1'
+            abc='1'
         )
 
 
 @es.register(ExampleEvent)
-async def test(m: str):
-    pass
+async def test(m=123):
+    a = m + 1
 
 a = ExampleEvent()
 tasks = []

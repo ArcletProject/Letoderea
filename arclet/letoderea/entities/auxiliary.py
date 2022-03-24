@@ -1,4 +1,4 @@
-from typing import Callable, Any, Literal, List, Union, Dict, TYPE_CHECKING
+from typing import Callable, Any, Literal, List, Union, Dict, TYPE_CHECKING, Type
 from ..utils import ArgumentPackage, run_always_await
 from .event import TemplateEvent
 from ..exceptions import JudgementError
@@ -66,12 +66,15 @@ class _AuxHandler:
 
 
 class BaseAuxiliary:
+    local_storage: Dict[Type["BaseAuxiliary"], Dict[scopes, List[_AuxHandler]]] = {}
     aux_handlers: Dict[scopes, List[_AuxHandler]]
 
-    @classmethod
-    def set_aux(cls, scope: scopes, atype: aux_types, keep: bool = False):
-        if not hasattr(cls, "aux_handlers"):
-            cls.aux_handlers = {}
+    def __init__(self):
+        self.aux_handlers = {}
+        if self.local_storage.get(self.__class__):
+            self.aux_handlers.update(self.local_storage.pop(self.__class__))
+
+    def set_aux(self, scope: scopes, atype: aux_types, keep: bool = False):
         if atype == 'supply':
             _func_type: Union[supply, judge] = supply
         elif atype == 'judge':
@@ -80,9 +83,28 @@ class BaseAuxiliary:
             raise ValueError(f"Invalid auxiliary type: {atype}")
 
         def decorator(func: _func_type):
-            if scope not in cls.aux_handlers:
-                cls.aux_handlers[scope] = []
-            cls.aux_handlers[scope].append(_AuxHandler(scope, atype, func, keep))
+            if scope not in self.aux_handlers:
+                self.aux_handlers[scope] = []
+            self.aux_handlers[scope].append(_AuxHandler(scope, atype, func, keep))
+            return func
+
+        return decorator
+
+    @classmethod
+    def inject_aux(cls, scope: scopes, atype: aux_types, keep: bool = False):
+        if atype == 'supply':
+            _func_type: Union[supply, judge] = supply
+        elif atype == 'judge':
+            _func_type: Union[supply, judge] = judge
+        else:
+            raise ValueError(f"Invalid auxiliary type: {atype}")
+
+        def decorator(func: _func_type):
+            if cls not in cls.local_storage:
+                cls.local_storage[cls] = {}
+            if scope not in cls.local_storage[cls]:
+                cls.local_storage[cls][scope] = []
+            cls.local_storage[cls][scope].append(_AuxHandler(scope, atype, func, keep))
             return func
 
         return decorator
@@ -104,8 +126,8 @@ class BaseAuxiliary:
     def __eq__(self, other: "BaseAuxiliary"):
         return self.aux_handlers == other.aux_handlers
 
-    def __init_subclass__(cls, **kwargs):
-        cls.aux_handlers = {}
-        for base in reversed(cls.__bases__):
-            if issubclass(base, BaseAuxiliary):
-                cls.aux_handlers.update(getattr(base, "aux_handlers", {}))
+    # def __init_subclass__(cls, **kwargs):
+    #     cls.aux_handlers = {cls: {}}
+    #     for base in reversed(cls.__bases__):
+    #         if issubclass(base, BaseAuxiliary):
+    #             cls.aux_handlers.update(getattr(base, "aux_handlers", {}))

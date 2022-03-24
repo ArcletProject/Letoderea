@@ -1,6 +1,6 @@
 import traceback
 from inspect import isclass
-from typing import Tuple, Dict, Any, Union, Callable, List
+from typing import Tuple, Dict, Any, Union, Callable, List, get_args
 from .entities.subscriber import Subscriber
 from .entities.event import TemplateEvent, ParamRet
 from .exceptions import UndefinedRequirement, UnexpectedArgument, ParsingStop, PropagationCancelled, JudgementError
@@ -19,7 +19,7 @@ async def await_exec_target(
         is_subscriber = True
     auxiliaries = target.auxiliaries if is_subscriber else []
     callable_target = target.callable_target if is_subscriber else target
-    event_data = target.internal_arguments if is_subscriber else {}
+    event_data = target.internal_arguments.copy() if is_subscriber else {}
     revise = target.revise_dispatches if is_subscriber else {}
     target_param = target.params if is_subscriber else argument_analysis(callable_target)
     if isinstance(events, Dict):
@@ -128,36 +128,60 @@ async def param_parser(
     """
     arguments_dict = {}
     for name, annotation, default in params:
-        if not annotation:
-            raise UndefinedRequirement(f"a argument: {{<{annotation}> {name}: {default}}} without annotation")
-        kwarg = event_args.get(annotation, {})
-        if not kwarg:
-            for t in event_args.keys():
-                if isclass(annotation) and issubclass(t, annotation):
-                    kwarg = event_args[t]
+        if not annotation or annotation == Any:
+            for _m_args in event_args.values():
+                if arg := _m_args.get(name):
+                    arguments_dict[name] = arg
                     break
-        try:
-            annotation_name = annotation.__name__
-        except AttributeError:
-            annotation_name = annotation
-        if name in revise:
-            real_name = revise[name]
-            arguments_dict[name] = kwarg[real_name]
+                elif arg := _m_args.get(str(default)):
+                    arguments_dict[name] = arg
+                    revise[name] = str(default)
+                    break
+                elif default is not Empty:
+                    arguments_dict[name] = default
+                    break
+                else:
+                    raise UndefinedRequirement(f"{name}'s annotation is undefined")
         else:
-            if arg := kwarg.get(name):
-                arguments_dict[name] = arg
-            elif arg := kwarg.get(annotation_name):
-                arguments_dict[name] = arg
-                revise[name] = annotation_name
-            elif arg := kwarg.get(str(default)):
-                arguments_dict[name] = arg
-                revise[name] = str(default)
-            elif kwarg:
-                k, v = kwarg.popitem()
-                arguments_dict[name] = v
-                revise[name] = k
-            elif default is not Empty:
-                arguments_dict[name] = default
+            if not (kwarg := event_args.get(annotation, {})):
+                if isclass(annotation):
+                    for t in event_args.keys():
+                        if issubclass(t, annotation):
+                            kwarg = event_args[t]
+                            break
+                elif annotation.__class__.__name__ in "_GenericAlias":
+                    for anno in get_args(annotation):
+                        if kwarg := event_args.get(anno, {}):
+                            annotation = anno
+                            break
+                        for t in event_args.keys():
+                            if isclass(anno) and issubclass(t, anno):
+                                kwarg = event_args[t]
+                                break
+
+            if isinstance(annotation, str):
+                annotation_name = annotation
+            else:
+                annotation_name = annotation.__name__
+            if name in revise:
+                real_name = revise[name]
+                arguments_dict[name] = kwarg[real_name]
+            else:
+                if arg := kwarg.get(name):
+                    arguments_dict[name] = arg
+                elif arg := kwarg.get(annotation_name):
+                    arguments_dict[name] = arg
+                    revise[name] = annotation_name
+                elif arg := kwarg.get(str(default)):
+                    arguments_dict[name] = arg
+                    revise[name] = str(default)
+                elif kwarg:
+                    k, v = kwarg.popitem()
+                    arguments_dict[name] = v
+                    revise[name] = k
+                elif default is not Empty:
+                    arguments_dict[name] = default
+
         if isinstance(default, BaseAuxiliary):
             aux = default.aux_handlers.get('parsing')
             if not aux:

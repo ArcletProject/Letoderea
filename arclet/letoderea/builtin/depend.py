@@ -11,6 +11,7 @@ class Depend(BaseAuxiliary):
 
     def __init__(self, callable_func: Callable):
         self.target = Subscriber(callable_func)
+        super().__init__()
 
         @self.set_aux("parsing", "supply")
         async def depend(target_argument: ArgumentPackage):

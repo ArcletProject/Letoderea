@@ -17,7 +17,7 @@ class ExampleEvent(TemplateEvent):
 
 
 @Subscriber
-def test():
+def test(m: str):
     test_stack[0] += 1
 
 

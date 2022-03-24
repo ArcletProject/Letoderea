@@ -24,7 +24,7 @@ class Subscriber:
         if hasattr(callable_target, 'auxiliaries'):
             self.auxiliaries = getattr(callable_target, "auxiliaries", []) + (auxiliaries or [])
         elif hasattr(self, 'auxiliaries'):
-            self.auxiliaries = self.auxiliaries + (auxiliaries or [])
+            self.auxiliaries += auxiliaries or []
         else:
             self.auxiliaries = auxiliaries or []
         self.params = argument_analysis(self.callable_target)

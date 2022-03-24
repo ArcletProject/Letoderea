@@ -20,6 +20,7 @@ class StepOut(BaseAuxiliary):
         self.event_type = event
         self._future: Optional[asyncio.Future] = None
         self._waited: bool = False
+        super().__init__()
 
         @self.set_aux("before_parse", "judge")
         def judge(j_event: TemplateEvent) -> bool:

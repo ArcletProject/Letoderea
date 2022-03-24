@@ -9,46 +9,33 @@ loop = asyncio.get_event_loop()
 test_stack = [0]
 es = EventSystem(loop=loop)
 
-#
-# class TestCondition(TemplateCondition):
-#
-
-#
-#     def judge(self, *args, **kwargs) -> bool:
-#         now = datetime.now()
-#         return now > datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
-
 
 class TestTimeLimit(BaseAuxiliary):
     def __init__(self, hour, minute):
         self.hour = hour
         self.minute = minute
+        super().__init__()
 
         @self.set_aux("before_parse", "judge")
         def judge(*args):
             now = datetime.now()
-            return now > datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
+            return now >= datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
 
 
-class TestInterval(BaseAuxiliary):
+class Interval(BaseAuxiliary):
     def __init__(self, interval: float):
-        self.record = False
-        self.success = False
+        self.success = True
         self.last_time = datetime.now()
         self.interval = interval
+        super().__init__()
 
         @self.set_aux("before_parse", "judge")
         def judge(*args):
-            if self.record:
-                self.success = result = (datetime.now() - self.last_time).total_seconds() > self.interval
-                return result
+            self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
+            return self.success
 
         @self.set_aux("execution_complete", "judge")
         def judge(*args):
-            if not self.record:
-                self.last_time = datetime.now()
-                self.record = True
-                return True
             if self.success:
                 self.last_time = datetime.now()
                 return True
@@ -64,7 +51,7 @@ class ExampleEvent(TemplateEvent):
         )
 
 
-@es.register(ExampleEvent, auxiliaries=[TestInterval(0.3)])
+@es.register(ExampleEvent, auxiliaries=[TestTimeLimit(17, 0), Interval(0.2)])
 async def test(int: int, a: str = "hello", ):
     print(int, a)
 
@@ -73,6 +60,7 @@ b = ExampleEvent()
 
 
 async def main():
+    await asyncio.sleep(2)
     for i in range(11):
         await asyncio.sleep(0.1)
         b.msg += 1

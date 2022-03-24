@@ -13,7 +13,7 @@ class TestDecorate(BaseAuxiliary):
     pass
 
 
-@TestDecorate.set_aux("before_parse", "supply")
+@TestDecorate.inject_aux("before_parse", "supply")
 def supply(target_argument: ArgumentPackage):
     if target_argument.annotation == str:
         return target_argument.value * 2
@@ -21,7 +21,7 @@ def supply(target_argument: ArgumentPackage):
         return target_argument.value * 3
 
 
-@TestDecorate.set_aux("parsing", "supply")
+@TestDecorate.inject_aux("parsing", "supply")
 def supply(target_argument: ArgumentPackage):
     if target_argument.annotation == str:
         return bytes(target_argument.value, encoding="utf-8")
