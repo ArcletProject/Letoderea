@@ -1,4 +1,4 @@
-from typing import Union, Type, overload, List, Dict, Any
+from typing import Union, Type, overload, List, Dict, Any, get_origin
 
 ParamRet = Dict[type, Dict[str, Any]]
 Inserts = List[Union["TemplateEvent", Type["TemplateEvent"]]]
@@ -21,7 +21,7 @@ class TemplateEvent:
             type_v = type(v)
             if not result.get(type_v):
                 result[type_v] = {}
-            result[v.__class__][k] = v
+            result[type_v][k] = v
         return result
 
     @staticmethod
@@ -46,6 +46,9 @@ class TemplateEvent:
     def get(self, attr_name: str):
         return getattr(self, attr_name, None)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}: {', '.join(f'{k}={v}' for k, v in vars(self).items())}"
+
 
 class StructuredEvent(TemplateEvent):
     """
@@ -57,7 +60,7 @@ class StructuredEvent(TemplateEvent):
         for a in [m.__annotations__ for m in self.__class__.__mro__[-2::-1]]:
             __anno.update(a)
         for k, v in kwargs.items():
-            if k in __anno and type(v) != __anno[k]:
+            if k in __anno and not isinstance(v, get_origin(__anno[k]) or __anno[k]):  # type: ignore
                 raise TypeError(f"{k} must be {__anno[k]}")
             setattr(self, k, v)
 

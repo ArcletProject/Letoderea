@@ -13,6 +13,7 @@ class Depend(BaseAuxiliary):
         self.target = Subscriber(callable_func)
         super().__init__()
 
-        @self.set_aux("parsing", "supply")
-        async def depend(target_argument: ArgumentPackage):
-            return await await_exec_target(self.target, target_argument.value)
+
+@Depend.inject_aux("parsing", "supply")
+async def depend(target_argument: ArgumentPackage[Depend]):
+    return await await_exec_target(target_argument.source.target, target_argument.value)

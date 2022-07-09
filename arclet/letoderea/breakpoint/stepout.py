@@ -23,9 +23,9 @@ class StepOut(BaseAuxiliary):
         super().__init__()
 
         @self.set_aux("before_parse", "judge")
-        def judge(j_event: TemplateEvent) -> bool:
-            if type(j_event) is self.event_type:
-                self.target_args = j_event.get_params()
+        def judge(source: StepOut, j_event: TemplateEvent) -> bool:
+            if type(j_event) is source.event_type:
+                source.target_args = j_event.get_params()
                 return True
             return False
 

@@ -17,7 +17,7 @@ class ExampleEvent(TemplateEvent):
         )
 
 
-def test(sr: str):
+def test(sr:str):
     pass
 
 

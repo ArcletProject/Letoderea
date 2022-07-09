@@ -1,6 +1,6 @@
 import asyncio
 import time
-
+from typing import List, Tuple, Any
 from arclet.letoderea import EventSystem
 from arclet.letoderea.entities.event import TemplateEvent
 
@@ -13,22 +13,22 @@ class ExampleEvent(TemplateEvent):
 
     def get_params(self):
         return self.param_export(
-            m='aa'
+            sr='aa'
         )
 
 
 @es.register(ExampleEvent)
-def test(m: str):
-    test_stack[0] += 1
+def test(sr):
+    print(sr)
 
 
 async def main():
     a = ExampleEvent()
-    for i in range(10000):
+    for i in range(10):
         await asyncio.sleep(0.0)
         es.event_publish(a)
 
 start = time.time()
 loop.run_until_complete(main())
 
-print(min(test_stack[0], 10000) / (time.time() - start), 'o/s')
+#print(min(test_stack[0], 10000) / (time.time() - start), 'o/s')

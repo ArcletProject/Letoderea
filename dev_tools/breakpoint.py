@@ -15,7 +15,7 @@ class TestStepOut(StepOut):
     @staticmethod
     def handler(msg: str):
         if msg == "continue!":
-            print(msg)
+            print("[out] >>> receive in handler", msg)
             return msg
 
 
@@ -32,22 +32,29 @@ class ExampleEvent(TemplateEvent):
 @es.register(ExampleEvent)
 async def test(m: str):
     if m == 'hello':
-        print("wait for msg:'continue!' ")
-        await break_point(TestStepOut(ExampleEvent))
-        print(m)
+        print("[subscriber] >>> wait for msg:'continue!' ")
+        out = TestStepOut(ExampleEvent)
+        print("[subscriber] >>> current out:", out)
+        await break_point(out)
+        print("[subscriber] >>>", m)
 
 
 a = ExampleEvent()
 a.msg = "hello"
 b = ExampleEvent()
 b.msg = "continue!"
+c = ExampleEvent()
+c.msg = "wait"
 
 
 async def main():
-    for i in range(0, 4):
-        if i % 2 == 0:
+    for i in range(0, 6):
+        if i % 3 == 0:
             print('>>> event posted with msg: "hello"')
             es.event_publish(a)
+        elif (i - 1) % 3 == 0:
+            print('>>> event posted with msg: "wait"')
+            es.event_publish(c)
         else:
             print('>>> event posted with msg: "continue!"')
             es.event_publish(b)
@@ -55,4 +62,3 @@ async def main():
 
 
 loop.run_until_complete(main())
-

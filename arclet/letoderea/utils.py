@@ -1,35 +1,30 @@
 import inspect
+from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from functools import lru_cache
-from typing import Type, Union, Callable, Any, Iterable, List, Generic, TypeVar
+from typing import Type, Union, Callable, Any, Iterable, List, Generic, TypeVar, TYPE_CHECKING
 
 from .entities.event import TemplateEvent
+
+if TYPE_CHECKING:
+    from .entities.auxiliary import BaseAuxiliary
 
 Empty = inspect.Signature.empty
 TEvent = Union[Type[TemplateEvent], TemplateEvent]
 T = TypeVar("T")
 D = TypeVar("D")
+TAux = TypeVar("TAux", bound='BaseAuxiliary')
 
 
-class ArgumentPackage:
+@dataclass
+class ArgumentPackage(Generic[TAux]):
+    source: TAux
     name: str
     annotation: Any
     value: Any
 
-    __slots__ = ("name", "value", "annotation")
-
-    def __init__(self, name, annotation, value):
-        self.name = name
-        self.annotation = annotation
-        self.value = value
-
-    def __repr__(self):
-        return (
-            "<ArgumentPackage name={0} annotation={1} value={2}".format(
-                self.name, self.annotation, self.value
-            )
-        )
+    __slots__ = ("source", "name", "value", "annotation")
 
 
 async def run_always_await(callable_target, *args, **kwargs):

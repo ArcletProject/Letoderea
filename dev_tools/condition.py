@@ -3,7 +3,7 @@ from arclet.letoderea.entities.auxiliary import BaseAuxiliary
 import asyncio
 from arclet.letoderea import EventSystem
 from arclet.letoderea.entities.event import TemplateEvent
-
+import gc
 
 loop = asyncio.get_event_loop()
 test_stack = [0]
@@ -16,10 +16,11 @@ class TestTimeLimit(BaseAuxiliary):
         self.minute = minute
         super().__init__()
 
-        @self.set_aux("before_parse", "judge")
-        def judge(*args):
-            now = datetime.now()
-            return now >= datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
+
+@TestTimeLimit.inject_aux("before_parse", "judge")
+def judge(self: TestTimeLimit, *args):
+    now = datetime.now()
+    return now >= datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
 
 
 class Interval(BaseAuxiliary):
@@ -29,16 +30,18 @@ class Interval(BaseAuxiliary):
         self.interval = interval
         super().__init__()
 
-        @self.set_aux("before_parse", "judge")
-        def judge(*args):
-            self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
-            return self.success
 
-        @self.set_aux("execution_complete", "judge")
-        def judge(*args):
-            if self.success:
-                self.last_time = datetime.now()
-                return True
+@Interval.inject_aux("before_parse", "judge")
+def judge(self: Interval, *args):
+    self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
+    return self.success
+
+
+@Interval.inject_aux("execution_complete", "judge")
+def judge(self: Interval, *args):
+    if self.success:
+        self.last_time = datetime.now()
+        return True
 
 
 class ExampleEvent(TemplateEvent):
@@ -47,23 +50,24 @@ class ExampleEvent(TemplateEvent):
 
     def get_params(self):
         return self.param_export(
-            int=self.msg
+            index=self.msg
         )
 
 
-@es.register(ExampleEvent, auxiliaries=[TestTimeLimit(17, 0), Interval(0.2)])
-async def test(int: int, a: str = "hello", ):
-    print(int, a)
+@es.register(ExampleEvent, auxiliaries=[TestTimeLimit(9, 0), Interval(0.2)])
+async def test(index: int, a: str = "hello", ):
+    gc.collect()
+    print(index, a)
 
 
 b = ExampleEvent()
 
 
 async def main():
-    await asyncio.sleep(2)
     for i in range(11):
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.15)
         b.msg += 1
         es.event_publish(b)
+
 
 loop.run_until_complete(main())

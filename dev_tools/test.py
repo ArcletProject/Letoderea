@@ -1,7 +1,7 @@
 import asyncio
 import time
 from typing import Union
-
+import gc
 from arclet.letoderea.handler import await_exec_target
 from arclet.letoderea import EventSystem
 from arclet.letoderea.utils import gather_inserts
@@ -38,3 +38,4 @@ e = time.time()
 n = e - s
 print(f"used {n}, {count/n}o/s")
 print(test.revise_dispatches)
+print(gc.collect())

@@ -14,9 +14,7 @@ async def await_exec_target(
         target: Union[Subscriber, Callable],
         events: Union[List[TEvent], ParamRet],
 ):
-    is_subscriber = False
-    if isinstance(target, Subscriber):
-        is_subscriber = True
+    is_subscriber = isinstance(target, Subscriber)
     auxiliaries = target.auxiliaries if is_subscriber else []
     callable_target = target.callable_target if is_subscriber else target
     event_data = target.internal_arguments.copy() if is_subscriber else {}
@@ -65,13 +63,13 @@ async def before_parse(
         return
     for handler in decorator.aux_handlers['before_parse']:
         if handler.aux_type == 'judge':
-            await handler.judge_wrapper(event_ctx.get())
+            await handler.judge_wrapper(decorator, event_ctx.get())
         if handler.aux_type == 'supply':
             for k, v in event_data.copy().items():
                 if handler.keep:
-                    event_data.update(await handler.supply_wrapper_keep(k, v))
+                    event_data.update(await handler.supply_wrapper_keep(decorator, k, v))
                 else:
-                    event_data[k].update(await handler.supply_wrapper(k, v))
+                    event_data[k].update(await handler.supply_wrapper(decorator, k, v))
 
 
 async def after_parse(
@@ -91,10 +89,10 @@ async def after_parse(
         if handler.aux_type == 'supply':
             for k, v in event_data.copy().items():
                 if handler.keep:
-                    r = await handler.supply_wrapper_keep(type(v), {k: v})
+                    r = await handler.supply_wrapper_keep(decorator, type(v), {k: v})
                     event_data.update(r.popitem()[1])
                 else:
-                    event_data[k].update(await handler.supply_wrapper(type(v), {k: v}))
+                    event_data[k].update(await handler.supply_wrapper(decorator, type(v), {k: v}))
 
 
 async def execution_complete(decorator: BaseAuxiliary,):
@@ -108,7 +106,7 @@ async def execution_complete(decorator: BaseAuxiliary,):
         return
     for handler in decorator.aux_handlers['execution_complete']:
         if handler.aux_type == 'judge':
-            await handler.judge_wrapper(event_ctx.get())
+            await handler.judge_wrapper(decorator, event_ctx.get())
 
 
 async def param_parser(
@@ -144,8 +142,13 @@ async def param_parser(
                     raise UndefinedRequirement(f"{name}'s annotation is undefined")
         else:
             if not (kwarg := event_args.get(annotation, {})):
-                if isclass(annotation):
-                    for t in event_args.keys():
+                if isinstance(annotation, str):
+                    for t in event_args:
+                        if t.__name__ == annotation:
+                            kwarg = event_args[t]
+                            break
+                elif isclass(annotation):
+                    for t in event_args:
                         if issubclass(t, annotation):
                             kwarg = event_args[t]
                             break
@@ -154,7 +157,7 @@ async def param_parser(
                         if kwarg := event_args.get(anno, {}):
                             annotation = anno
                             break
-                        for t in event_args.keys():
+                        for t in event_args:
                             if isclass(anno) and issubclass(t, anno):
                                 kwarg = event_args[t]
                                 break
@@ -166,21 +169,20 @@ async def param_parser(
             if name in revise:
                 real_name = revise[name]
                 arguments_dict[name] = kwarg[real_name]
-            else:
-                if arg := kwarg.get(name):
-                    arguments_dict[name] = arg
-                elif arg := kwarg.get(annotation_name):
-                    arguments_dict[name] = arg
-                    revise[name] = annotation_name
-                elif arg := kwarg.get(str(default)):
-                    arguments_dict[name] = arg
-                    revise[name] = str(default)
-                elif kwarg:
-                    k, v = kwarg.popitem()
-                    arguments_dict[name] = v
-                    revise[name] = k
-                elif default is not Empty:
-                    arguments_dict[name] = default
+            elif arg := kwarg.get(name):
+                arguments_dict[name] = arg
+            elif arg := kwarg.get(annotation_name):
+                arguments_dict[name] = arg
+                revise[name] = annotation_name
+            elif arg := kwarg.get(str(default)):
+                arguments_dict[name] = arg
+                revise[name] = str(default)
+            elif kwarg:
+                k, v = kwarg.popitem()
+                arguments_dict[name] = v
+                revise[name] = k
+            elif default is not Empty:  # and isclass(annotation) and isinstance(default, annotation):
+                arguments_dict[name] = default
 
         if isinstance(default, BaseAuxiliary):
             aux = default.aux_handlers.get('parsing')
@@ -188,11 +190,13 @@ async def param_parser(
                 continue
             supplys = list(filter(lambda x: x.aux_type == 'supply', aux))
             if default.__class__.__name__ == 'Depend':
-                __depend_result = await supplys[0].supply_wrapper(dict, {name: event_args})
-                arguments_dict[name] = __depend_result.get(name)
+                _depend_result = await supplys[0].supply_wrapper(default, dict, {name: event_args})
+                if (res := _depend_result.get(name)) != event_args:
+                    arguments_dict[name] = res
             else:
-                __deco_result = await supplys[0].supply_wrapper(annotation, {name: arguments_dict[name]})
-                arguments_dict[name] = __deco_result.get(name)
+                _deco_result = await supplys[0].supply_wrapper(default, annotation, {name: arguments_dict[name]})
+                if (res := _deco_result.get(name)) != arguments_dict[name]:
+                    arguments_dict[name] = res
         if name not in arguments_dict:
             raise UnexpectedArgument(f"a argument: {{{annotation} {name}}} without value")
     return arguments_dict

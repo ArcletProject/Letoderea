@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from typing import Callable, Any, Literal, List, Union, Dict, TYPE_CHECKING, Type
 from ..utils import ArgumentPackage, run_always_await
 from .event import TemplateEvent
@@ -9,39 +10,28 @@ if TYPE_CHECKING:
 scopes = Literal['before_parse', 'parsing', 'after_parse', 'execution_complete']
 aux_types = Literal['judge', 'supply']
 supply = Callable[[ArgumentPackage], Any]
-judge = Callable[..., bool]
+judge = Callable[['BaseAuxiliary', TemplateEvent], bool]
 
 
+@dataclass
 class _AuxHandler:
     """
     参数辅助器基类，用于修饰参数, 或者判断条件
 
-    Args:
+    Argument:
         keep: 是否保留未装饰的参数,若为False则会覆盖原有参数
     """
 
     scope: scopes
     aux_type: aux_types
     handler: Union[supply, judge]
-    keep: bool
+    keep: bool = field(default=False)
 
-    def __init__(
-            self,
-            scope: scopes,
-            aux_type: aux_types,
-            handler: Union[supply, judge],
-            keep: bool = False
-    ) -> None:
-        self.scope = scope
-        self.aux_type = aux_type
-        self.handler = handler
-        self.keep = keep
-
-    async def supply_wrapper_keep(self, arg_type: type, args: Dict[str, Any]):
+    async def supply_wrapper_keep(self, source: "BaseAuxiliary", arg_type: type, args: Dict[str, Any]):
         h: supply = self.handler
         result = {}
         for k, v in args.items():
-            arg = await run_always_await(h, ArgumentPackage(k, arg_type, v))
+            arg = await run_always_await(h, ArgumentPackage(source, k, arg_type, v))
             if arg is None:
                 continue
             type_arg = type(arg)
@@ -49,19 +39,19 @@ class _AuxHandler:
                 result[arg.__class__] = {k: arg}
         return result
 
-    async def supply_wrapper(self, arg_type: type, args: Dict[str, Any]):
+    async def supply_wrapper(self, source: "BaseAuxiliary", arg_type: type, args: Dict[str, Any]):
         h: supply = self.handler
         result = {}
         for k, v in args.items():
-            arg = await run_always_await(h, ArgumentPackage(k, arg_type, v))
+            arg = await run_always_await(h, ArgumentPackage(source, k, arg_type, v))
             if arg is None:
                 continue
             result[k] = arg
         return result or args
 
-    async def judge_wrapper(self, event: TemplateEvent):
+    async def judge_wrapper(self, source: "BaseAuxiliary", event: TemplateEvent):
         h: judge = self.handler
-        if await run_always_await(h, event) is False:
+        if await run_always_await(h, source, event) is False:
             raise JudgementError
 
 
@@ -114,20 +104,14 @@ class BaseAuxiliary:
         def __wrapper(target: Union[Callable, "Subscriber"]):
             if isinstance(target, Callable):
                 if not hasattr(target, "auxiliaries"):
-                    setattr(target, "auxiliaries", [cls(*args, **kwargs)])
+                    setattr(target, "auxiliaries", [cls(*args, **kwargs)])  # type: ignore
                 else:
-                    getattr(target, "auxiliaries").append(cls(*args, **kwargs))
+                    getattr(target, "auxiliaries").append(cls(*args, **kwargs))    # type: ignore
             else:
-                target.auxiliaries.append(cls(*args, **kwargs))
+                target.auxiliaries.append(cls(*args, **kwargs))    # type: ignore
             return target
 
         return __wrapper
 
     def __eq__(self, other: "BaseAuxiliary"):
         return self.aux_handlers == other.aux_handlers
-
-    # def __init_subclass__(cls, **kwargs):
-    #     cls.aux_handlers = {cls: {}}
-    #     for base in reversed(cls.__bases__):
-    #         if issubclass(base, BaseAuxiliary):
-    #             cls.aux_handlers.update(getattr(base, "aux_handlers", {}))
