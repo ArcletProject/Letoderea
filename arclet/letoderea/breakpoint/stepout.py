@@ -38,7 +38,7 @@ class StepOut(BaseAuxiliary):
         pass
 
     def __call__(self, func: Callable):
-        setattr(self, 'handler', func)
+        setattr(self, "handler", func)
         return self
 
     @property
@@ -53,10 +53,7 @@ class StepOut(BaseAuxiliary):
         if self.done():
             return False
         try:
-            result = await await_exec_target(
-                self.handler,
-                self.target_args
-            )
+            result = await await_exec_target(self.handler, self.target_args)
             if result is not None and not self._future.done():
                 self._future.set_result(result)
                 return True
@@ -66,9 +63,9 @@ class StepOut(BaseAuxiliary):
                 return True
         return False
 
-    async def wait(self, timeout: float = 0.):
+    async def wait(self, timeout: float = 0.0):
         if self._waited:
-            raise RuntimeError('已被等待。')
+            raise RuntimeError("已被等待。")
 
         if self._future is None:
             self._future = asyncio.get_running_loop().create_future()

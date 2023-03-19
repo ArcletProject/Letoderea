@@ -7,10 +7,10 @@ from ..exceptions import JudgementError
 if TYPE_CHECKING:
     from .subscriber import Subscriber
 
-scopes = Literal['before_parse', 'parsing', 'after_parse', 'execution_complete']
-aux_types = Literal['judge', 'supply']
+scopes = Literal["before_parse", "parsing", "after_parse", "execution_complete"]
+aux_types = Literal["judge", "supply"]
 supply = Callable[[ArgumentPackage], Any]
-judge = Callable[['BaseAuxiliary', TemplateEvent], bool]
+judge = Callable[["BaseAuxiliary", TemplateEvent], bool]
 
 
 @dataclass
@@ -27,7 +27,9 @@ class _AuxHandler:
     handler: Union[supply, judge]
     keep: bool = field(default=False)
 
-    async def supply_wrapper_keep(self, source: "BaseAuxiliary", arg_type: type, args: Dict[str, Any]):
+    async def supply_wrapper_keep(
+        self, source: "BaseAuxiliary", arg_type: type, args: Dict[str, Any]
+    ):
         h: supply = self.handler
         result = {}
         for k, v in args.items():
@@ -39,7 +41,9 @@ class _AuxHandler:
                 result[arg.__class__] = {k: arg}
         return result
 
-    async def supply_wrapper(self, source: "BaseAuxiliary", arg_type: type, args: Dict[str, Any]):
+    async def supply_wrapper(
+        self, source: "BaseAuxiliary", arg_type: type, args: Dict[str, Any]
+    ):
         h: supply = self.handler
         result = {}
         for k, v in args.items():
@@ -55,6 +59,14 @@ class _AuxHandler:
             raise JudgementError
 
 
+def _validate(atype: str):
+    if atype == "supply":
+        return supply
+    if atype == "judge":
+        return judge
+    raise ValueError(f"Invalid auxiliary type: {atype}")
+
+
 class BaseAuxiliary:
     local_storage: Dict[Type["BaseAuxiliary"], Dict[scopes, List[_AuxHandler]]] = {}
     aux_handlers: Dict[scopes, List[_AuxHandler]]
@@ -65,12 +77,7 @@ class BaseAuxiliary:
             self.aux_handlers.update(self.local_storage.pop(self.__class__))
 
     def set_aux(self, scope: scopes, atype: aux_types, keep: bool = False):
-        if atype == 'supply':
-            _func_type: Union[supply, judge] = supply
-        elif atype == 'judge':
-            _func_type: Union[supply, judge] = judge
-        else:
-            raise ValueError(f"Invalid auxiliary type: {atype}")
+        _func_type = _validate(atype)
 
         def decorator(func: _func_type):
             if scope not in self.aux_handlers:
@@ -82,12 +89,7 @@ class BaseAuxiliary:
 
     @classmethod
     def inject_aux(cls, scope: scopes, atype: aux_types, keep: bool = False):
-        if atype == 'supply':
-            _func_type: Union[supply, judge] = supply
-        elif atype == 'judge':
-            _func_type: Union[supply, judge] = judge
-        else:
-            raise ValueError(f"Invalid auxiliary type: {atype}")
+        _func_type = _validate(atype)
 
         def decorator(func: _func_type):
             if cls not in cls.local_storage:
@@ -103,12 +105,12 @@ class BaseAuxiliary:
     def set_target(cls, *args, **kwargs):
         def __wrapper(target: Union[Callable, "Subscriber"]):
             if isinstance(target, Callable):
-                if not hasattr(target, "auxiliaries"):
-                    setattr(target, "auxiliaries", [cls(*args, **kwargs)])  # type: ignore
+                if not hasattr(target, "__auxiliaries__"):
+                    setattr(target, "__auxiliaries__", [cls(*args, **kwargs)])  # type: ignore
                 else:
-                    getattr(target, "auxiliaries").append(cls(*args, **kwargs))    # type: ignore
+                    getattr(target, "__auxiliaries__").append(cls(*args, **kwargs))  # type: ignore
             else:
-                target.auxiliaries.append(cls(*args, **kwargs))    # type: ignore
+                target.auxiliaries.append(cls(*args, **kwargs))  # type: ignore
             return target
 
         return __wrapper

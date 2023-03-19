@@ -20,9 +20,9 @@ class Breakpoint:
         self.step_delegates = []
 
     async def wait(
-            self,
-            step_out_condition: StepOut,
-            timeout: float = 0.,
+        self,
+        step_out_condition: StepOut,
+        timeout: float = 0.0,
     ):
         event_type = step_out_condition.event_type
         self.new_subscriber(event_type, step_out_condition)
@@ -45,11 +45,12 @@ class Breakpoint:
             for step in self._step_outs[event_type]:
                 if await step.make_done():
                     break
+
         subscriber = Subscriber(_, auxiliaries=[step_out_condition])
         delegate = EventDelegate(event_type, priority=15)
         delegate += subscriber
         self.step_out_publisher.add_delegate(delegate)
         self.step_delegates.append(delegate)
 
-    def __call__(self, step_out_condition: StepOut, timeout: float = 0.):
+    def __call__(self, step_out_condition: StepOut, timeout: float = 0.0):
         return self.wait(step_out_condition, timeout)

@@ -12,8 +12,8 @@ class Publisher(Protocol):
 
     def add_delegate(self, delegate: EventDelegate) -> None:
         """
-        将delegate添加到delegates中
-        应当保证同priority同event的delegate只能有一个
+        将 delegate 添加到 delegates 中
+        应当保证同 priority 同 event 的 delegate 只能有一个
         """
         ...
 
@@ -21,15 +21,11 @@ class Publisher(Protocol):
         ...
 
     def require(
-            self,
-            event: Union[str, TEvent],
-            priority: Optional[int] = None,
-            *args,
-            **kwargs
+        self, event: Union[str, TEvent], priority: Optional[int] = None, *args, **kwargs
     ) -> Optional[Union[EventDelegate, List[EventDelegate]]]:
         """
-        依据event名称或者event对象，返回对应的delegate
-        在每个publisher中可以存在多个delegate，利用priority进行排序
-        但是同priority同event的delegate只能有一个
+        依据 event 名称或者 event 对象，返回对应的 delegate
+        在每个 publisher 中可以存在多个 delegate，利用 priority 进行排序
+        但是同 priority 同 event 的 delegate 只能有一个
         """
         ...

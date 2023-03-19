@@ -8,13 +8,11 @@ class TemplateEvent:
     """
     事件基类, 用于承载事件信息
     """
+
     inserts: List[Union["TemplateEvent", Type["TemplateEvent"]]] = []
 
     @classmethod
-    def param_export(
-            cls,
-            **kwargs
-    ):
+    def param_export(cls, **kwargs):
         """该函数用于包装参数"""
         result: ParamRet = {}
         for k, v in kwargs.items():
@@ -75,17 +73,11 @@ if __name__ == "__main__":
                 str=self.msg,
             )
 
-
     class TestEvent(TemplateEvent):
         inserts = [TestInsert]
         msg: str = "hello"
 
         def get_params(self) -> ParamRet:
-            return self.param_export(
-                msg="hello",
-                str=self.msg,
-                int=1
-            )
-
+            return self.param_export(msg="hello", str=self.msg, int=1)
 
     print(TestEvent().get_params())

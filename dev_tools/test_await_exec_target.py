@@ -4,9 +4,7 @@ from arclet.letoderea.entities.event import TemplateEvent
 from arclet.letoderea.handler import await_exec_target
 from arclet.letoderea.entities.subscriber import Subscriber
 
-loop = asyncio.get_event_loop()
-test_stack = [0]
-
+loop = asyncio.new_event_loop()
 
 class ExampleEvent(TemplateEvent):
 
@@ -18,7 +16,7 @@ class ExampleEvent(TemplateEvent):
 
 @Subscriber
 def test(m: str):
-    test_stack[0] += 1
+    ...
 
 
 async def main():
@@ -30,4 +28,4 @@ async def main():
 start = time.time()
 loop.run_until_complete(main())
 
-print(min(test_stack[0], 100000) / (time.time() - start), 'o/s')
+print(100000 / (time.time() - start), 'o/s')

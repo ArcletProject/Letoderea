@@ -7,6 +7,7 @@ class EventDelegate:
     """
     订阅器相关的处理器
     """
+
     subscribers: List[Subscriber]
     bind_event: TEvent
     priority: int
@@ -19,8 +20,10 @@ class EventDelegate:
     def __iadd__(self, other):
         if isinstance(other, Subscriber):
             if other.name in self.subscribers_names():
-                raise ValueError(f"Function \"{other.name}\" for event: "
-                                 f"{self.bind_event.__name__} has already registered!")
+                raise ValueError(
+                    f'Function "{other.name}" for event: '
+                    f"{self.bind_event.__name__} has already registered!"
+                )
             self.subscribers.append(other)
             return self
         elif isinstance(other, List):
@@ -34,7 +37,7 @@ class EventDelegate:
                 [
                     other.subscribers == self.subscribers,
                     other.bind_event is self.bind_event,
-                    other.priority == self.priority
+                    other.priority == self.priority,
                 ]
             )
         else:

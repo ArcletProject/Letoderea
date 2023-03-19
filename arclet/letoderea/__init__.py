@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 from typing import List, Union, Dict, Any, Type
 
 from .builtin.publisher import TemplatePublisher
@@ -14,39 +13,27 @@ from .utils import search_event, event_class_generator, group_dict, gather_inser
 
 
 class EventSystem:
+    _ref_tasks = set()
     loop: asyncio.AbstractEventLoop
     publishers: List[Publisher]
-    __publisher: Publisher
-    safety_interval: float
-    last_run: datetime
+    _background_publisher: Publisher
 
-    def __init__(
-            self,
-            *,
-            loop: asyncio.AbstractEventLoop = None,
-            interval: float = 0.00
-    ):
+    def __init__(self, *, loop: asyncio.AbstractEventLoop = None):
         self.loop = loop or asyncio.new_event_loop()
-        self.safety_interval = interval
-        self.last_run = datetime.now()
         self.publishers = []
-        self.__publisher = TemplatePublisher()
-        self.publishers.append(self.__publisher)
+        self._background_publisher = TemplatePublisher()
+        self.publishers.append(self._background_publisher)
 
     def event_publish(
-            self,
-            event: Union[TemplateEvent, Dict[str, Any]],
-            publisher: Publisher = None
+        self, event: Union[TemplateEvent, Dict[str, Any]], publisher: Publisher = None
     ):
         publishers = [publisher] if publisher else self.publishers
         delegates = []
         for publisher in publishers:
             delegates.extend(publisher.require(event.__class__) or [])
-        if (datetime.now() - self.last_run).total_seconds() >= self.safety_interval:
-            self.loop.create_task(
-                self.delegate_exec(delegates, event)
-            )
-        self.last_run = datetime.now()
+        task = self.loop.create_task(self.delegate_exec(delegates, event))
+        task.add_done_callback(self._ref_tasks.discard)
+        return task
 
     @staticmethod
     async def delegate_exec(delegates: List[EventDelegate], event: TemplateEvent):
@@ -64,13 +51,14 @@ class EventSystem:
                         return
 
     def register(
-            self,
-            event: Union[str, Type[TemplateEvent]],
-            *,
-            priority: int = 16,
-            auxiliaries: List[BaseAuxiliary] = None,
-            publisher: Publisher = None,
-            inline_arguments: Dict[str, Any] = None
+        self,
+        event: Union[str, Type[TemplateEvent]],
+        *,
+        priority: int = 16,
+        auxiliaries: List[BaseAuxiliary] = None,
+        publisher: Publisher = None,
+        inline_arguments: Dict[str, Any] = None,
+        bypass: bool = False,
     ):
         if isinstance(event, str):
             name = event
@@ -79,25 +67,26 @@ class EventSystem:
                 raise Exception(name + " cannot found!")
 
         events = [event]
-        events.extend(event_class_generator(event))
+        if bypass:
+            events.extend(event_class_generator(event))
         auxiliaries = auxiliaries or []
         inline_arguments = inline_arguments or {}
-        publisher = publisher or self.__publisher
+        publisher = publisher or self._background_publisher
 
         def register_wrapper(exec_target):
             if not isinstance(exec_target, Subscriber):
                 exec_target = Subscriber(
                     callable_target=exec_target,
                     auxiliaries=auxiliaries,
-                    **inline_arguments
+                    **inline_arguments,
                 )
             for e in events:
-                may_delegate = publisher.require(e, priority)
-                if may_delegate:
+                if may_delegate := publisher.require(e, priority):
                     may_delegate += exec_target
                 else:
                     _event_handler = EventDelegate(e, priority)
                     _event_handler += exec_target
                     publisher.add_delegate(_event_handler)
             return exec_target
+
         return register_wrapper

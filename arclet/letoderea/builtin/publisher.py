@@ -15,42 +15,40 @@ class TemplatePublisher:
 
     def add_delegate(self, delegate: EventDelegate) -> None:
         """
-        将delegate添加到delegates中
-        应当保证同priority同event的delegate只能有一个
+        将 delegate 添加到 delegates 中
+        应当保证同 priority 同 event 的 delegate 只能有一个
         """
-        if not self.delegates:
-            self.delegates.append(delegate)
-        else:
+        if self.delegates:
             last_delegate = self.delegates[-1]
-            if last_delegate.bind_event == delegate.bind_event:
-                if last_delegate.priority == delegate.priority:
-                    return
-            self.delegates.append(delegate)
+            if (
+                last_delegate.bind_event == delegate.bind_event
+                and last_delegate.priority == delegate.priority
+            ):
+                return
+        self.delegates.append(delegate)
 
     def remove_delegate(self, target: Union[TEvent, EventDelegate]) -> None:
         if isinstance(target, EventDelegate):
             self.delegates.remove(target)
-        else:
-            delegates = self.require(target)
+        elif delegates := self.require(target):
             for delegate in delegates:
                 self.delegates.remove(delegate)
 
     def require(
-            self,
-            event: Union[str, TEvent],
-            priority: Optional[int] = None,
+        self,
+        event: Union[str, TEvent],
+        priority: Optional[int] = None,
     ) -> Optional[Union[EventDelegate, List[EventDelegate]]]:
         """
-        依据event名称或者event对象，返回对应的delegate
-        在每个publisher中可以存在多个delegate，利用priority进行排序
-        但是同priority同event的delegate只能有一个
+        依据 event 名称或者 event 对象，返回对应的 delegate
+        在每个 publisher 中可以存在多个 delegate，利用 priority 进行排序
+        但是同 priority 同 event 的 delegate 只能有一个
         """
-        _delegates = []
-        for delegate in self.delegates:
-            if delegate.bind_event == event:
-                _delegates.append(delegate)
-        if len(_delegates) == 0:
-            return None
+        _delegates = [
+            delegate for delegate in self.delegates if delegate.bind_event == event
+        ]
+        if not _delegates:
+            return
         if priority:
             for delegate in filter(lambda d: d.priority == priority, _delegates):
                 return delegate

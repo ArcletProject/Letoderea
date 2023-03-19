@@ -3,7 +3,17 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from functools import lru_cache
-from typing import Type, Union, Callable, Any, Iterable, List, Generic, TypeVar, TYPE_CHECKING
+from typing import (
+    Type,
+    Union,
+    Callable,
+    Any,
+    Iterable,
+    List,
+    Generic,
+    TypeVar,
+    TYPE_CHECKING,
+)
 
 from .entities.event import TemplateEvent
 
@@ -14,7 +24,7 @@ Empty = inspect.Signature.empty
 TEvent = Union[Type[TemplateEvent], TemplateEvent]
 T = TypeVar("T")
 D = TypeVar("D")
-TAux = TypeVar("TAux", bound='BaseAuxiliary')
+TAux = TypeVar("TAux", bound="BaseAuxiliary")
 
 
 @dataclass
@@ -28,7 +38,7 @@ class ArgumentPackage(Generic[TAux]):
 
 
 async def run_always_await(callable_target, *args, **kwargs):
-    if iscoroutinefunction(callable_target):
+    if is_async(callable_target):
         return await callable_target(*args, **kwargs)
     return callable_target(*args, **kwargs)
 
@@ -38,16 +48,18 @@ def argument_analysis(callable_target: Callable):
     return [
         (
             name,
-            param.annotation if param.annotation is not inspect.Signature.empty else None,
-            param.default  # if param.default is not inspect.Signature.empty else None,
+            param.annotation
+            if param.annotation is not inspect.Signature.empty
+            else None,
+            param.default,  # if param.default is not inspect.Signature.empty else None,
         )
         for name, param in inspect.signature(callable_target).parameters.items()
     ]
 
 
 @lru_cache(4096)
-def iscoroutinefunction(o):
-    return inspect.iscoroutinefunction(o)
+def is_async(o: Any):
+    return inspect.iscoroutinefunction(o) or inspect.isawaitable(o)
 
 
 def group_dict(iterable: Iterable, key_callable: Callable[[Any], Any]):

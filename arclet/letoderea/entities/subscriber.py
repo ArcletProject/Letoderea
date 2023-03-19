@@ -12,18 +12,20 @@ class Subscriber:
     revise_dispatches: Dict[str, str]
 
     def __init__(
-            self,
-            callable_target: Callable,
-            *,
-            subscriber_name: Optional[str] = None,
-            auxiliaries: Optional[List[BaseAuxiliary]] = None,
-            **kwargs
+        self,
+        callable_target: Callable,
+        *,
+        subscriber_name: Optional[str] = None,
+        auxiliaries: Optional[List[BaseAuxiliary]] = None,
+        **kwargs,
     ) -> None:
         self.callable_target = callable_target
         self.subscriber_name = subscriber_name or callable_target.__name__
-        if hasattr(callable_target, 'auxiliaries'):
-            self.auxiliaries = getattr(callable_target, "auxiliaries", []) + (auxiliaries or [])
-        elif hasattr(self, 'auxiliaries'):
+        if hasattr(callable_target, "__auxiliaries__"):
+            self.auxiliaries = getattr(callable_target, "__auxiliaries__", []) + (
+                auxiliaries or []
+            )
+        elif hasattr(self, "auxiliaries"):
             self.auxiliaries += auxiliaries or []
         else:
             self.auxiliaries = auxiliaries or []
@@ -35,7 +37,7 @@ class Subscriber:
         return self.callable_target(*args, **kwargs)
 
     def __repr__(self):
-        return f'<Subscriber,name={self.subscriber_name}>'
+        return f"Subscriber[{self.subscriber_name}]"
 
     def __str__(self):
         return self.__repr__()
