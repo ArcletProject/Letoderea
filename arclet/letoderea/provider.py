@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Generic, TypeVar
 
-from .typing import Collection
+from .typing import Contexts
 
 T = TypeVar("T")
 
@@ -46,7 +46,7 @@ class Provider(Generic[T], metaclass=ABCMeta):
             raise TypeError("Subclass of Provider must be generic")
 
     @abstractmethod
-    async def __call__(self, collection: Collection) -> T | None:
+    async def __call__(self, context: Contexts) -> T | None:
         """
         依据提供模式，从集合中提供一个对象
         """

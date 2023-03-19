@@ -31,13 +31,29 @@ def bind(
             res[name] = (
                 annotation,
                 default,
-                sorted(providers, key=lambda x: x.target == target, reverse=True)
+                sorted(
+                    filter(
+                        lambda x: True if x.target == "$" else x.target == name,
+                        providers,
+                    ),
+                    key=lambda x: x.target == target,
+                    reverse=True,
+                ),
             )
         else:
             for t, providers in generic_map.items():
                 if annotation and issubclass(annotation, t):
                     res[name] = (
-                        annotation, default, sorted(providers, key=lambda x: x.target == target, reverse=True)
+                        annotation,
+                        default,
+                        sorted(
+                            filter(
+                                lambda x: True if x.target == "$" else x.target == name,
+                                providers,
+                            ),
+                            key=lambda x: x.target == target,
+                            reverse=True,
+                        ),
                     )
                     break
         if name not in res:
@@ -45,7 +61,7 @@ def bind(
             res[name] = (
                 annotation,
                 default,
-                name_spec or ([] if annotation else wildcard_providers)
+                name_spec or ([] if annotation else wildcard_providers),
             )
         if isinstance(default, Provider):
             res[name][2].insert(0, default)

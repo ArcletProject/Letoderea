@@ -9,7 +9,7 @@ from typing import Any, Generic, TypeVar, Callable, Mapping
 
 from typing_extensions import TypeAlias
 
-Collection: TypeAlias = "dict[str, Any]"
+Contexts: TypeAlias = "dict[str, Any]"
 
 
 T = TypeVar("T")

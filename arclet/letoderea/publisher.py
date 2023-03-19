@@ -7,20 +7,20 @@ from .event import BaseEvent
 
 
 class BasePublisher(metaclass=ABCMeta):
-    subscribers: dict[type[BaseEvent], list[Subscriber]]
-    supported_events: set[type[BaseEvent]]
+    subscribers: dict[str, list[Subscriber]]
+    supported_events: set[str]
 
-    def __init__(self, *events: type[BaseEvent]):
+    def __init__(self, *events: str):
         self.subscribers = {}
         self.supported_events = set(events)
 
     @property
-    def events(self) -> set[type[BaseEvent]]:
+    def events(self) -> set[str]:
         return self.supported_events
 
     @events.setter
-    def events(self, add: type[BaseEvent]):
-        self.supported_events.add(add)
+    def events(self, add: type | str):
+        self.supported_events.add(add.__name__ if isinstance(add, type) else add)
 
     @abstractmethod
     def validate(self, data: dict[str, Any]) -> BaseEvent | None:
@@ -39,7 +39,7 @@ class BasePublisher(metaclass=ABCMeta):
         """被动提供事件方法， 由 event system 主动轮询"""
         raise NotImplementedError
 
-    def add_subscriber(self, event: type[BaseEvent], subscriber: Subscriber) -> None:
+    def add_subscriber(self, event: str, subscriber: Subscriber) -> None:
         """
         添加订阅者
         """
@@ -47,7 +47,7 @@ class BasePublisher(metaclass=ABCMeta):
             raise TypeError(f"Event {event} is not supported by {self}")
         self.subscribers.setdefault(event, []).append(subscriber)
 
-    def remove_subscriber(self, event: type[BaseEvent], subscriber: Subscriber) -> None:
+    def remove_subscriber(self, event: str, subscriber: Subscriber) -> None:
         """
         移除订阅者
         """

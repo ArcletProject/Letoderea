@@ -1,31 +1,29 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 import inspect
-from .typing import Collection
+from functools import lru_cache
+from typing import Protocol, runtime_checkable
+
 from .provider import Provider
+from .typing import Contexts
 
-_record_locals = {}
+
+@runtime_checkable
+class BaseEvent(Protocol):
+    async def gather(self, context: Contexts):
+        ...
 
 
-class EventMeta(ABCMeta):
-    providers: list[type[Provider] | Provider]
-
-    def __new__(mcs, name, bases, namespace, **kwargs):
-        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
-        cls.providers = getattr(cls, "providers", [])
-        cls.providers.extend(
-            p for _, p in inspect.getmembers(
-                cls,
-                lambda x: inspect.isclass(x)
-                and issubclass(x, Provider)
-                and x is not Provider,
-            )
+@lru_cache(4096)
+def get_providers(event: type[BaseEvent] | BaseEvent) -> list[type[Provider] | Provider]:
+    res = getattr(event, "providers", [])
+    res.extend(
+        p
+        for _, p in inspect.getmembers(
+            event,
+            lambda x: inspect.isclass(x)
+            and issubclass(x, Provider)
+            and x is not Provider,
         )
-        return cls
-
-
-class BaseEvent(metaclass=EventMeta):
-    @abstractmethod
-    async def gather(self, collection: Collection):
-        raise NotImplementedError
+    )
+    return res

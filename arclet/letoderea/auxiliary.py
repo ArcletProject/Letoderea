@@ -17,7 +17,7 @@ from typing_extensions import Self
 
 from .event import BaseEvent
 from .exceptions import JudgementError
-from .typing import Collection
+from .typing import Contexts
 from .utils import run_always_await
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ class AuxHandler:
     aux_type: AuxType
     handler: Union[supply, judge]
 
-    async def supply(self, source: Self, arg_type: Any, collection: Collection):
+    async def supply(self, source: Self, arg_type: Any, collection: Contexts):
         h: supply = self.handler
         for k, v in collection.items():
             arg = await run_always_await(h, Package(source, k, v, arg_type))  # type: ignore

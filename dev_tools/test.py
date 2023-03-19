@@ -3,23 +3,23 @@ from __future__ import annotations
 import asyncio
 import pstats
 import time
-from arclet.letoderea import EventSystem, BaseEvent, Provider, Collection, event_ctx
+from arclet.letoderea import EventSystem, Provider, Contexts
 from arclet.letoderea.handler import depend_handler
 from pprint import pprint
 from cProfile import Profile
 es = EventSystem()
 
 
-class TestEvent(BaseEvent):
+class TestEvent:
     def __init__(self, name: str):
         self.name = name
 
-    async def gather(self, collection: Collection):
-        collection["name"] = self.name
+    async def gather(self, context: Contexts):
+        context["name"] = self.name
 
     class TestProvider(Provider[str]):
-        async def __call__(self, collection: Collection) -> str | None:
-            return collection.get("name")
+        async def __call__(self, context: Contexts) -> str | None:
+            return context.get("name")
 
 
 @es.register(TestEvent)
@@ -32,41 +32,40 @@ pprint(test_subscriber.params)
 count = 20000
 
 
-with event_ctx.use(a):
-    tasks.extend(
-        es.loop.create_task(depend_handler(test_subscriber, [a]))
-        for _ in range(count)
-    )
+tasks.extend(
+    es.loop.create_task(depend_handler(test_subscriber, a))
+    for _ in range(count)
+)
 
 
-    async def main():
-        await asyncio.gather(*tasks)
+async def main():
+    await asyncio.gather(*tasks)
 
-    s = time.perf_counter_ns()
-    es.loop.run_until_complete(main())
-    e = time.perf_counter_ns()
-    n = e - s
-    print(f"used {n/10e8}, {count*10e8/n}o/s")
-    print(f"{n / count} ns per loop with {count} loops")
+s = time.perf_counter_ns()
+es.loop.run_until_complete(main())
+e = time.perf_counter_ns()
+n = e - s
+print(f"used {n/10e8}, {count*10e8/n}o/s")
+print(f"{n / count} ns per loop with {count} loops")
 
-    tasks.clear()
-    tasks.extend(
-        es.loop.create_task(depend_handler(test_subscriber, [a]))
-        for _ in range(count)
-    )
+tasks.clear()
+tasks.extend(
+    es.loop.create_task(depend_handler(test_subscriber, a))
+    for _ in range(count)
+)
 
-    async def main():
-        await asyncio.gather(*tasks)
+async def main():
+    await asyncio.gather(*tasks)
 
-    prof = Profile()
-    prof.enable()
-    es.loop.run_until_complete(main())
-    prof.disable()
-    prof.create_stats()
+prof = Profile()
+prof.enable()
+es.loop.run_until_complete(main())
+prof.disable()
+prof.create_stats()
 
-    stats = pstats.Stats(prof)
-    stats.strip_dirs()
-    stats.sort_stats('tottime')
-    stats.print_stats(20)
+stats = pstats.Stats(prof)
+stats.strip_dirs()
+stats.sort_stats('tottime')
+stats.print_stats(20)
 
 

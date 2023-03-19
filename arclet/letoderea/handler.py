@@ -1,12 +1,13 @@
 from __future__ import annotations
 import traceback
+import asyncio
 from itertools import chain
 from inspect import isclass
 from typing import Tuple, Dict, Any, Union, Callable, List, get_args
 
 from .provider import Provider
 from .subscriber import Subscriber
-from .event import BaseEvent
+from .event import BaseEvent, get_providers
 from .exceptions import (
     UndefinedRequirement,
     UnexpectedArgument,
@@ -15,20 +16,19 @@ from .exceptions import (
     JudgementError,
 )
 from .utils import argument_analysis, run_always_await
-from .typing import Empty, Collection, Force
+from .typing import Empty, Contexts, Force
 from .auxiliary import BaseAuxiliary
 from .context import event_ctx
 
 
 async def depend_handler(
     target: Subscriber | Callable,
-    events: List[BaseEvent],
+    event: BaseEvent,
 ):
     if not isinstance(target, Subscriber):
-        target = Subscriber(target, providers=sum((event.providers for event in events), []))
-    collection = {}
-    for event in events:
-        await event.gather(collection)
+        target = Subscriber(target, providers=get_providers(event))
+    collection = {"event": event}
+    await event.gather(collection)
     try:
         # for aux in target.auxiliaries:
         #     await before_parse(aux, event_data)
@@ -120,7 +120,7 @@ async def depend_handler(
 
 async def param_parser(
     params: dict[str, tuple[Any, Any, list[Provider]]],
-    context: Collection,
+    context: Contexts,
     revise: dict[str, Any],
 ):
     """
@@ -141,6 +141,7 @@ async def param_parser(
         if name in context:
             arguments_dict[name] = context[name]
             continue
+
         for provider in providers:
             res = await provider(context)
             if res is not None:

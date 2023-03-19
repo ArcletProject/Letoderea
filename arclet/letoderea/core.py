@@ -6,13 +6,13 @@ from typing import Callable
 from .auxiliary import BaseAuxiliary
 from .backend import BackendPublisher
 from .context import event_ctx
-from .event import BaseEvent
+from .event import BaseEvent, get_providers
 from .exceptions import PropagationCancelled
 from .handler import depend_handler
 from .provider import ProvideMode, Provider
 from .publisher import BasePublisher
 from .subscriber import Subscriber
-from .typing import Collection
+from .typing import Contexts
 from .utils import group_dict
 
 
@@ -32,13 +32,13 @@ class EventSystem:
 
         @self.global_providers.append
         class EventGenericProvider(Provider[BaseEvent], mode=ProvideMode.generic):
-            async def __call__(self, collection: Collection) -> BaseEvent | None:
-                return event_ctx.get()
+            async def __call__(self, context: Contexts) -> BaseEvent | None:
+                return context.get("event")
 
         @self.global_providers.append
         class EventNameMatchProvider(Provider[BaseEvent], mode=ProvideMode.wildcard, target="event"):
-            async def __call__(self, collection: Collection) -> BaseEvent | None:
-                return event_ctx.get()
+            async def __call__(self, context: Contexts) -> BaseEvent | None:
+                return context.get("event")
 
     async def _loop_fetch(self):
         while True:
@@ -50,7 +50,7 @@ class EventSystem:
 
     def publish(self, event: BaseEvent, publisher: BasePublisher | None = None):
         publisher = publisher or self._backend_publisher
-        subscribers = publisher.subscribers[event.__class__]
+        subscribers = publisher.subscribers[event.__class__.__name__]
         task = self.loop.create_task(self.dispatch(subscribers, event))
         task.add_done_callback(self._ref_tasks.discard)
         return task
@@ -60,7 +60,7 @@ class EventSystem:
         with event_ctx.use(event):
             for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
                 tasks = [
-                    depend_handler(subscriber, [event])
+                    depend_handler(subscriber, event)
                     for subscriber in current_subs
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -80,16 +80,17 @@ class EventSystem:
 
         def register_wrapper(exec_target: Callable) -> Subscriber:
             for event in events:
+                name = event.__name__
                 select_pub: BasePublisher
                 for publisher in self.publishers:
-                    if event in publisher.events:
+                    if name in publisher.events:
                         select_pub = publisher
                         break
                 else:
                     select_pub = self._backend_publisher
                 _providers = [
                     *self.global_providers,
-                    *event.providers,
+                    *get_providers(event),  # type: ignore
                     *providers,
                 ]
                 if not isinstance(exec_target, Subscriber):
@@ -99,7 +100,7 @@ class EventSystem:
                         auxiliaries=auxiliaries,
                         providers=_providers,
                     )
-                select_pub.add_subscriber(event, exec_target)
+                select_pub.add_subscriber(name, exec_target)
 
             return exec_target
 

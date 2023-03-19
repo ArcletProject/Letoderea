@@ -15,13 +15,13 @@ class BackendPublisher(BasePublisher):
     async def supply(self) -> BaseEvent:
         pass
 
-    def add_subscriber(self, event: type[BaseEvent], subscriber) -> None:
+    def add_subscriber(self, event: str, subscriber) -> None:
         """
         添加订阅者
         """
         self.subscribers.setdefault(event, []).append(subscriber)
 
-    def remove_subscriber(self, event: type[BaseEvent], subscriber) -> None:
+    def remove_subscriber(self, event: str, subscriber) -> None:
         """
         移除订阅者
         """

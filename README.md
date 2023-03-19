@@ -14,16 +14,17 @@ pip install arclet-letoderea
 ```
 
 ## 样例
+
 ```python
-from arclet.letoderea import EventSystem, BaseEvent, Provider, Collection
+from arclet.letoderea import EventSystem, Contexts
 
 es = EventSystem()
 
 
-class TestEvent(BaseEvent):
+class TestEvent:
 
-    async def gather(self, collection: Collection):
-        collection["name"] = "Letoderea"
+    async def gather(self, context: Contexts):
+        context["name"] = "Letoderea"
 
 
 @es.register(TestEvent)
