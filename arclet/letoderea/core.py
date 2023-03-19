@@ -73,7 +73,7 @@ class EventSystem:
         *events: type[BaseEvent],
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider] | None = None,
+        providers: list[Provider | type[Provider]] | None = None,
     ):
         auxiliaries = auxiliaries or []
         providers = providers or []

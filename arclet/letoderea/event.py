@@ -13,7 +13,7 @@ class EventMeta(ABCMeta):
 
     def __new__(mcs, name, bases, namespace, **kwargs):
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
-        cls.providers = []
+        cls.providers = getattr(cls, "providers", [])
         return cls
 
     def __enter__(self):

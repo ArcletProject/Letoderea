@@ -42,7 +42,11 @@ def bind(
                     break
         if name not in res:
             name_spec = [wild for wild in wildcard_providers if wild.target == name]
-            res[name] = (annotation, default, name_spec or wildcard_providers)
+            res[name] = (
+                annotation,
+                default,
+                name_spec or ([] if annotation else wildcard_providers)
+            )
         if isinstance(default, Provider):
             res[name][2].insert(0, default)
     return res

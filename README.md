@@ -15,26 +15,23 @@ pip install arclet-letoderea
 
 ## 样例
 ```python
-import asyncio
-from arclet.letoderea import EventSystem
-from arclet.letoderea.entities.event import TemplateEvent
+from arclet.letoderea import EventSystem, BaseEvent, Provider, Collection
 
-class ExampleEvent(TemplateEvent):
-    def get_params(self):
-        return self.param_export(
-            msg="I'm here!"
-        )
- 
-loop = asyncio.get_event_loop()
-es = EventSystem(loop=loop)
-@es.register(ExampleEvent)
-async def test(msg: str):
-    print(msg)
+es = EventSystem()
 
-async def main():
-    es.event_publish(ExampleEvent())
-    await asyncio.sleep(0.1)
-loop.run_until_complete(main())
+
+class TestEvent(BaseEvent):
+
+    async def gather(self, collection: Collection):
+        collection["name"] = "Letoderea"
+
+
+@es.register(TestEvent)
+async def test_subscriber(name: str):
+    print(name)
+
+
+es.loop.run_until_complete(es.publish(TestEvent()))
 ```
 
 ## 开源协议
