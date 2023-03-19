@@ -22,8 +22,8 @@ with TestEvent:
 
 
 @es.register(TestEvent)
-async def test_subscriber(event: TestEvent):
-    event.name
+async def test_subscriber(a: str):
+    pass
 
 a = TestEvent("1")
 tasks = []
@@ -32,8 +32,10 @@ count = 20000
 
 
 with event_ctx.use(a):
-    for _ in range(count):
-        tasks.append(es.loop.create_task(depend_handler(test_subscriber, [a])))
+    tasks.extend(
+        es.loop.create_task(depend_handler(test_subscriber, [a]))
+        for _ in range(count)
+    )
     s = time.time()
     es.loop.run_until_complete(asyncio.gather(*tasks))
     e = time.time()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import functools
+from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Any, Generic, TypeVar, Callable, Mapping
@@ -86,3 +87,9 @@ except ImportError:
             _locals = obj_locals
 
         return {key: eval(value, _globals, _locals) if isinstance(value, str) else value for key, value in ann.items()}  # type: ignore
+
+
+@dataclass
+class Force:
+    """用于转义在本框架中特殊部分的特殊值"""
+    value: Any

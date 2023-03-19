@@ -15,7 +15,7 @@ from .exceptions import (
     JudgementError,
 )
 from .utils import argument_analysis, run_always_await
-from .typing import Empty, Collection
+from .typing import Empty, Collection, Force
 from .auxiliary import BaseAuxiliary
 from .context import event_ctx
 
@@ -144,6 +144,8 @@ async def param_parser(
         for provider in providers:
             res = await provider(context)
             if res is not None:
+                if res.__class__ is Force:
+                    res = res.value
                 arguments_dict[name] = res
                 break
         if name not in arguments_dict:

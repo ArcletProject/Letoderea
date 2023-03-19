@@ -27,21 +27,22 @@ def bind(
             provide_map.setdefault(provider.origin, []).append(provider)
 
     for name, annotation, default in argument_analysis(target):
-        if annotation in provide_map:
+        if providers := provide_map.get(annotation):
             res[name] = (
                 annotation,
                 default,
-                sorted(provide_map[annotation], key=lambda x: x.name == name, reverse=True)
+                sorted(providers, key=lambda x: x.target == target, reverse=True)
             )
         else:
-            res[name] = next(
-                (
-                    (annotation, default, sorted(providers, key=lambda x: x.name == name, reverse=True))
-                    for t, providers in generic_map.items()
-                    if issubclass(annotation, t)
-                ),
-                (annotation, default, wildcard_providers),
-            )
+            for t, providers in generic_map.items():
+                if annotation and issubclass(annotation, t):
+                    res[name] = (
+                        annotation, default, sorted(providers, key=lambda x: x.target == target, reverse=True)
+                    )
+                    break
+        if name not in res:
+            name_spec = [wild for wild in wildcard_providers if wild.target == name]
+            res[name] = (annotation, default, name_spec or wildcard_providers)
         if isinstance(default, Provider):
             res[name][2].insert(0, default)
     return res

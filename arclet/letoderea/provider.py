@@ -19,13 +19,13 @@ class ProvideMode(Enum):
 
 
 class Provider(Generic[T], metaclass=ABCMeta):
-    name: ClassVar[str]
+    target: ClassVar[str]
     origin: type[T]
     mode: ClassVar[ProvideMode]
 
     def __init_subclass__(cls, **kwargs):
-        if name := kwargs.get("name", "$"):
-            cls.name = name
+        if target := kwargs.get("target", "$"):
+            cls.target = target
         if (mode := kwargs.get("mode", ProvideMode.strict)) and isinstance(mode, ProvideMode):
             cls.mode = mode
         cls.origin = cls.__orig_bases__[0].__args__[0]  # noqa

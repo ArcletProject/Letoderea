@@ -31,7 +31,12 @@ class EventSystem:
         self.global_providers = []
 
         @self.global_providers.append
-        class BuiltinProvider(Provider[BaseEvent], mode=ProvideMode.generic):
+        class EventGenericProvider(Provider[BaseEvent], mode=ProvideMode.generic):
+            async def __call__(self, collection: Collection) -> BaseEvent | None:
+                return event_ctx.get()
+
+        @self.global_providers.append
+        class EventNameMatchProvider(Provider[BaseEvent], mode=ProvideMode.wildcard, target="event"):
             async def __call__(self, collection: Collection) -> BaseEvent | None:
                 return event_ctx.get()
 
