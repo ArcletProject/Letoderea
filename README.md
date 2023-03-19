@@ -32,8 +32,7 @@ async def test(msg: str):
     print(msg)
 
 async def main():
-    es.event_publish(ExampleEvent())
-    await asyncio.sleep(0.1)
+    await es.event_publish(ExampleEvent())
 loop.run_until_complete(main())
 ```
 
