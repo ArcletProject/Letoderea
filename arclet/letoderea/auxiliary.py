@@ -6,7 +6,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Generic,
     Literal,
     TypeVar,
     Union,
@@ -36,18 +35,10 @@ class AuxType(Enum):
     judge = auto()
 
 
-TTarget = TypeVar("TTarget", bound=Union[Callable, "Subscriber"])
 TAux = TypeVar("TAux", bound="BaseAuxiliary")
-supply = Callable[["Package"], Any]
+TTarget = TypeVar("TTarget", bound=Union[Callable, "Subscriber"])
+supply = Callable[["BaseAuxiliary", Contexts], Any]
 judge = Callable[["BaseAuxiliary", BaseEvent], bool]
-
-
-@dataclass
-class Package(Generic[TAux]):
-    source: TAux
-    name: str
-    value: Any
-    annotation: Any
 
 
 @dataclass
@@ -60,16 +51,12 @@ class AuxHandler:
     aux_type: AuxType
     handler: Union[supply, judge]
 
-    async def supply(self, source: Self, arg_type: Any, collection: Contexts):
-        h: supply = self.handler
-        for k, v in collection.items():
-            arg = await run_always_await(h, Package(source, k, v, arg_type))  # type: ignore
-            if arg is None:
-                continue
-            collection[k] = arg
+    async def supply(self, source: "BaseAuxiliary", context: Contexts):
+        h: supply = self.handler  # type: ignore
+        return await run_always_await(h, source, context)
 
-    async def judge(self, source: Self, event: BaseEvent):
-        h: judge = self.handler
+    async def judge(self, source: "BaseAuxiliary", event: BaseEvent):
+        h: judge = self.handler  # type: ignore
         if await run_always_await(h, source, event) is False:
             raise JudgementError
 
@@ -83,21 +70,21 @@ class BaseAuxiliary:
     def __init__(self):
         self.handlers = {}
         if _local_storage.get(self.__class__):
-            self.handlers.update(_local_storage.pop(self.__class__))
+            self.handlers.update(_local_storage.get(self.__class__))
 
     @overload
     def set(
         self, scope: Scope, atype: Literal[AuxType.supply]
-    ) -> Callable[[supply], supply]:
+    ) -> Callable[[Callable[[TAux, Contexts], Any]], Callable[[TAux, Contexts], Any]]:
         ...
 
     @overload
     def set(
         self, scope: Scope, atype: Literal[AuxType.judge]
-    ) -> Callable[[judge], judge]:
+    ) -> Callable[[Callable[[TAux, BaseEvent], bool]], Callable[[TAux, BaseEvent], bool]]:
         ...
 
-    def set(self, scope: Scope, atype: AuxType):
+    def set(self, scope: Scope, atype: AuxType):  # type: ignore
         def decorator(func: Callable):
             self.handlers.setdefault(scope, []).append(AuxHandler(scope, atype, func))
             return func
@@ -108,18 +95,18 @@ class BaseAuxiliary:
     @overload
     def inject(
         cls, scope: Scope, atype: Literal[AuxType.supply]
-    ) -> Callable[[supply], supply]:
+    ) -> Callable[[Callable[[TAux, Contexts], Any]], Callable[[TAux, Contexts], Any]]:
         ...
 
     @classmethod
     @overload
     def inject(
         cls, scope: Scope, atype: Literal[AuxType.judge]
-    ) -> Callable[[judge], judge]:
+    ) -> Callable[[Callable[[TAux, BaseEvent], bool]], Callable[[TAux, BaseEvent], bool]]:
         ...
 
     @classmethod
-    def inject(cls, scope: Scope, atype: AuxType):
+    def inject(cls, scope: Scope, atype: AuxType):  # type: ignore
         def decorator(func: Callable):
             _local_storage.setdefault(cls, {}).setdefault(scope, []).append(
                 AuxHandler(scope, atype, func)

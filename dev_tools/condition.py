@@ -1,8 +1,7 @@
 from datetime import datetime
-from arclet.letoderea.entities.auxiliary import BaseAuxiliary
+from arclet.letoderea.auxiliary import BaseAuxiliary, Scope, AuxType
 import asyncio
 from arclet.letoderea import EventSystem
-from arclet.letoderea.entities.event import TemplateEvent
 import gc
 
 loop = asyncio.get_event_loop()
@@ -17,8 +16,8 @@ class TestTimeLimit(BaseAuxiliary):
         super().__init__()
 
 
-@TestTimeLimit.inject_aux("before_parse", "judge")
-def judge(self: TestTimeLimit, *args):
+@TestTimeLimit.inject(Scope.before_parse, AuxType.judge)
+def judge(self: TestTimeLimit, event):
     now = datetime.now()
     return now >= datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
 
@@ -31,30 +30,28 @@ class Interval(BaseAuxiliary):
         super().__init__()
 
 
-@Interval.inject_aux("before_parse", "judge")
-def judge(self: Interval, *args):
+@Interval.inject(Scope.before_parse, AuxType.judge)
+def judge(self: Interval, event):
     self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
     return self.success
 
 
-@Interval.inject_aux("execution_complete", "judge")
-def judge(self: Interval, *args):
+@Interval.inject(Scope.cleanup, AuxType.judge)
+def judge(self: Interval, event):
     if self.success:
         self.last_time = datetime.now()
         return True
 
 
-class ExampleEvent(TemplateEvent):
+class ExampleEvent:
     type: str = "ExampleEvent"
     msg: int = 0
 
-    def get_params(self):
-        return self.param_export(
-            index=self.msg
-        )
+    async def gather(self, context: dict):
+        context['index'] = self.msg
 
 
-@es.register(ExampleEvent, auxiliaries=[TestTimeLimit(9, 0), Interval(0.2)])
+@es.register(ExampleEvent, auxiliaries=[TestTimeLimit(0, 0), Interval(0.2)])
 async def test(index: int, a: str = "hello", ):
     gc.collect()
     print(index, a)
@@ -64,10 +61,10 @@ b = ExampleEvent()
 
 
 async def main():
-    for i in range(11):
+    for _ in range(11):
         await asyncio.sleep(0.15)
         b.msg += 1
-        es.event_publish(b)
+        await es.publish(b)
 
 
 loop.run_until_complete(main())

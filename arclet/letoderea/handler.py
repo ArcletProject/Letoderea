@@ -1,9 +1,6 @@
 from __future__ import annotations
 import traceback
-import asyncio
-from itertools import chain
-from inspect import isclass
-from typing import Tuple, Dict, Any, Union, Callable, List, get_args
+from typing import Any, Callable
 
 from .provider import Provider
 from .subscriber import Subscriber
@@ -15,9 +12,9 @@ from .exceptions import (
     PropagationCancelled,
     JudgementError,
 )
-from .utils import argument_analysis, run_always_await
+from .utils import run_always_await
 from .typing import Empty, Contexts, Force
-from .auxiliary import BaseAuxiliary
+from .auxiliary import BaseAuxiliary, Scope, AuxType
 from .context import event_ctx
 
 
@@ -25,20 +22,20 @@ async def depend_handler(
     target: Subscriber | Callable,
     event: BaseEvent,
 ):
-    if not isinstance(target, Subscriber):
+    if target.__class__ != Subscriber:
         target = Subscriber(target, providers=get_providers(event))
-    collection = {"event": event}
-    await event.gather(collection)
+    contexts = {"event": event, "$subscriber": target}
+    await event.gather(contexts)
     try:
-        # for aux in target.auxiliaries:
-        #     await before_parse(aux, event_data)
-        arguments = await param_parser(target.params, collection, target.revise_mapping)
+        for aux in target.auxiliaries:
+            await before_parse(aux, contexts)
+        arguments = await param_parser(target.params, contexts, target.revise_mapping)
 
-        # for aux in auxiliaries:
-        #     await after_parse(aux, arguments)
+        for aux in target.auxiliaries:
+            await after_parse(aux, arguments)
         result = await run_always_await(target.callable_target, **arguments)
-        # for aux in auxiliaries:
-        #     await execution_complete(aux)
+        for aux in target.auxiliaries:
+            await execution_complete(aux)
     except (UnexpectedArgument, UndefinedRequirement):
         traceback.print_exc()
         raise
@@ -49,77 +46,72 @@ async def depend_handler(
         raise e
     return result
 
-#
-# async def before_parse(
-#     decorator: BaseAuxiliary,
-#     event_data: Dict[type, Dict[str, Any]],
-# ):
-#     """
-#     在解析前执行的操作
-#
-#     Args:
-#         decorator: 解析器列表
-#         event_data: 事件参数字典
-#     """
-#     if not decorator.aux_handlers.get("before_parse"):
-#         return
-#     for handler in decorator.aux_handlers["before_parse"]:
-#         if handler.aux_type == "judge":
-#             await handler.judge_wrapper(decorator, event_ctx.get())
-#         if handler.aux_type == "supply":
-#             for k, v in event_data.copy().items():
-#                 if handler.keep:
-#                     event_data.update(
-#                         await handler.supply_wrapper_keep(decorator, k, v)
-#                     )
-#                 else:
-#                     event_data[k].update(await handler.supply_wrapper(decorator, k, v))
-#
-#
-# async def after_parse(
-#     decorator: BaseAuxiliary,
-#     event_data: Dict[str, Any],
-# ):
-#     """
-#     在解析前执行的操作
-#
-#     Args:
-#         decorator: 解析器列表
-#         event_data: 事件参数字典
-#     """
-#     if not decorator.aux_handlers.get("after_parse"):
-#         return
-#     for handler in decorator.aux_handlers["after_parse"]:
-#         if handler.aux_type == "supply":
-#             for k, v in event_data.copy().items():
-#                 if handler.keep:
-#                     r = await handler.supply_wrapper_keep(decorator, type(v), {k: v})
-#                     event_data.update(r.popitem()[1])
-#                 else:
-#                     event_data[k].update(
-#                         await handler.supply_wrapper(decorator, type(v), {k: v})
-#                     )
-#
-#
-# async def execution_complete(
-#     decorator: BaseAuxiliary,
-# ):
-#     """
-#     在解析前执行的操作
-#
-#     Args:
-#         decorator: 解析器列表
-#     """
-#     if not decorator.aux_handlers.get("execution_complete"):
-#         return
-#     for handler in decorator.aux_handlers["execution_complete"]:
-#         if handler.aux_type == "judge":
-#             await handler.judge_wrapper(decorator, event_ctx.get())
-#
+
+async def before_parse(
+    decorator: BaseAuxiliary,
+    contexts: Contexts,
+):
+    """
+    在解析前执行的操作
+
+    Args:
+        decorator: 解析器列表
+        contexts: 事件参数字典
+    """
+    if not decorator.handlers.get(Scope.before_parse):
+        return
+    for handler in decorator.handlers[Scope.before_parse]:
+        if handler.aux_type == AuxType.judge:
+            await handler.judge(decorator, contexts["event"])
+        else:
+            await handler.supply(decorator, contexts)
+
+
+async def after_parse(
+    decorator: BaseAuxiliary,
+    data: Contexts,
+):
+    """
+    在解析前执行的操作
+
+    Args:
+        decorator: 解析器列表
+        data: 事件参数字典
+    """
+    if not decorator.handlers.get(Scope.after_parse):
+        return
+    for handler in decorator.handlers[Scope.after_parse]:
+        if handler.aux_type == AuxType.judge:
+            await handler.judge(decorator, data["event"])
+        else:
+            length = len(data)
+            await handler.supply(decorator, data)
+            if length > len(data):
+                raise UndefinedRequirement(
+                    f"Undefined requirement in {set(data.keys()) - set(data.keys())}"
+                )
+            if length < len(data):
+                raise UnexpectedArgument(
+                    f"Unexpected argument in {set(data.keys()) - set(data.keys())}"
+                )
+
+
+async def execution_complete(decorator: BaseAuxiliary):
+    """
+    在解析前执行的操作
+
+    Args:
+        decorator: 解析器列表
+    """
+    if not decorator.handlers.get(Scope.cleanup):
+        return
+    for handler in decorator.handlers[Scope.cleanup]:
+        if handler.aux_type == AuxType.judge:
+            await handler.judge(decorator, event_ctx.get())
 
 
 async def param_parser(
-    params: dict[str, tuple[Any, Any, list[Provider]]],
+    params: list[tuple[str, Any, Any, list[Provider]]],
     context: Contexts,
     revise: dict[str, Any],
 ):
@@ -134,17 +126,31 @@ async def param_parser(
         函数需要的参数字典
     """
     arguments_dict = {}
-    for name, slot in params.items():
-        annotation, default, providers = slot
+    for name, annotation, default, providers in params:
         if name in revise:
             name = revise[name]
         if name in context:
             arguments_dict[name] = context[name]
-            continue
-
-        for provider in providers:
-            res = await provider(context)
-            if res is not None:
+        else:
+            for provider in providers:
+                res = await provider(context)
+                if res is not None:
+                    if res.__class__ is Force:
+                        res = res.value
+                    arguments_dict[name] = res
+                    break
+        if name not in arguments_dict and default is not Empty:
+            arguments_dict[name] = default
+        if isinstance(default, BaseAuxiliary):
+            aux = default.handlers.get(Scope.parsing)
+            if not aux:
+                continue
+            for handler in filter(
+                lambda x: x.aux_type == AuxType.supply, aux
+            ):
+                res = await handler.supply(default, context)
+                if res is None:
+                    continue
                 if res.__class__ is Force:
                     res = res.value
                 arguments_dict[name] = res

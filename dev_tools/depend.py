@@ -1,35 +1,38 @@
-from arclet.letoderea.builtin.depend import Depend
-from arclet.letoderea.handler import await_exec_target
-import asyncio
-from arclet.letoderea.entities.event import TemplateEvent
+from __future__ import annotations
+
+from arclet.letoderea import EventSystem
+from arclet.letoderea.builtin.depend import Depends
+from arclet.letoderea import Contexts
 from arclet.letoderea.exceptions import ParsingStop
 
-loop = asyncio.get_event_loop()
+es = EventSystem()
 
 
-class ExampleEvent(TemplateEvent):
-
-    def get_params(self):
-        return self.param_export(
-            str='a'
-        )
+class ExampleEvent:
+    async def gather(self, context: dict):
+        context['m'] = 'aa'
 
 
-def test_depend(m: str):
-    if m == 'aa':
+def test_depend(context: Contexts):
+    if context['m'] == 'aa':
         return False
     raise ParsingStop
 
 
-def test(m: bool = Depend(test_depend)):
+def TestDepend() -> bool:
+    return Depends(test_depend)
+
+
+@es.register(ExampleEvent)
+def test(m: bool = TestDepend()):
     print(m)
 
 
 async def main():
     try:
         a = ExampleEvent()
-        await await_exec_target(test, [a])
+        await es.publish(a)
     except ParsingStop:
         return
 
-loop.run_until_complete(main())
+es.loop.run_until_complete(main())

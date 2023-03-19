@@ -5,15 +5,14 @@ import functools
 from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Any, Generic, TypeVar, Callable, Mapping
+from typing import Any, Generic, TypeVar, Callable, Mapping, Union, Awaitable
 
-from typing_extensions import TypeAlias
-
-Contexts: TypeAlias = "dict[str, Any]"
+Contexts = dict[str, Any]
 
 
 T = TypeVar("T")
 TCallable = TypeVar("TCallable", bound=Callable[..., Any])
+TTarget = Union[Callable[..., T], Callable[..., Awaitable[T]]]
 D = TypeVar("D")
 Empty = inspect.Signature.empty
 

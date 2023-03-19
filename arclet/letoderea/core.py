@@ -4,7 +4,6 @@ import asyncio
 from typing import Callable
 
 from .auxiliary import BaseAuxiliary
-from .backend import BackendPublisher
 from .context import event_ctx, system_ctx
 from .event import BaseEvent, get_providers
 from .exceptions import PropagationCancelled
@@ -14,6 +13,18 @@ from .publisher import Publisher
 from .subscriber import Subscriber
 from .typing import Contexts
 from .utils import group_dict
+
+
+class BackendPublisher(Publisher):
+    id = "__backend__publisher__"
+
+    def add_subscriber(self, event: str, subscriber: Subscriber) -> None:
+        self.subscribers.setdefault(event, []).append(subscriber)
+
+    def remove_subscriber(self, event: str, subscriber: Subscriber) -> None:
+        self.subscribers.setdefault(event, []).remove(subscriber)
+        if not self.subscribers[event]:
+            del self.subscribers[event]
 
 
 class EventSystem:
@@ -40,6 +51,11 @@ class EventSystem:
         class EventNameMatchProvider(Provider[BaseEvent], mode=ProvideMode.wildcard, target="event"):
             async def __call__(self, context: Contexts) -> BaseEvent | None:
                 return context.get("event")
+
+        @self.global_providers.append
+        class ContextProvider(Provider[Contexts]):
+            async def __call__(self, context: Contexts) -> Contexts:
+                return context
 
     async def _loop_fetch(self):
         while True:

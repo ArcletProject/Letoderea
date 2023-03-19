@@ -1,35 +1,31 @@
 import time
 import asyncio
-from arclet.letoderea.entities.event import TemplateEvent
-from arclet.letoderea.entities.subscriber import Subscriber
+from arclet.letoderea.provider import Provider
+from arclet.letoderea.subscriber import Subscriber
 from arclet.letoderea.handler import param_parser
 
 loop = asyncio.new_event_loop()
 
 
-class ExampleEvent(TemplateEvent):
-
-    def get_params(self):
-        return self.param_export(
-            msg='aa'
-        )
-
-
-def test(sr:str):
+def test(sr: str):
     pass
 
 
-test = Subscriber(test)
+class Test(Provider[str]):
+    async def __call__(self, context: dict) -> str:
+        return 'hello'
 
-e = ExampleEvent()
+
+test = Subscriber(test, providers=[Test()])
+
 revise = {}
 
 
 async def main():
-    for i in range(100000):
-        await param_parser(test.params, e.get_params(), revise)
+    for _ in range(100000):
+        await param_parser(test.params, {'sr': 'world'}, revise)
 
-start = time.time()
+start = time.perf_counter_ns()
 loop.run_until_complete(main())
-print(round(1000000 / (time.time() - start), 6), 'o/s')
+print(round(100000 * 10e8 / (time.perf_counter_ns() - start), 6), 'o/s')
 print(revise)

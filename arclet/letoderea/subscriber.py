@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from inspect import isclass
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar, Generic
 
+from .typing import TTarget
 from .auxiliary import BaseAuxiliary
 from .provider import ProvideMode, Provider
-from .utils import argument_analysis
+from .utils import argument_analysis, run_always_await
 
 
 def bind(
     target: Callable, providers: list[Provider]
-) -> dict[str, tuple[Any, Any, list[Provider]]]:
-    res = {}
+) -> list[tuple[str, Any, Any, list[Provider]]]:
+    res: dict[str, tuple[Any, Any, list[Provider]]] = {}
+
     provide_map = {}
     generic_map = {}
     wildcard_providers = []
@@ -27,7 +28,7 @@ def bind(
             provide_map.setdefault(provider.origin, []).append(provider)
 
     for name, annotation, default in argument_analysis(target):
-        if providers := provide_map.get(annotation):
+        if providers := provide_map.get(annotation, []):
             res[name] = (
                 annotation,
                 default,
@@ -65,21 +66,24 @@ def bind(
             )
         if isinstance(default, Provider):
             res[name][2].insert(0, default)
-    return res
+    return [(k, v[0], v[1], v[2]) for k, v in res.items()]
 
 
-class Subscriber:
+R = TypeVar("R")
+
+
+class Subscriber(Generic[R]):
     name: str
-    callable_target: Callable
+    callable_target: TTarget[R]
     priority: int
     auxiliaries: list[BaseAuxiliary]
     providers: list[Provider]
-    params: dict[str, tuple[Any, Any, list[Provider]]]
+    params: list[tuple[str, Any, Any, list[Provider]]]
     revise_mapping: dict[str, str]
 
     def __init__(
         self,
-        callable_target: Callable,
+        callable_target: TTarget[R],
         *,
         priority: int = 16,
         name: str | None = None,
@@ -90,11 +94,8 @@ class Subscriber:
         self.name = name or callable_target.__name__
         self.priority = priority
         self.auxiliaries = auxiliaries or []
-        self.providers = providers or []
-        for index, provider in enumerate(self.providers):
-            if isclass(provider):
-                provider: type[Provider]
-                self.providers[index] = provider()
+        providers = providers or []
+        self.providers = [p() if isinstance(p, type) else p for p in providers]
         if hasattr(callable_target, "__auxiliaries__"):
             self.auxiliaries.extend(getattr(callable_target, "__auxiliaries__", []))
         if hasattr(callable_target, "__providers__"):
@@ -102,8 +103,8 @@ class Subscriber:
         self.params = bind(callable_target, self.providers)
         self.revise_mapping = {}
 
-    def __call__(self, *args, **kwargs):
-        return self.callable_target(*args, **kwargs)
+    async def __call__(self, *args, **kwargs) -> R:
+        return await run_always_await(self.callable_target, *args, **kwargs)
 
     def __repr__(self):
         return f"Subscriber::{self.name}"

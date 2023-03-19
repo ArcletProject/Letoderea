@@ -1,7 +1,7 @@
 import inspect
 from functools import lru_cache
 from typing import Any, Callable, Iterable
-from .typing import get_annotations, Empty
+from .typing import get_annotations, TTarget, T
 
 
 def group_dict(iterable: Iterable, key_callable: Callable[[Any], Any]):
@@ -46,7 +46,7 @@ def is_async(o: Any):
     return is_coroutinefunction(o) or is_awaitable(o)
 
 
-async def run_always_await(target, *args, **kwargs):
+async def run_always_await(target: TTarget[Any], *args, **kwargs) -> Any:
     obj = target(*args, **kwargs)
     if is_async(target) or is_async(obj):
         obj = await obj
