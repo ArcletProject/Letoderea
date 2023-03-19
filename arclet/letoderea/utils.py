@@ -18,7 +18,11 @@ def argument_analysis(callable_target: Callable):
     return [
         (
             name,
-            (callable_annotation.get(name) if isinstance(param.annotation, str) else param.annotation)
+            (
+                callable_annotation.get(name)
+                if isinstance(param.annotation, str)
+                else param.annotation
+            )
             if param.annotation is not inspect.Signature.empty
             else None,
             param.default,
@@ -28,12 +32,22 @@ def argument_analysis(callable_target: Callable):
 
 
 @lru_cache(4096)
+def is_coroutinefunction(o):
+    return inspect.iscoroutinefunction(o)
+
+
+@lru_cache(4096)
+def is_awaitable(o):
+    return inspect.isawaitable(o)
+
+
+@lru_cache(4096)
 def is_async(o: Any):
-    return inspect.iscoroutinefunction(o) or inspect.isawaitable(o)
+    return is_coroutinefunction(o) or is_awaitable(o)
 
 
 async def run_always_await(target, *args, **kwargs):
     obj = target(*args, **kwargs)
-    while is_async(obj):
+    if is_async(target) or is_async(obj):
         obj = await obj
     return obj
