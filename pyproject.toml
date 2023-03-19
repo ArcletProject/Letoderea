@@ -5,7 +5,9 @@ description = "A high-performance, simple-structured event system, relies on asy
 authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
 ]
-dependencies = []
+dependencies = [
+    "typing-extensions>=4.0.0",
+]
 requires-python = ">=3.8"
 readme = "README.md"
 license = {text = "MIT"}
