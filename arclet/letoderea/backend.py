@@ -1,19 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
-from .event import BaseEvent
-from .publisher import BasePublisher
+from .publisher import Publisher
 
 
-class BackendPublisher(BasePublisher):
-    def validate(self, data: dict[str, Any]) -> BaseEvent | None:
-        pass
-
-    async def publish(self, event: BaseEvent) -> None:
-        pass
-
-    async def supply(self) -> BaseEvent:
-        pass
+class BackendPublisher(Publisher):
+    id = "__backend__publisher__"
 
     def add_subscriber(self, event: str, subscriber) -> None:
         """

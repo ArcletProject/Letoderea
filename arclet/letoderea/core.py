@@ -5,12 +5,12 @@ from typing import Callable
 
 from .auxiliary import BaseAuxiliary
 from .backend import BackendPublisher
-from .context import event_ctx
+from .context import event_ctx, system_ctx
 from .event import BaseEvent, get_providers
 from .exceptions import PropagationCancelled
 from .handler import depend_handler
 from .provider import ProvideMode, Provider
-from .publisher import BasePublisher
+from .publisher import Publisher
 from .subscriber import Subscriber
 from .typing import Contexts
 from .utils import group_dict
@@ -18,9 +18,9 @@ from .utils import group_dict
 
 class EventSystem:
     _ref_tasks = set()
-    _backend_publisher: BasePublisher = BackendPublisher()
+    _backend_publisher: Publisher = BackendPublisher()
     loop: asyncio.AbstractEventLoop
-    publishers: list[BasePublisher]
+    publishers: list[Publisher]
     global_providers: list[Provider]
 
     def __init__(self, loop=None, fetch=True):
@@ -29,6 +29,7 @@ class EventSystem:
             self.loop_task = self.loop.create_task(self._loop_fetch())
         self.publishers = []
         self.global_providers = []
+        system_ctx.set(self)
 
         @self.global_providers.append
         class EventGenericProvider(Provider[BaseEvent], mode=ProvideMode.generic):
@@ -48,7 +49,7 @@ class EventSystem:
                     continue
                 await self.publish(event, publisher)
 
-    def publish(self, event: BaseEvent, publisher: BasePublisher | None = None):
+    def publish(self, event: BaseEvent, publisher: Publisher | None = None):
         publisher = publisher or self._backend_publisher
         subscribers = publisher.subscribers[event.__class__.__name__]
         task = self.loop.create_task(self.dispatch(subscribers, event))
@@ -81,7 +82,7 @@ class EventSystem:
         def register_wrapper(exec_target: Callable) -> Subscriber:
             for event in events:
                 name = event.__name__
-                select_pub: BasePublisher
+                select_pub: Publisher
                 for publisher in self.publishers:
                     if name in publisher.events:
                         select_pub = publisher

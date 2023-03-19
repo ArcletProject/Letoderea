@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from typing import Any
-from abc import abstractmethod, ABCMeta
 from .subscriber import Subscriber
 from .event import BaseEvent
+from .context import system_ctx
 
 
-class BasePublisher(metaclass=ABCMeta):
+class Publisher:
+    id: str
     subscribers: dict[str, list[Subscriber]]
     supported_events: set[str]
 
     def __init__(self, *events: str):
+        if not hasattr(self, "id"):
+            raise TypeError("Publisher must have an id")
         self.subscribers = {}
         self.supported_events = set(events)
 
@@ -22,22 +25,13 @@ class BasePublisher(metaclass=ABCMeta):
     def events(self, add: type | str):
         self.supported_events.add(add.__name__ if isinstance(add, type) else add)
 
-    @abstractmethod
-    def validate(self, data: dict[str, Any]) -> BaseEvent | None:
-        """
-        验证事件数据是否为该 Publisher 所属
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    async def publish(self, event: BaseEvent) -> None:
+    async def publish(self, event: BaseEvent) -> Any:
         """主动提供事件方法， event system 被动接收"""
-        raise NotImplementedError
+        return await system_ctx.get().publish(event, self)
 
-    @abstractmethod
-    async def supply(self) -> BaseEvent:
+    async def supply(self) -> BaseEvent | None:
         """被动提供事件方法， 由 event system 主动轮询"""
-        raise NotImplementedError
+        return
 
     def add_subscriber(self, event: str, subscriber: Subscriber) -> None:
         """
