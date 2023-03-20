@@ -70,7 +70,7 @@ class BaseAuxiliary:
     def __init__(self):
         self.handlers = {}
         if _local_storage.get(self.__class__):
-            self.handlers.update(_local_storage.get(self.__class__))
+            self.handlers.update(_local_storage.get(self.__class__, {}))
 
     @overload
     def set(
@@ -115,17 +115,7 @@ class BaseAuxiliary:
 
         return decorator
 
-    @classmethod
-    def wrap(cls, *args, **kwargs):
-        def wrapper(target: TTarget) -> TTarget:
-            _target = target if isinstance(target, Callable) else target.callable_target
-            if not hasattr(_target, "__auxiliaries__"):
-                setattr(_target, "__auxiliaries__", [cls(*args, **kwargs)])  # type: ignore
-            else:
-                getattr(_target, "__auxiliaries__").append(cls(*args, **kwargs))  # type: ignore
-            return target
-
-        return wrapper
-
     def __eq__(self, other: "BaseAuxiliary"):
         return self.handlers == other.handlers
+
+

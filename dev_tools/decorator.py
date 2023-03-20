@@ -1,5 +1,5 @@
 import asyncio
-from arclet.letoderea import EventSystem, Contexts
+from arclet.letoderea import EventSystem, Contexts, wrap_aux
 from arclet.letoderea.auxiliary import BaseAuxiliary, Scope, AuxType
 
 
@@ -38,7 +38,7 @@ class ExampleEvent:
 
 
 @es.register(ExampleEvent)
-@TestDecorate.wrap()
+@wrap_aux(TestDecorate())
 async def test(m: int, a: str = TestDecorate()):
     print(m, type(m), end=' ')
     print(a, type(a))

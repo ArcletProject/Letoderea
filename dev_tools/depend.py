@@ -13,8 +13,8 @@ class ExampleEvent:
         context['m'] = 'aa'
 
 
-def test_depend(context: Contexts):
-    if context['m'] == 'aa':
+def test_depend(m: str):
+    if m == 'aa':
         return False
     raise ParsingStop
 

@@ -8,7 +8,7 @@ from .provider import ProvideMode, Provider
 from .utils import argument_analysis, run_always_await
 
 
-def bind(
+def _compile(
     target: Callable, providers: list[Provider]
 ) -> list[tuple[str, Any, Any, list[Provider]]]:
     res: dict[str, tuple[Any, Any, list[Provider]]] = {}
@@ -100,7 +100,7 @@ class Subscriber(Generic[R]):
             self.auxiliaries.extend(getattr(callable_target, "__auxiliaries__", []))
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
-        self.params = bind(callable_target, self.providers)
+        self.params = _compile(callable_target, self.providers)
         self.revise_mapping = {}
 
     async def __call__(self, *args, **kwargs) -> R:

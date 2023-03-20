@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from typing import Callable
+from weakref import finalize
+from contextlib import suppress
 
 from .auxiliary import BaseAuxiliary
 from .context import event_ctx, system_ctx
@@ -16,12 +18,10 @@ from .utils import group_dict
 
 
 class BackendPublisher(Publisher):
-    id = "__backend__publisher__"
-
-    def add_subscriber(self, event: str, subscriber: Subscriber) -> None:
+    def add_subscriber(self, event: type[BaseEvent], subscriber: Subscriber) -> None:
         self.subscribers.setdefault(event, []).append(subscriber)
 
-    def remove_subscriber(self, event: str, subscriber: Subscriber) -> None:
+    def remove_subscriber(self, event: type[BaseEvent], subscriber: Subscriber) -> None:
         self.subscribers.setdefault(event, []).remove(subscriber)
         if not self.subscribers[event]:
             del self.subscribers[event]
@@ -29,18 +29,27 @@ class BackendPublisher(Publisher):
 
 class EventSystem:
     _ref_tasks = set()
-    _backend_publisher: Publisher = BackendPublisher()
+    _backend_publisher: Publisher = BackendPublisher("__backend__publisher__")
     loop: asyncio.AbstractEventLoop
-    publishers: list[Publisher]
+    publishers: dict[str, Publisher]
     global_providers: list[Provider]
 
     def __init__(self, loop=None, fetch=True):
         self.loop = loop or asyncio.get_event_loop()
         if fetch:
             self.loop_task = self.loop.create_task(self._loop_fetch())
-        self.publishers = []
+        self.publishers = {}
         self.global_providers = []
-        system_ctx.set(self)
+        self._token = system_ctx.set(self)
+
+        def _remove(es):
+            with suppress(Exception):
+                es.loop_task.cancel()
+                es.loop_task = None
+            with suppress(Exception):
+                system_ctx.reset(es._token)
+            system_ctx.set(None)  # type: ignore
+        finalize(self, _remove, self)
 
         @self.global_providers.append
         class EventGenericProvider(Provider[BaseEvent], mode=ProvideMode.generic):
@@ -60,14 +69,20 @@ class EventSystem:
     async def _loop_fetch(self):
         while True:
             await asyncio.sleep(0.05)
-            for publisher in self.publishers:
+            for publisher in self.publishers.values():
                 if not (event := (await publisher.supply())):
                     continue
                 await self.publish(event, publisher)
 
-    def publish(self, event: BaseEvent, publisher: Publisher | None = None):
-        publisher = publisher or self._backend_publisher
-        subscribers = publisher.subscribers[event.__class__.__name__]
+    def add_publisher(self, publisher: Publisher):
+        self.publishers[publisher.id] = publisher
+
+    def publish(self, event: BaseEvent, publisher: str | Publisher | None = None):
+        if isinstance(publisher, str):
+            publisher = self.publishers.get(publisher)
+        if publisher is None:
+            publisher = self._backend_publisher
+        subscribers = publisher.subscribers[event.__class__]
         task = self.loop.create_task(self.dispatch(subscribers, event))
         task.add_done_callback(self._ref_tasks.discard)
         return task
@@ -97,10 +112,9 @@ class EventSystem:
 
         def register_wrapper(exec_target: Callable) -> Subscriber:
             for event in events:
-                name = event.__name__
                 select_pub: Publisher
-                for publisher in self.publishers:
-                    if name in publisher.events:
+                for publisher in self.publishers.values():
+                    if event in publisher.events:
                         select_pub = publisher
                         break
                 else:
@@ -108,6 +122,7 @@ class EventSystem:
                 _providers = [
                     *self.global_providers,
                     *get_providers(event),  # type: ignore
+                    *select_pub.providers.get(event, []),
                     *providers,
                 ]
                 if not isinstance(exec_target, Subscriber):
@@ -117,7 +132,7 @@ class EventSystem:
                         auxiliaries=auxiliaries,
                         providers=_providers,
                     )
-                select_pub.add_subscriber(name, exec_target)
+                select_pub.add_subscriber(event, exec_target)  # type: ignore
 
             return exec_target
 
