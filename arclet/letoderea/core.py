@@ -10,7 +10,7 @@ from .context import event_ctx, system_ctx
 from .event import BaseEvent, get_providers
 from .exceptions import PropagationCancelled
 from .handler import depend_handler
-from .provider import ProvideMode, Provider
+from .provider import Provider, Param
 from .publisher import Publisher
 from .subscriber import Subscriber
 from .typing import Contexts
@@ -52,17 +52,19 @@ class EventSystem:
         finalize(self, _remove, self)
 
         @self.global_providers.append
-        class EventGenericProvider(Provider[BaseEvent], mode=ProvideMode.generic):
-            async def __call__(self, context: Contexts) -> BaseEvent | None:
-                return context.get("event")
+        class EventProvider(Provider[BaseEvent]):
+            def validate(self, param: Param):
+                return issubclass(param.annotation, BaseEvent) or param.name == "event"
 
-        @self.global_providers.append
-        class EventNameMatchProvider(Provider[BaseEvent], mode=ProvideMode.wildcard, target="event"):
             async def __call__(self, context: Contexts) -> BaseEvent | None:
                 return context.get("event")
 
         @self.global_providers.append
         class ContextProvider(Provider[Contexts]):
+
+            def validate(self, param: Param):
+                return param.annotation == Contexts
+
             async def __call__(self, context: Contexts) -> Contexts:
                 return context
 

@@ -4,69 +4,23 @@ from typing import Any, Callable, TypeVar, Generic
 
 from .typing import TTarget
 from .auxiliary import BaseAuxiliary
-from .provider import ProvideMode, Provider
+from .provider import Param, Provider
 from .utils import argument_analysis, run_always_await
 
 
 def _compile(
     target: Callable, providers: list[Provider]
 ) -> list[tuple[str, Any, Any, list[Provider]]]:
-    res: dict[str, tuple[Any, Any, list[Provider]]] = {}
-
-    provide_map = {}
-    generic_map = {}
-    wildcard_providers = []
-    for provider in providers:
-        if provider.mode == ProvideMode.wildcard:
-            wildcard_providers.append(provider)
-        elif provider.mode == ProvideMode.subclass:
-            for t in provider.origin.mro()[:-1]:
-                provide_map.setdefault(t, []).append(provider)
-        elif provider.mode == ProvideMode.generic:
-            generic_map.setdefault(provider.origin, []).append(provider)
-        else:
-            provide_map.setdefault(provider.origin, []).append(provider)
-
-    for name, annotation, default in argument_analysis(target):
-        if providers := provide_map.get(annotation, []):
-            res[name] = (
-                annotation,
-                default,
-                sorted(
-                    filter(
-                        lambda x: True if x.target == "$" else x.target == name,
-                        providers,
-                    ),
-                    key=lambda x: x.target == target,
-                    reverse=True,
-                ),
-            )
-        else:
-            for t, providers in generic_map.items():
-                if annotation and issubclass(annotation, t):
-                    res[name] = (
-                        annotation,
-                        default,
-                        sorted(
-                            filter(
-                                lambda x: True if x.target == "$" else x.target == name,
-                                providers,
-                            ),
-                            key=lambda x: x.target == target,
-                            reverse=True,
-                        ),
-                    )
-                    break
-        if name not in res:
-            name_spec = [wild for wild in wildcard_providers if wild.target == name]
-            res[name] = (
-                annotation,
-                default,
-                name_spec or ([] if annotation else wildcard_providers),
-            )
+    res = []
+    for name, anno, default in argument_analysis(target):
+        catches = []
+        for provider in providers:
+            if provider.validate(Param(name, anno, default, bool(len(catches)))):
+                catches.append(provider)
         if isinstance(default, Provider):
-            res[name][2].insert(0, default)
-    return [(k, v[0], v[1], v[2]) for k, v in res.items()]
+            catches.insert(0, default)
+        res.append((name, anno, default, catches))
+    return res
 
 
 R = TypeVar("R")

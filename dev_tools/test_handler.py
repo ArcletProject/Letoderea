@@ -2,17 +2,17 @@ import asyncio
 import time
 from arclet.letoderea.handler import depend_handler
 from arclet.letoderea.subscriber import Subscriber
-from arclet.letoderea import Provider
+from arclet.letoderea import Provider, Contexts
 
 loop = asyncio.new_event_loop()
 
 
 class ExampleEvent:
-    async def gather(self, context: dict):
+    async def gather(self, context: Contexts):
         context["a"] = "aa"
 
     class TestProvider(Provider[str]):
-        async def __call__(self, context: dict) -> str:
+        async def __call__(self, context: Contexts) -> str:
             return context["a"]
 
 

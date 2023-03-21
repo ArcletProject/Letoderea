@@ -1,6 +1,6 @@
 from __future__ import annotations
 import traceback
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from .provider import Provider
 from .subscriber import Subscriber
@@ -24,7 +24,7 @@ async def depend_handler(
 ):
     if target.__class__ != Subscriber:
         target = Subscriber(target, providers=get_providers(event))
-    contexts = {"event": event, "$subscriber": target}
+    contexts = cast(Contexts, {"event": event, "$subscriber": target})
     await event.gather(contexts)
     try:
         for aux in target.auxiliaries:
@@ -32,7 +32,7 @@ async def depend_handler(
         arguments = await param_parser(target.params, contexts, target.revise_mapping)
 
         for aux in target.auxiliaries:
-            await after_parse(aux, arguments)
+            await after_parse(aux, cast(Contexts, arguments))
         result = await run_always_await(target.callable_target, **arguments)
         for aux in target.auxiliaries:
             await execution_complete(aux)
@@ -112,7 +112,7 @@ async def execution_complete(decorator: BaseAuxiliary):
 
 async def param_parser(
     params: list[tuple[str, Any, Any, list[Provider]]],
-    context: Contexts,
+    context: dict[str, Any],
     revise: dict[str, Any],
 ):
     """
@@ -133,7 +133,7 @@ async def param_parser(
             arguments_dict[name] = context[name]
         else:
             for provider in providers:
-                res = await provider(context)
+                res = await provider(context)  # type: ignore
                 if res is not None:
                     if res.__class__ is Force:
                         res = res.value
@@ -148,7 +148,7 @@ async def param_parser(
             for handler in filter(
                 lambda x: x.aux_type == AuxType.supply, aux
             ):
-                res = await handler.supply(default, context)
+                res = await handler.supply(default, context)  # type: ignore
                 if res is None:
                     continue
                 if res.__class__ is Force:

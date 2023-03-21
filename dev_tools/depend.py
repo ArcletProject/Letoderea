@@ -9,7 +9,7 @@ es = EventSystem()
 
 
 class ExampleEvent:
-    async def gather(self, context: dict):
+    async def gather(self, context: Contexts):
         context['m'] = 'aa'
 
 

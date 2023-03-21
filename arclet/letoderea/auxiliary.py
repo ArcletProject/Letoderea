@@ -12,7 +12,6 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Self
 
 from .event import BaseEvent
 from .exceptions import JudgementError
@@ -117,5 +116,3 @@ class BaseAuxiliary:
 
     def __eq__(self, other: "BaseAuxiliary"):
         return self.handlers == other.handlers
-
-

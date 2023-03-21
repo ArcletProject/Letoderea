@@ -1,4 +1,4 @@
-from arclet.letoderea import Publisher, EventSystem, Provider, Contexts, bind
+from arclet.letoderea import Publisher, EventSystem, provider, Contexts, bind
 import asyncio
 
 
@@ -14,14 +14,10 @@ class TestEvent:
         context["name"] = self.name
 
 
-class TestProvider(Provider[str]):
-    async def __call__(self, context: Contexts):
-        return context.get("name")
-
-
+test = provider(str, call=lambda x: x.get("name"))
 my_publisher = Publisher("test", TestEvent)
 my_publisher.unsafe_push(TestEvent("hello world"))
-my_publisher[TestEvent] += TestProvider()
+my_publisher[TestEvent] += test()
 
 
 @es.register(TestEvent)

@@ -5,9 +5,11 @@ import functools
 from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Any, Generic, TypeVar, Callable, Mapping, Union, Awaitable
+from typing import Any, Generic, TypeVar, Callable, Mapping, Union, Awaitable, Dict
 
-Contexts = dict[str, Any]
+
+class Contexts(Dict[str, Any]):
+    ...
 
 
 T = TypeVar("T")
