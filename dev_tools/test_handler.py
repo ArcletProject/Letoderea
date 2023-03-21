@@ -25,11 +25,11 @@ sub = Subscriber(test, providers=[ExampleEvent.TestProvider()])
 
 async def main():
     a = ExampleEvent()
-    for _ in range(100000):
+    for _ in range(50000):
         await depend_handler(test, a)
 
 
 start = time.time()
 loop.run_until_complete(main())
 
-print(100000 / (time.time() - start), "o/s")
+print(50000 / (time.time() - start), "o/s")

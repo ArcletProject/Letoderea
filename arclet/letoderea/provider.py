@@ -28,7 +28,7 @@ class Provider(Generic[T], metaclass=ABCMeta):
         self.origin = _local_storage[self.__class__]  # type: ignore
 
     def __init_subclass__(cls, **kwargs):
-        _local_storage[cls] = (cls.__orig_bases__[0].__args__[0],)  # type: ignore
+        _local_storage[cls] = cls.__orig_bases__[0].__args__[0]  # type: ignore
         if _local_storage[cls] is T:
             raise TypeError(
                 "Subclass of Provider must be generic. If you need a wildcard, please using `typing.Any`"

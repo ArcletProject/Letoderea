@@ -1,4 +1,4 @@
-from typing import Callable, Any
+from typing import Any
 
 from ..auxiliary import BaseAuxiliary, Scope, AuxType
 from ..subscriber import Subscriber

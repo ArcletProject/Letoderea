@@ -3,12 +3,9 @@ import asyncio
 from arclet.letoderea.provider import Provider
 from arclet.letoderea.subscriber import Subscriber
 from arclet.letoderea.handler import param_parser
+from arclet.letoderea.typing import Empty
 
 loop = asyncio.new_event_loop()
-
-
-def test(sr: str):
-    pass
 
 
 class Test(Provider[str]):
@@ -16,16 +13,13 @@ class Test(Provider[str]):
         return 'hello'
 
 
-test = Subscriber(test, providers=[Test()])
-
-revise = {}
+test = Test()
 
 
 async def main():
     for _ in range(100000):
-        await param_parser(test.params, {'sr': 'world'}, revise)
+        await param_parser("sr", str, Empty, [test], {'sr': 'world'})
 
 start = time.perf_counter_ns()
 loop.run_until_complete(main())
 print(round(100000 * 10e8 / (time.perf_counter_ns() - start), 6), 'o/s')
-print(revise)

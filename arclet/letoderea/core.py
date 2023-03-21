@@ -54,7 +54,9 @@ class EventSystem:
         @self.global_providers.append
         class EventProvider(Provider[BaseEvent]):
             def validate(self, param: Param):
-                return issubclass(param.annotation, BaseEvent) or param.name == "event"
+                return (
+                    isinstance(param.annotation, type) and issubclass(param.annotation, BaseEvent)
+                ) or param.name == "event"
 
             async def __call__(self, context: Contexts) -> BaseEvent | None:
                 return context.get("event")

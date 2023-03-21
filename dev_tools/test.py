@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import pstats
 import time
-from arclet.letoderea import EventSystem, Provider, Contexts
+from arclet.letoderea import EventSystem, Provider, Contexts, Param
 from arclet.letoderea.handler import depend_handler
 from pprint import pprint
 from cProfile import Profile
@@ -11,25 +11,27 @@ es = EventSystem()
 
 
 class TestEvent:
-    def __init__(self, name: str):
-        self.name = name
 
     async def gather(self, context: Contexts):
-        context["name"] = self.name
+        ...
 
     class TestProvider(Provider[str]):
+
+        def validate(self, param: Param):
+            return param.name == "a"
+
         async def __call__(self, context: Contexts) -> str | None:
-            return context.get("name")
+            return "1"
 
 
 @es.register(TestEvent)
-async def test_subscriber(a: str):
+async def test_subscriber(a):
     pass
 
-a = TestEvent("1")
+a = TestEvent()
 tasks = []
 pprint(test_subscriber.params)
-count = 20000
+count = 100000
 
 
 tasks.extend(
@@ -53,6 +55,7 @@ tasks.extend(
     es.loop.create_task(depend_handler(test_subscriber, a))
     for _ in range(count)
 )
+
 
 async def main():
     await asyncio.gather(*tasks)

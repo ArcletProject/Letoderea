@@ -1,8 +1,12 @@
 from __future__ import annotations
-import traceback
-from typing import Any, Callable, cast
 
-from .provider import Provider
+import inspect
+import pprint
+import sys
+import traceback
+from typing import Any, Callable, cast, Type
+
+from .provider import Provider, provider
 from .subscriber import Subscriber
 from .event import BaseEvent, get_providers
 from .exceptions import (
@@ -12,8 +16,8 @@ from .exceptions import (
     PropagationCancelled,
     JudgementError,
 )
-from .utils import run_always_await
-from .typing import Empty, Contexts, Force
+from .utils import run_always_await, Force
+from .typing import Empty, Contexts, generic_isinstance
 from .auxiliary import BaseAuxiliary, Scope, AuxType
 from .context import event_ctx
 
@@ -29,21 +33,50 @@ async def depend_handler(
     try:
         for aux in target.auxiliaries:
             await before_parse(aux, contexts)
-        arguments = await param_parser(target.params, contexts, target.revise_mapping)
-
+        arguments = cast(Contexts, {})
+        for param in target.params:
+            if param.depend:
+                arguments[param.name] = await param.depend(contexts)
+            else:
+                arguments[param.name] = await param_parser(
+                    param.name, param.annotation, param.default, param.providers, contexts
+                )
         for aux in target.auxiliaries:
-            await after_parse(aux, cast(Contexts, arguments))
+            await after_parse(aux, arguments)
         result = await run_always_await(target.callable_target, **arguments)
-        for aux in target.auxiliaries:
-            await execution_complete(aux)
-    except (UnexpectedArgument, UndefinedRequirement):
-        traceback.print_exc()
+    except UndefinedRequirement as u:
+        name, *_, pds = u.args
+        param = inspect.signature(target.callable_target).parameters[name]
+        code = target.callable_target.__code__  # type: ignore
+        etype: Type[Exception] = type(  # type: ignore
+            "UndefinedRequirement",
+            (UndefinedRequirement, SyntaxError),
+            {},
+        )
+        _args = (code.co_filename, code.co_firstlineno, 1, str(param))
+        if sys.version_info >= (3, 10):
+            _args += (code.co_firstlineno, len(name) + 1)
+        traceback.print_exception(
+            etype,
+            etype(
+                f"\nUnable to parse parameter ({param}) "
+                f"\n by providers"
+                f"\n{pprint.pformat(pds)}"
+                f"\n with context"
+                f"\n{pprint.pformat(contexts)}",
+                _args,
+            ),
+            u.__traceback__,
+        )
         raise
-    except (ParsingStop, PropagationCancelled, JudgementError):
+    except (ParsingStop, PropagationCancelled, JudgementError, UnexpectedArgument):
         raise
     except Exception as e:
         traceback.print_exc()
         raise e
+    finally:
+        for aux in target.auxiliaries:
+            await execution_complete(aux)
     return result
 
 
@@ -87,8 +120,8 @@ async def after_parse(
             length = len(data)
             await handler.supply(decorator, data)
             if length > len(data):
-                raise UndefinedRequirement(
-                    f"Undefined requirement in {set(data.keys()) - set(data.keys())}"
+                raise UnexpectedArgument(
+                    f"Missing requirement in {set(data.keys()) - set(data.keys())}"
                 )
             if length < len(data):
                 raise UnexpectedArgument(
@@ -111,53 +144,43 @@ async def execution_complete(decorator: BaseAuxiliary):
 
 
 async def param_parser(
-    params: list[tuple[str, Any, Any, list[Provider]]],
-    context: dict[str, Any],
-    revise: dict[str, Any],
+    name: str,
+    annotation: Any,
+    default: Any,
+    providers: list[Provider],
+    context: Contexts | dict[str, Any],
 ):
     """
     将调用函数提供的参数字典与事件提供的参数字典进行比对，并返回正确的参数字典
 
     Args:
-        params: 调用的函数的参数列表
+        name: 参数名
+        annotation: 参数类型
+        default: 默认值
+        providers: 参数提供者列表
         context: 函数可返回的参数字典
-        revise: 修正的参数字典
     Returns:
         函数需要的参数字典
     """
-    arguments_dict = {}
-    for name, annotation, default, providers in params:
-        if name in revise:
-            name = revise[name]
-        if name in context:
-            arguments_dict[name] = context[name]
-        else:
-            for provider in providers:
-                res = await provider(context)  # type: ignore
-                if res is not None:
-                    if res.__class__ is Force:
-                        res = res.value
-                    arguments_dict[name] = res
-                    break
-        if name not in arguments_dict and default is not Empty:
-            arguments_dict[name] = default
-        if isinstance(default, BaseAuxiliary):
-            aux = default.handlers.get(Scope.parsing)
-            if not aux:
-                continue
-            for handler in filter(
-                lambda x: x.aux_type == AuxType.supply, aux
-            ):
-                res = await handler.supply(default, context)  # type: ignore
-                if res is None:
-                    continue
-                if res.__class__ is Force:
-                    res = res.value
-                arguments_dict[name] = res
-                break
-        if name not in arguments_dict:
-            # TODO: 遍历 context，如果有符合的类型，就直接返回
-            raise UnexpectedArgument(
-                f"argument: {name} ({annotation}) without value"
-            )
-    return arguments_dict
+    if name in context:
+        return context[name]
+    for _provider in providers:
+        res = await _provider(context)  # type: ignore
+        if res is None:
+            continue
+        if res.__class__ is Force:
+            res = res.value
+        return res
+    if annotation:
+        for key, value in context.items():
+            if generic_isinstance(value, annotation):
+                providers.append(provider(annotation, target=key)())
+                return value
+            if isinstance(annotation, str) and f"{type(value)}" == annotation:
+                providers.append(provider(type(value), target=key)())
+                return value
+    if default is not Empty:
+        return default
+    raise UndefinedRequirement(
+        name, annotation, default, providers
+    )

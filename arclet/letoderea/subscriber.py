@@ -1,25 +1,41 @@
 from __future__ import annotations
 
+from functools import partial
+from dataclasses import dataclass
 from typing import Any, Callable, TypeVar, Generic
 
 from .typing import TTarget
-from .auxiliary import BaseAuxiliary
-from .provider import Param, Provider
+from .auxiliary import BaseAuxiliary, AuxType, Scope
+from .provider import Param, Provider, provider
 from .utils import argument_analysis, run_always_await
+
+
+@dataclass
+class CompileParam:
+    name: str
+    annotation: Any
+    default: Any
+    providers: list[Provider]
+    depend: Provider | None
+
+    __slots__ = ("name", "annotation", "default", "providers", "depend")
 
 
 def _compile(
     target: Callable, providers: list[Provider]
-) -> list[tuple[str, Any, Any, list[Provider]]]:
+) -> list[CompileParam]:
     res = []
     for name, anno, default in argument_analysis(target):
-        catches = []
-        for provider in providers:
-            if provider.validate(Param(name, anno, default, bool(len(catches)))):
-                catches.append(provider)
+        param = CompileParam(name, anno, default, [], None)
+        for _provider in providers:
+            if _provider.validate(Param(name, anno, default, bool(len(param.providers)))):
+                param.providers.append(_provider)
         if isinstance(default, Provider):
-            catches.insert(0, default)
-        res.append((name, anno, default, catches))
+            param.providers.insert(0, default)
+        if isinstance(default, BaseAuxiliary) and (aux := default.handlers.get(Scope.parsing)):
+            if depend := next(filter(lambda x: x.aux_type == AuxType.supply, aux), None):
+                param.depend = provider(anno, call=partial(depend.supply, default))()
+        res.append(param)
     return res
 
 
@@ -32,8 +48,7 @@ class Subscriber(Generic[R]):
     priority: int
     auxiliaries: list[BaseAuxiliary]
     providers: list[Provider]
-    params: list[tuple[str, Any, Any, list[Provider]]]
-    revise_mapping: dict[str, str]
+    params: list[CompileParam]
 
     def __init__(
         self,
@@ -55,7 +70,6 @@ class Subscriber(Generic[R]):
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
         self.params = _compile(callable_target, self.providers)
-        self.revise_mapping = {}
 
     async def __call__(self, *args, **kwargs) -> R:
         return await run_always_await(self.callable_target, *args, **kwargs)

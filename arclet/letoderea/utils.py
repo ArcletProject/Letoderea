@@ -1,5 +1,6 @@
 import inspect
 from functools import lru_cache
+from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 from .typing import get_annotations, TTarget, T
 
@@ -51,3 +52,9 @@ async def run_always_await(target: TTarget[Any], *args, **kwargs) -> Any:
     if is_async(target) or is_async(obj):
         obj = await obj
     return obj
+
+
+@dataclass
+class Force:
+    """用于转义在本框架中特殊部分的特殊值"""
+    value: Any

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pprint import pprint
-from arclet.letoderea import EventSystem, BaseEvent, Provider, Contexts
+from arclet.letoderea import EventSystem, BaseEvent, Provider, Contexts, bind
 from arclet.letoderea.handler import depend_handler
 
 es = EventSystem()
@@ -12,11 +12,6 @@ es = EventSystem()
 class IntProvider(Provider[int]):
     async def __call__(self, context: Contexts) -> int | None:
         return 123
-
-
-class StrProvider(Provider[str]):
-    async def __call__(self, context: Contexts) -> str | None:
-        return context['name']
 
 
 class BoolProvider(Provider[bool]):
@@ -30,13 +25,17 @@ class FloatProvider(Provider[float]):
 
 
 class TestEvent(BaseEvent):
-    providers = [IntProvider, StrProvider, BoolProvider, FloatProvider]
 
     async def gather(self, context: Contexts):
         context["name"] = "Letoderea"
 
+    class TestProvider(Provider[str]):
+        async def __call__(self, context: Contexts) -> str | None:
+            return context['name']
+
 
 @es.register(TestEvent)
+@bind(IntProvider, BoolProvider, FloatProvider)
 async def test_subscriber(
     name0: str,
     age0: int,
