@@ -1,4 +1,4 @@
-from arclet.letoderea import Publisher, EventSystem, provider, Contexts, bind
+from arclet.letoderea import Publisher, EventSystem, provide, Contexts, bind, BaseEvent
 import asyncio
 
 
@@ -14,8 +14,14 @@ class TestEvent:
         context["name"] = self.name
 
 
-test = provider(str, call=lambda x: x.get("name"))
-my_publisher = Publisher("test", TestEvent)
+class MyPublisher(Publisher):
+
+    def validate(self, event: type[BaseEvent]):
+        return event == TestEvent
+
+
+test = provide(str, call=lambda x: x.get("name"))
+my_publisher = MyPublisher("test")
 my_publisher.unsafe_push(TestEvent("hello world"))
 my_publisher[TestEvent] += test()
 

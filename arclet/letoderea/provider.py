@@ -48,7 +48,7 @@ class Provider(Generic[T], metaclass=ABCMeta):
         raise NotImplementedError
 
 
-def provider(
+def provide(
     origin: type[T],
     call: Callable[[Contexts], T | None | Awaitable[T | None]] | None = None,
     validate: Callable[[Param], bool] | None = None,
@@ -62,7 +62,7 @@ def provider(
 
     class _Provider(Provider[origin]):
         def validate(self, param: Param):
-            return validate(param) if validate else super().validate(param)
+            return validate(param) if validate else param.name == target if target else super().validate(param)
 
         async def __call__(self, context: Contexts):
             return await run_always_await(call, context) if call else context.get(target)

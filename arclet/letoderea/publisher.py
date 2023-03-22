@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 from asyncio import Queue
 from contextlib import suppress
 from dataclasses import dataclass
@@ -53,31 +54,26 @@ class Delegate:
         return self
 
 
-class Publisher:
+class Publisher(metaclass=ABCMeta):
     id: str
     subscribers: dict[type[BaseEvent], list[Subscriber]]
     providers: dict[type[BaseEvent], list[Provider]]
-    supported_events: set[type[BaseEvent]]
 
-    def __init__(self, id_: str, *events: type[BaseEvent], queue_size: int = -1):
+    def __init__(self, id_: str, queue_size: int = -1):
         self.id = id_
         self.event_queue = Queue(queue_size)
         self.subscribers = {}
         self.providers = {}
-        self.supported_events = set(events)
         if es := system_ctx.get():
             es.add_publisher(self)
 
     def __repr__(self):
         return f"Publisher::{self.id}"
 
-    @property
-    def events(self) -> set[type[BaseEvent]]:
-        return self.supported_events
-
-    @events.setter
-    def events(self, add: type[BaseEvent]):
-        self.supported_events.add(add)
+    @abstractmethod
+    def validate(self, event: type[BaseEvent]):
+        """验证该事件类型是否符合该发布者"""
+        raise NotImplementedError
 
     async def publish(self, event: BaseEvent) -> Any:
         """主动提供事件方法， event system 被动接收"""
@@ -99,7 +95,7 @@ class Publisher:
         """
         添加订阅者
         """
-        if event not in self.supported_events:
+        if not self.validate(event):  # type: ignore
             raise TypeError(f"Event {event} is not supported by {self}")
         self.subscribers.setdefault(event, []).append(subscriber)
 
@@ -107,7 +103,7 @@ class Publisher:
         """
         移除订阅者
         """
-        if event not in self.supported_events:
+        if not self.validate(event):  # type: ignore
             raise TypeError(f"Event {event} is not supported by {self}")
         with suppress(ValueError):
             self.subscribers.setdefault(event, []).remove(subscriber)
@@ -116,13 +112,13 @@ class Publisher:
 
     def bind_provider(self, event: type[BaseEvent], *providers: Provider) -> None:
         """为事件绑定间接 Provider"""
-        if event not in self.supported_events:
+        if not self.validate(event):  # type: ignore
             raise TypeError(f"Event {event} is not supported by {self}")
         self.providers.setdefault(event, []).extend(providers)
 
     def unbind_provider(self, event: type[BaseEvent], provider: Provider) -> None:
         """移除事件的间接 Provider"""
-        if event not in self.supported_events:
+        if not self.validate(event):  # type: ignore
             raise TypeError(f"Event {event} is not supported by {self}")
         with suppress(ValueError):
             self.providers.setdefault(event, []).remove(provider)
@@ -130,12 +126,12 @@ class Publisher:
             del self.providers[event]
 
     def __getitem__(self, item: type[BaseEvent]):
-        if item not in self.supported_events:
+        if not self.validate(item):  # type: ignore
             raise TypeError(f"Event {item} is not supported by {self}")
         return Delegate(etype=item, publisher=self)  # type: ignore
 
     def __setitem__(self, key, value):
-        if key not in self.supported_events:
+        if not self.validate(key):
             raise TypeError(f"Event {key} is not supported by {self}")
         if isinstance(value, Subscriber):
             self.add_subscriber(key, value)

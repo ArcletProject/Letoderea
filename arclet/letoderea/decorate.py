@@ -12,9 +12,7 @@ TWrap = TypeVar("TWrap", bound=Union[Callable, Subscriber])
 
 def wrap_aux(*aux: BaseAuxiliary):
     def wrapper(target: TWrap) -> TWrap:
-        if isinstance(target, Subscriber):
-            target.auxiliaries.extend(aux)
-        else:
+        if not isinstance(target, Subscriber):
             if not hasattr(target, "__auxiliaries__"):
                 setattr(target, "__auxiliaries__", list(aux))
             else:

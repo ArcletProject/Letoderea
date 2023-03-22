@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, TypeVar, Generic
 
 from .typing import TTarget
-from .auxiliary import BaseAuxiliary, AuxType, Scope
-from .provider import Param, Provider, provider
+from .auxiliary import BaseAuxiliary, AuxType, SCOPE, Executor, combine
+from .provider import Param, Provider, provide
 from .utils import argument_analysis, run_always_await
 
 
@@ -32,9 +32,8 @@ def _compile(
                 param.providers.append(_provider)
         if isinstance(default, Provider):
             param.providers.insert(0, default)
-        if isinstance(default, BaseAuxiliary) and (aux := default.handlers.get(Scope.parsing)):
-            if depend := next(filter(lambda x: x.aux_type == AuxType.supply, aux), None):
-                param.depend = provider(anno, call=partial(depend.supply, default))()
+        if isinstance(default, BaseAuxiliary) and (default.type == AuxType.depend):
+            param.depend = provide(anno, call=partial(default, "parsing"))()
         res.append(param)
     return res
 
@@ -46,7 +45,7 @@ class Subscriber(Generic[R]):
     name: str
     callable_target: TTarget[R]
     priority: int
-    auxiliaries: list[BaseAuxiliary]
+    auxiliaries: dict[SCOPE, list[Executor]]
     providers: list[Provider]
     params: list[CompileParam]
 
@@ -62,13 +61,19 @@ class Subscriber(Generic[R]):
         self.callable_target = callable_target
         self.name = name or callable_target.__name__
         self.priority = priority
-        self.auxiliaries = auxiliaries or []
+        self.auxiliaries = {}
         providers = providers or []
         self.providers = [p() if isinstance(p, type) else p for p in providers]
+        auxiliaries = auxiliaries or []
         if hasattr(callable_target, "__auxiliaries__"):
-            self.auxiliaries.extend(getattr(callable_target, "__auxiliaries__", []))
+            auxiliaries.extend(getattr(callable_target, "__auxiliaries__", []))
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
+        for aux in auxiliaries:
+            for scope in aux.available_scopes:
+                self.auxiliaries.setdefault(scope, []).append(aux)
+        for scope, value in self.auxiliaries.items():
+            self.auxiliaries[scope] = combine(value)  # type: ignore
         self.params = _compile(callable_target, self.providers)
 
     async def __call__(self, *args, **kwargs) -> R:

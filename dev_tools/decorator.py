@@ -1,30 +1,32 @@
 import asyncio
-from arclet.letoderea import EventSystem, Contexts, wrap_aux
-from arclet.letoderea.auxiliary import BaseAuxiliary, Scope, AuxType
 
+from arclet.letoderea import EventSystem, Contexts, wrap_aux
+from arclet.letoderea.auxiliary import BaseAuxiliary, SCOPE, AuxType
 
 loop = asyncio.get_event_loop()
 es = EventSystem(loop=loop)
 
 
 class TestDecorate(BaseAuxiliary):
-    pass
 
+    def __init__(self):
+        super().__init__(AuxType.supply)
 
-@TestDecorate.inject(Scope.before_parse, AuxType.supply)
-def supply(self: TestDecorate, context: Contexts):
-    for k, v in context.items():
-        if isinstance(v, str):
-            context[k] = v * 2
-        if isinstance(v, int):
-            context[k] = v * 3
-
-
-@TestDecorate.inject(Scope.parsing, AuxType.supply)
-def supply(self: TestDecorate, context: Contexts):
-    for k, v in context.items():
-        if isinstance(v, str):
-            return bytes(v, encoding="utf-8")
+    async def __call__(self, scope: SCOPE, context: Contexts):
+        if scope == "prepare":
+            for k, v in context.items():
+                if isinstance(v, str):
+                    context[k] = v * 2
+                if isinstance(v, int):
+                    context[k] = v * 3
+            return context
+        for k, v in context.items():
+            if isinstance(v, str):
+                context[k] = bytes(v, encoding="utf-8")
+        return context
+    @property
+    def available_scopes(self) -> set[SCOPE]:
+        return {"prepare", "complete"}
 
 
 class ExampleEvent:

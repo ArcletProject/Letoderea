@@ -6,7 +6,7 @@ import sys
 import traceback
 from typing import Any, Callable, cast, Type
 
-from .provider import Provider, provider
+from .provider import Provider, provide
 from .subscriber import Subscriber
 from .event import BaseEvent, get_providers
 from .exceptions import (
@@ -18,8 +18,7 @@ from .exceptions import (
 )
 from .utils import run_always_await, Force
 from .typing import Empty, Contexts, generic_isinstance
-from .auxiliary import BaseAuxiliary, Scope, AuxType
-from .context import event_ctx
+from .auxiliary import Executor
 
 
 async def depend_handler(
@@ -31,8 +30,9 @@ async def depend_handler(
     contexts = cast(Contexts, {"event": event, "$subscriber": target})
     await event.gather(contexts)
     try:
-        for aux in target.auxiliaries:
-            await before_parse(aux, contexts)
+        if 'prepare' in target.auxiliaries:
+            for aux in target.auxiliaries['prepare']:
+                await prepare(aux, contexts)
         arguments = cast(Contexts, {})
         for param in target.params:
             if param.depend:
@@ -41,8 +41,9 @@ async def depend_handler(
                 arguments[param.name] = await param_parser(
                     param.name, param.annotation, param.default, param.providers, contexts
                 )
-        for aux in target.auxiliaries:
-            await after_parse(aux, arguments)
+        if 'complete' in target.auxiliaries:
+            for aux in target.auxiliaries['complete']:
+                await complete(aux, arguments)
         result = await run_always_await(target.callable_target, **arguments)
     except UndefinedRequirement as u:
         name, *_, pds = u.args
@@ -75,72 +76,46 @@ async def depend_handler(
         traceback.print_exc()
         raise e
     finally:
-        for aux in target.auxiliaries:
-            await execution_complete(aux)
+        if 'cleanup' in target.auxiliaries:
+            for aux in target.auxiliaries['cleanup']:
+                await aux("cleanup", contexts)
+        contexts.clear()
     return result
 
 
-async def before_parse(
-    decorator: BaseAuxiliary,
-    contexts: Contexts,
-):
+async def prepare(decorator: Executor, ctx: Contexts):
+    res = await decorator("prepare", ctx.copy()) # type: ignore
+    if res is False:
+        raise JudgementError
+    if isinstance(res, dict):
+        ctx.update(res)
+
+
+async def complete(decorator: Executor, ctx: Contexts):
     """
     在解析前执行的操作
 
     Args:
         decorator: 解析器列表
-        contexts: 事件参数字典
+        ctx: 事件参数字典
     """
-    if not decorator.handlers.get(Scope.before_parse):
-        return
-    for handler in decorator.handlers[Scope.before_parse]:
-        if handler.aux_type == AuxType.judge:
-            await handler.judge(decorator, contexts["event"])
-        else:
-            await handler.supply(decorator, contexts)
-
-
-async def after_parse(
-    decorator: BaseAuxiliary,
-    data: Contexts,
-):
-    """
-    在解析前执行的操作
-
-    Args:
-        decorator: 解析器列表
-        data: 事件参数字典
-    """
-    if not decorator.handlers.get(Scope.after_parse):
-        return
-    for handler in decorator.handlers[Scope.after_parse]:
-        if handler.aux_type == AuxType.judge:
-            await handler.judge(decorator, data["event"])
-        else:
-            length = len(data)
-            await handler.supply(decorator, data)
-            if length > len(data):
-                raise UnexpectedArgument(
-                    f"Missing requirement in {set(data.keys()) - set(data.keys())}"
-                )
-            if length < len(data):
-                raise UnexpectedArgument(
-                    f"Unexpected argument in {set(data.keys()) - set(data.keys())}"
-                )
-
-
-async def execution_complete(decorator: BaseAuxiliary):
-    """
-    在解析前执行的操作
-
-    Args:
-        decorator: 解析器列表
-    """
-    if not decorator.handlers.get(Scope.cleanup):
-        return
-    for handler in decorator.handlers[Scope.cleanup]:
-        if handler.aux_type == AuxType.judge:
-            await handler.judge(decorator, event_ctx.get())
+    keys = set(ctx.keys())
+    res = await decorator("complete", ctx.copy())  # type: ignore
+    if res is False:
+        raise JudgementError
+    if isinstance(res, dict):
+        if set(res.keys()) == keys:
+            ctx.clear()
+            ctx.update(res)
+            return
+        if len(keys) > len(res):
+            raise UnexpectedArgument(
+                f"Missing requirement in {keys - set(res.keys())}"
+            )
+        if len(keys) < len(res):
+            raise UnexpectedArgument(
+                f"Unexpected argument in {keys - set(res.keys())}"
+            )
 
 
 async def param_parser(
@@ -174,10 +149,10 @@ async def param_parser(
     if annotation:
         for key, value in context.items():
             if generic_isinstance(value, annotation):
-                providers.append(provider(annotation, target=key)())
+                providers.append(provide(annotation, target=key)())
                 return value
             if isinstance(annotation, str) and f"{type(value)}" == annotation:
-                providers.append(provider(type(value), target=key)())
+                providers.append(provide(type(value), target=key)())
                 return value
     if default is not Empty:
         return default

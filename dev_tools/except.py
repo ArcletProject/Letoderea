@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from arclet.letoderea import EventSystem, BaseEvent, provider, Contexts, bind, register
+from arclet.letoderea import EventSystem, BaseEvent, provide, Contexts, bind, register
 
 es = EventSystem()
 
@@ -11,9 +11,9 @@ class TestEvent(BaseEvent):
 
 
 @register(TestEvent)
-@bind(provider(int, lambda x: x.get('a')))
-@bind(provider(int, lambda x: x.get('b')))
-@bind(provider(int, lambda x: x.get('c')))
+@bind(provide(int, lambda x: x.get('a')))
+@bind(provide(int, lambda x: x.get('b')))
+@bind(provide(int, lambda x: x.get('c')))
 async def test_subscriber(name: str, age: int):
     print(name, age)
 

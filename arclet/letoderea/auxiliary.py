@@ -1,118 +1,172 @@
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Literal,
-    TypeVar,
-    Union,
-    overload,
-)
+from functools import partial
+from typing import Optional, Awaitable, Callable, Literal, Protocol, Any, overload
 
-
-from .event import BaseEvent
-from .exceptions import JudgementError
 from .typing import Contexts
-from .utils import run_always_await
 
-if TYPE_CHECKING:
-    from .subscriber import Subscriber
-
-
-class Scope(Enum):
-    before_parse = auto()
-    parsing = auto()
-    after_parse = auto()
-    cleanup = auto()
+SCOPE = Literal["prepare", "parsing", "complete", "cleanup"]
 
 
 class AuxType(Enum):
     supply = auto()
     judge = auto()
+    depend = auto()
 
 
-TAux = TypeVar("TAux", bound="BaseAuxiliary")
-TTarget = TypeVar("TTarget", bound=Union[Callable, "Subscriber"])
-supply = Callable[["BaseAuxiliary", Contexts], Any]
-judge = Callable[["BaseAuxiliary", BaseEvent], bool]
+class CombineMode(Enum):
+    AND = auto()
+    OR = auto()
+    SINGLE = auto()
 
 
-@dataclass
-class AuxHandler:
-    """
-    参数辅助器基类，用于修饰参数, 或者判断条件
-    """
+@dataclass(init=False, eq=True, unsafe_hash=True)
+class BaseAuxiliary(metaclass=ABCMeta):
+    type: AuxType
+    mode: CombineMode
 
-    scope: Scope
-    aux_type: AuxType
-    handler: Union[supply, judge]
+    @property
+    @abstractmethod
+    def available_scopes(self) -> set[SCOPE]:
+        raise NotImplementedError
 
-    async def supply(self, source: "BaseAuxiliary", context: Contexts):
-        h: supply = self.handler  # type: ignore
-        return await run_always_await(h, source, context)
+    def __init__(self, atype: AuxType, mode: CombineMode = CombineMode.SINGLE):
+        self.type = atype
+        self.mode = mode
 
-    async def judge(self, source: "BaseAuxiliary", event: BaseEvent):
-        h: judge = self.handler  # type: ignore
-        if await run_always_await(h, source, event) is False:
-            raise JudgementError
-
-
-_local_storage: dict[type["BaseAuxiliary"], dict[Scope, list["AuxHandler"]]] = {}
+    @abstractmethod
+    async def __call__(self, scope: SCOPE, context: Contexts):
+        raise NotImplementedError
 
 
-class BaseAuxiliary:
-    handlers: dict[Scope, list["AuxHandler"]]
+class SupplyAuxiliary(BaseAuxiliary):
+    def __init__(self, mode: CombineMode = CombineMode.SINGLE):
+        super().__init__(AuxType.supply, mode)
 
-    def __init__(self):
-        self.handlers = {}
-        if _local_storage.get(self.__class__):
-            self.handlers.update(_local_storage.get(self.__class__, {}))
+    @abstractmethod
+    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[Contexts]:
+        raise NotImplementedError
 
-    @overload
-    def set(
-        self, scope: Scope, atype: Literal[AuxType.supply]
-    ) -> Callable[[Callable[[TAux, Contexts], Any]], Callable[[TAux, Contexts], Any]]:
-        ...
 
-    @overload
-    def set(
-        self, scope: Scope, atype: Literal[AuxType.judge]
-    ) -> Callable[[Callable[[TAux, BaseEvent], bool]], Callable[[TAux, BaseEvent], bool]]:
-        ...
+class JudgeAuxiliary(BaseAuxiliary):
+    def __init__(self, mode: CombineMode = CombineMode.SINGLE):
+        super().__init__(AuxType.judge, mode)
 
-    def set(self, scope: Scope, atype: AuxType):  # type: ignore
-        def decorator(func: Callable):
-            self.handlers.setdefault(scope, []).append(AuxHandler(scope, atype, func))
-            return func
+    @abstractmethod
+    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[bool]:
+        raise NotImplementedError
 
-        return decorator
 
-    @classmethod
-    @overload
-    def inject(
-        cls, scope: Scope, atype: Literal[AuxType.supply]
-    ) -> Callable[[Callable[[TAux, Contexts], Any]], Callable[[TAux, Contexts], Any]]:
-        ...
+class Executor(Protocol):
+    async def __call__(self, scope: SCOPE, context: Contexts): ...
 
-    @classmethod
-    @overload
-    def inject(
-        cls, scope: Scope, atype: Literal[AuxType.judge]
-    ) -> Callable[[Callable[[TAux, BaseEvent], bool]], Callable[[TAux, BaseEvent], bool]]:
-        ...
 
-    @classmethod
-    def inject(cls, scope: Scope, atype: AuxType):  # type: ignore
-        def decorator(func: Callable):
-            _local_storage.setdefault(cls, {}).setdefault(scope, []).append(
-                AuxHandler(scope, atype, func)
-            )
-            return func
+class CombineExecutor:
+    steps: list[Callable[[SCOPE, Contexts], Awaitable]]
 
-        return decorator
+    def __init__(self, auxes: list[BaseAuxiliary]):
+        self.steps = []
+        ors = []
 
-    def __eq__(self, other: "BaseAuxiliary"):
-        return self.handlers == other.handlers
+        async def _ors(_scope: SCOPE, ctx: Contexts, *, funcs: list[BaseAuxiliary]):
+            res = None
+            for func in funcs:
+                res = await func(_scope, ctx)
+                if res is None:
+                    continue
+                if res:
+                    return res
+            return res
+
+        for aux in auxes:
+            if aux.mode == CombineMode.AND:
+                if ors:
+                    ors.append(aux)
+                    self.steps.append(partial(_ors, funcs=ors.copy()))
+                    ors.clear()
+                else:
+                    self.steps.append(aux)
+            elif aux.mode == CombineMode.OR:
+                ors.append(aux)
+        if ors:
+            self.steps.append(partial(_ors, funcs=ors.copy()))
+            ors.clear()
+
+    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[bool]:
+        res = None
+        ctx = context
+        last = None
+        for step in self.steps:
+            if (last := await step(scope, ctx)) is None:
+                continue
+            if isinstance(last, dict):
+                ctx = last
+                continue
+            if last is False:
+                return False
+            if res is None:
+                res = last
+            res &= last
+        return ctx if isinstance(last, dict) else res
+
+
+def combine(auxiliaries: list[BaseAuxiliary]) -> list[Executor]:
+    cb = []
+    res = []
+    for aux in auxiliaries:
+        if aux.mode == CombineMode.SINGLE:
+            if cb:
+                res.append(CombineExecutor(cb))
+                cb.clear()
+            res.append(aux)
+        else:
+            cb.append(aux)
+    return res
+
+
+@overload
+def auxilia(
+    atype: Literal[AuxType.supply],
+    mode: CombineMode,
+    prepare: Callable[[Contexts], Optional[Contexts]] | None = None,
+    complete: Callable[[Contexts], Optional[Contexts]] | None = None,
+    cleanup: Callable[[Contexts], Optional[Contexts]] | None = None,
+): ...
+
+
+@overload
+def auxilia(
+    atype: Literal[AuxType.judge],
+    mode: CombineMode,
+    prepare: Callable[[Contexts], Optional[bool]] | None = None,
+    complete: Callable[[Contexts], Optional[bool]] | None = None,
+    cleanup: Callable[[Contexts], Optional[bool]] | None = None,
+): ...
+
+
+def auxilia(
+    atype: AuxType,
+    mode: CombineMode,
+    prepare: Callable[[Contexts], Any] | None = None,
+    complete: Callable[[Contexts], Any] | None = None,
+    cleanup: Callable[[Contexts], Any] | None = None,
+):
+    class _Auxiliary(BaseAuxiliary):
+        async def __call__(self, scope: SCOPE, context: Contexts):
+            res = None
+            if scope == "prepare" and prepare:
+                res = prepare(context)
+            if scope == "complete" and complete:
+                res = complete(context)
+            if scope == "cleanup" and cleanup:
+                res = cleanup(context)
+            return res if res is False else context
+
+        @property
+        def available_scopes(self) -> set[SCOPE]:
+            return {"prepare", "complete", "cleanup"}
+
+    return _Auxiliary(atype, mode)
