@@ -31,7 +31,7 @@ async def test_subscriber(a):
 a = TestEvent()
 tasks = []
 pprint(test_subscriber.params)
-count = 100000
+count = 20000
 
 
 tasks.extend(

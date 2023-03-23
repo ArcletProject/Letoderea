@@ -6,7 +6,7 @@ from weakref import finalize
 from contextlib import suppress
 
 from .auxiliary import BaseAuxiliary
-from .context import event_ctx, system_ctx
+from .context import system_ctx
 from .event import BaseEvent, get_providers, get_auxiliaries
 from .exceptions import PropagationCancelled
 from .handler import depend_handler
@@ -96,16 +96,15 @@ class EventSystem:
 
     async def dispatch(self, subscribers: list[Subscriber], event: BaseEvent):
         grouped: dict[int, list[Subscriber]] = group_dict(subscribers, lambda x: x.priority)
-        with event_ctx.use(event):
-            for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
-                tasks = [
-                    depend_handler(subscriber, event)
-                    for subscriber in current_subs
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                for result in results:
-                    if result is PropagationCancelled:
-                        return
+        for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
+            tasks = [
+                depend_handler(subscriber, event)
+                for subscriber in current_subs
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if result is PropagationCancelled:
+                    return
 
     def register(
         self,
@@ -113,17 +112,25 @@ class EventSystem:
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
         providers: list[Provider | type[Provider]] | None = None,
+        publisher: Publisher | None = None
     ):
         auxiliaries = auxiliaries or []
         providers = providers or []
 
         def register_wrapper(exec_target: Callable) -> Subscriber:
             for event in events:
-                select_pubs = [
-                    publisher
-                    for publisher in self.publishers.values()
-                    if publisher.validate(event)  # type: ignore
-                ] or [self._backend_publisher]
+                select_pubs = (
+                    [publisher]
+                    if publisher and publisher.validate(event)  # type: ignore
+                    else (
+                        [
+                            pub
+                            for pub in self.publishers.values()
+                            if pub.validate(event)  # type: ignore
+                        ] or [self._backend_publisher]
+                    )
+
+                )
                 for pub in select_pubs:
                     _providers = [
                         *self.global_providers,
@@ -132,13 +139,12 @@ class EventSystem:
                         *providers,
                     ]
                     auxiliaries.extend(get_auxiliaries(event))
-                    if not isinstance(exec_target, Subscriber):
-                        exec_target = Subscriber(
-                            exec_target,
-                            priority=priority,
-                            auxiliaries=auxiliaries,
-                            providers=_providers,
-                        )
+                    exec_target = Subscriber(
+                        exec_target,
+                        priority=priority,
+                        auxiliaries=auxiliaries,
+                        providers=_providers,
+                    )
                     pub.add_subscriber(event, exec_target)  # type: ignore
 
             return exec_target
