@@ -1,118 +1,62 @@
 import inspect
 from dataclasses import dataclass
-from contextlib import contextmanager
-from contextvars import ContextVar, Token
 from functools import lru_cache
-from typing import (
-    Type,
-    Union,
-    Callable,
-    Any,
-    Iterable,
-    List,
-    Generic,
-    TypeVar,
-    TYPE_CHECKING,
-)
+from typing import Any, Callable, Iterable
 
-from .entities.event import TemplateEvent
-
-if TYPE_CHECKING:
-    from .entities.auxiliary import BaseAuxiliary
-
-Empty = inspect.Signature.empty
-TEvent = Union[Type[TemplateEvent], TemplateEvent]
-T = TypeVar("T")
-D = TypeVar("D")
-TAux = TypeVar("TAux", bound="BaseAuxiliary")
-
-
-@dataclass
-class ArgumentPackage(Generic[TAux]):
-    source: TAux
-    name: str
-    annotation: Any
-    value: Any
-
-    __slots__ = ("source", "name", "value", "annotation")
-
-
-async def run_always_await(callable_target, *args, **kwargs):
-    if is_async(callable_target):
-        return await callable_target(*args, **kwargs)
-    return callable_target(*args, **kwargs)
-
-
-@lru_cache(4096)
-def argument_analysis(callable_target: Callable):
-    return [
-        (
-            name,
-            param.annotation
-            if param.annotation is not inspect.Signature.empty
-            else None,
-            param.default,  # if param.default is not inspect.Signature.empty else None,
-        )
-        for name, param in inspect.signature(callable_target).parameters.items()
-    ]
-
-
-@lru_cache(4096)
-def is_async(o: Any):
-    return inspect.iscoroutinefunction(o) or inspect.isawaitable(o)
+from .typing import TTarget, get_annotations
 
 
 def group_dict(iterable: Iterable, key_callable: Callable[[Any], Any]):
     temp = {}
     for i in iterable:
         k = key_callable(i)
-        temp[k] = i
+        temp.setdefault(k, []).append(i)
     return temp
 
 
-def event_class_generator(target=TemplateEvent):
-    for i in target.__subclasses__():
-        yield i
-        if i.__subclasses__():
-            yield from event_class_generator(i)
+@lru_cache(4096)
+def argument_analysis(callable_target: Callable):
+    callable_annotation = get_annotations(callable_target, eval_str=True)
+    return [
+        (
+            name,
+            (
+                callable_annotation.get(name)
+                if isinstance(param.annotation, str)
+                else param.annotation
+            )
+            if param.annotation is not inspect.Signature.empty
+            else None,
+            param.default,
+        )
+        for name, param in inspect.signature(callable_target).parameters.items()
+    ]
 
 
-def search_event(name: str):
-    for i in event_class_generator():
-        if i.__name__ == name:
-            return i
+@lru_cache(4096)
+def is_coroutinefunction(o):
+    return inspect.iscoroutinefunction(o)
 
 
-@lru_cache(None)
-def gather_inserts(event: Union[Type[TemplateEvent], TemplateEvent]) -> "List[TEvent]":
-    inserts = getattr(event, "inserts", [])
-    result: "List[TEvent]" = [event]
-
-    for i in inserts:
-        if issubclass(i, TemplateEvent):
-            result.extend(gather_inserts(i))
-        else:
-            result.append(i)
-    return result
+@lru_cache(4096)
+def is_awaitable(o):
+    return inspect.isawaitable(o)
 
 
-class ContextModel(Generic[T]):
-    current_ctx: ContextVar[T]
+@lru_cache(4096)
+def is_async(o: Any):
+    return is_coroutinefunction(o) or is_awaitable(o)
 
-    def __init__(self, name: str) -> None:
-        self.current_ctx = ContextVar(name)
 
-    def get(self, default: Union[T, D] = None) -> Union[T, D]:
-        return self.current_ctx.get(default)
+async def run_always_await(target: TTarget[Any], *args, **kwargs) -> Any:
+    obj = target(*args, **kwargs)
+    if is_async(target) or is_async(obj):
+        obj = await obj
+    return obj
 
-    def set(self, value: T):
-        return self.current_ctx.set(value)
 
-    def reset(self, token: Token):
-        return self.current_ctx.reset(token)
+@dataclass
+class Force:
+    """用于转义在本框架中特殊部分的特殊值"""
 
-    @contextmanager
-    def use(self, value: T):
-        token = self.set(value)
-        yield
-        self.reset(token)
+    value: Any

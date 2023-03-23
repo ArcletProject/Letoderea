@@ -1,19 +1,28 @@
-from typing import Callable
+from dataclasses import dataclass
+from typing import Any
 
-from ..entities.auxiliary import BaseAuxiliary
-from ..entities.subscriber import Subscriber
-from ..utils import ArgumentPackage
-from ..handler import await_exec_target
+from ..auxiliary import SCOPE, AuxType, BaseAuxiliary
+from ..handler import depend_handler
+from ..subscriber import Subscriber
+from ..typing import Contexts, TTarget
 
 
+@dataclass(init=False, eq=True)
 class Depend(BaseAuxiliary):
-    target: Subscriber
+    @property
+    def available_scopes(self):
+        return {"parsing"}
 
-    def __init__(self, callable_func: Callable):
-        self.target = Subscriber(callable_func)
-        super().__init__()
+    async def __call__(self, scope: SCOPE, context: Contexts):
+        sub = Subscriber(self.target, providers=context["$subscriber"].providers)
+        return await depend_handler(sub, context["event"])
+
+    target: TTarget[Any]
+
+    def __init__(self, callable_func: TTarget[Any]):
+        self.target = callable_func
+        super().__init__(AuxType.depend)
 
 
-@Depend.inject_aux("parsing", "supply")
-async def depend(target_argument: ArgumentPackage[Depend]):
-    return await await_exec_target(target_argument.source.target, target_argument.value)
+def Depends(target: TTarget[Any]) -> Any:
+    return Depend(target)

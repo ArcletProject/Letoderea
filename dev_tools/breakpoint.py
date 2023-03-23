@@ -1,42 +1,37 @@
 import asyncio
 from arclet.letoderea import EventSystem
-from arclet.letoderea.entities.event import TemplateEvent
-from arclet.letoderea.breakpoint.stepout import StepOut
-from arclet.letoderea.breakpoint import Breakpoint
+from arclet.letoderea.typing import Contexts
+from arclet.letoderea.builtin.breakpoint import StepOut, Breakpoint
+
 
 loop = asyncio.get_event_loop()
-test_stack = [0]
 es = EventSystem(loop=loop)
-break_point = Breakpoint(event_system=es)
+break_point = Breakpoint(es)
 
 
-class TestStepOut(StepOut):
-
-    @staticmethod
-    def handler(msg: str):
-        if msg == "continue!":
-            print("[out] >>> receive in handler", msg)
-            return msg
+def handler(msg: str):
+    if msg == "continue!":
+        print("[breakpoint] <<< receive in handler:", f'"{msg}"')
+        return "world!"
 
 
-class ExampleEvent(TemplateEvent):
-    type: str = "ExampleEvent"
+class ExampleEvent:
     msg: str
 
-    def get_params(self):
-        return self.param_export(
-            str=self.msg
-        )
+    async def gather(self, ctx: Contexts):
+        ctx['msg'] = self.msg
 
 
 @es.register(ExampleEvent)
-async def test(m: str):
-    if m == 'hello':
-        print("[subscriber] >>> wait for msg:'continue!' ")
-        out = TestStepOut(ExampleEvent)
+async def test(msg: str):
+    if msg == 'hello':
+        print("[subscriber] >>> wait for msg: \"continue!\" ")
+        out = StepOut([ExampleEvent])
+        out.use(handler)
         print("[subscriber] >>> current out:", out)
-        await break_point(out)
-        print("[subscriber] >>>", m)
+        res = await break_point(out)
+        print("[subscriber] >>> wait result:", f'"{res}"')
+        print("[subscriber] >>> finish!")
 
 
 a = ExampleEvent()
@@ -48,16 +43,16 @@ c.msg = "wait"
 
 
 async def main():
-    for i in range(0, 6):
+    for i in range(6):
         if i % 3 == 0:
-            print('>>> event posted with msg: "hello"')
-            es.event_publish(a)
+            print(i, 'event posted with msg: "hello"')
+            es.publish(a)
         elif (i - 1) % 3 == 0:
-            print('>>> event posted with msg: "wait"')
-            es.event_publish(c)
+            print(i, 'event posted with msg: "wait"')
+            es.publish(c)
         else:
-            print('>>> event posted with msg: "continue!"')
-            es.event_publish(b)
+            print(i, 'event posted with msg: "continue!"')
+            es.publish(b)
         await asyncio.sleep(1)
 
 

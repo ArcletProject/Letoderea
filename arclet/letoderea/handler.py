@@ -1,223 +1,159 @@
+from __future__ import annotations
+
+import inspect
+import pprint
+import sys
 import traceback
-from inspect import isclass
-from typing import Tuple, Dict, Any, Union, Callable, List, get_args
-from .entities.subscriber import Subscriber
-from .entities.event import TemplateEvent, ParamRet
+from typing import Any, Callable, Type, cast
+
+from .auxiliary import Executor
+from .event import BaseEvent, get_providers
 from .exceptions import (
-    UndefinedRequirement,
-    UnexpectedArgument,
+    JudgementError,
     ParsingStop,
     PropagationCancelled,
-    JudgementError,
+    UndefinedRequirement,
+    UnexpectedArgument,
 )
-from .utils import argument_analysis, run_always_await, Empty, TEvent, ContextModel
-from .entities.auxiliary import BaseAuxiliary
+from .provider import Provider, provide
+from .subscriber import Subscriber
+from .typing import Contexts, Empty, generic_isinstance
+from .utils import Force, run_always_await
 
-event_ctx: ContextModel[TemplateEvent] = ContextModel("leto::event")
 
-
-async def await_exec_target(
-    target: Union[Subscriber, Callable],
-    events: Union[List[TEvent], ParamRet],
+async def depend_handler(
+    target: Subscriber | Callable,
+    event: BaseEvent,
 ):
-    is_subscriber = isinstance(target, Subscriber)
-    auxiliaries = target.auxiliaries if is_subscriber else []
-    callable_target = target.callable_target if is_subscriber else target
-    event_data = target.internal_arguments.copy() if is_subscriber else {}
-    revise = target.revise_dispatches if is_subscriber else {}
-    target_param = (
-        target.params if is_subscriber else argument_analysis(callable_target)
-    )
-    if isinstance(events, Dict):
-        event_data.update(events)
-    else:
-        for event in events:
-            event_data.update(event.get_params())
+    if target.__class__ != Subscriber:
+        target = Subscriber(target, providers=get_providers(event))
+    contexts = cast(Contexts, {"event": event, "$subscriber": target})
+    await event.gather(contexts)
     try:
-        for aux in auxiliaries:
-            await before_parse(aux, event_data)
-        arguments = await param_parser(target_param, event_data, revise)
-        if is_subscriber:
-            target.revise_dispatches = revise
-        for aux in auxiliaries:
-            await after_parse(aux, arguments)
-        result = await run_always_await(callable_target, **arguments)
-        for aux in auxiliaries:
-            await execution_complete(aux)
-    except (UnexpectedArgument, UndefinedRequirement):
-        traceback.print_exc()
+        if "prepare" in target.auxiliaries:
+            for aux in target.auxiliaries["prepare"]:
+                await prepare(aux, contexts)
+        arguments = cast(Contexts, {})
+        for param in target.params:
+            if param.depend:
+                arguments[param.name] = await param.depend(contexts)
+            else:
+                arguments[param.name] = await param_parser(
+                    param.name,
+                    param.annotation,
+                    param.default,
+                    param.providers,
+                    contexts,
+                )
+        if "complete" in target.auxiliaries:
+            for aux in target.auxiliaries["complete"]:
+                await complete(aux, arguments)
+        result = await run_always_await(target.callable_target, **arguments)
+    except UndefinedRequirement as u:
+        name, *_, pds = u.args
+        param = inspect.signature(target.callable_target).parameters[name]
+        code = target.callable_target.__code__  # type: ignore
+        etype: Type[Exception] = type(  # type: ignore
+            "UndefinedRequirement",
+            (UndefinedRequirement, SyntaxError),
+            {},
+        )
+        _args = (code.co_filename, code.co_firstlineno, 1, str(param))
+        if sys.version_info >= (3, 10):
+            _args += (code.co_firstlineno, len(name) + 1)
+        traceback.print_exception(
+            etype,
+            etype(
+                f"\nUnable to parse parameter ({param}) "
+                f"\n by providers"
+                f"\n{pprint.pformat(pds)}"
+                f"\n with context"
+                f"\n{pprint.pformat(contexts)}",
+                _args,
+            ),
+            u.__traceback__,
+        )
         raise
-    except (ParsingStop, PropagationCancelled, JudgementError):
+    except (ParsingStop, PropagationCancelled, JudgementError, UnexpectedArgument):
         raise
     except Exception as e:
         traceback.print_exc()
         raise e
+    finally:
+        if "cleanup" in target.auxiliaries:
+            for aux in target.auxiliaries["cleanup"]:
+                await aux("cleanup", contexts)
+        contexts.clear()
     return result
 
 
-async def before_parse(
-    decorator: BaseAuxiliary,
-    event_data: Dict[type, Dict[str, Any]],
-):
+async def prepare(decorator: Executor, ctx: Contexts):
+    res = await decorator("prepare", ctx.copy())  # type: ignore
+    if res is False:
+        raise JudgementError
+    if isinstance(res, dict):
+        ctx.update(res)
+
+
+async def complete(decorator: Executor, ctx: Contexts):
     """
     在解析前执行的操作
 
     Args:
         decorator: 解析器列表
-        event_data: 事件参数字典
+        ctx: 事件参数字典
     """
-    if not decorator.aux_handlers.get("before_parse"):
-        return
-    for handler in decorator.aux_handlers["before_parse"]:
-        if handler.aux_type == "judge":
-            await handler.judge_wrapper(decorator, event_ctx.get())
-        if handler.aux_type == "supply":
-            for k, v in event_data.copy().items():
-                if handler.keep:
-                    event_data.update(
-                        await handler.supply_wrapper_keep(decorator, k, v)
-                    )
-                else:
-                    event_data[k].update(await handler.supply_wrapper(decorator, k, v))
-
-
-async def after_parse(
-    decorator: BaseAuxiliary,
-    event_data: Dict[str, Any],
-):
-    """
-    在解析前执行的操作
-
-    Args:
-        decorator: 解析器列表
-        event_data: 事件参数字典
-    """
-    if not decorator.aux_handlers.get("after_parse"):
-        return
-    for handler in decorator.aux_handlers["after_parse"]:
-        if handler.aux_type == "supply":
-            for k, v in event_data.copy().items():
-                if handler.keep:
-                    r = await handler.supply_wrapper_keep(decorator, type(v), {k: v})
-                    event_data.update(r.popitem()[1])
-                else:
-                    event_data[k].update(
-                        await handler.supply_wrapper(decorator, type(v), {k: v})
-                    )
-
-
-async def execution_complete(
-    decorator: BaseAuxiliary,
-):
-    """
-    在解析前执行的操作
-
-    Args:
-        decorator: 解析器列表
-    """
-    if not decorator.aux_handlers.get("execution_complete"):
-        return
-    for handler in decorator.aux_handlers["execution_complete"]:
-        if handler.aux_type == "judge":
-            await handler.judge_wrapper(decorator, event_ctx.get())
+    keys = set(ctx.keys())
+    res = await decorator("complete", ctx.copy())  # type: ignore
+    if res is False:
+        raise JudgementError
+    if isinstance(res, dict):
+        if set(res.keys()) == keys:
+            ctx.clear()
+            ctx.update(res)
+            return
+        if len(keys) > len(res):
+            raise UnexpectedArgument(f"Missing requirement in {keys - set(res.keys())}")
+        if len(keys) < len(res):
+            raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")
 
 
 async def param_parser(
-    params: List[Tuple[str, Any, Any]],
-    event_args: Dict[type, Dict[str, Any]],
-    revise: Dict[str, Any],
+    name: str,
+    annotation: Any,
+    default: Any,
+    providers: list[Provider],
+    context: Contexts | dict[str, Any],
 ):
     """
     将调用函数提供的参数字典与事件提供的参数字典进行比对，并返回正确的参数字典
 
     Args:
-        params: 调用的函数的参数列表
-        event_args: 函数可返回的参数字典
-        revise: 修正的参数字典
+        name: 参数名
+        annotation: 参数类型
+        default: 默认值
+        providers: 参数提供者列表
+        context: 函数可返回的参数字典
     Returns:
         函数需要的参数字典
     """
-    arguments_dict = {}
-    for name, annotation, default in params:
-        if not annotation or annotation == Any:
-            for _m_args in event_args.values():
-                if arg := _m_args.get(name):
-                    arguments_dict[name] = arg
-                    break
-                elif arg := _m_args.get(str(default)):
-                    arguments_dict[name] = arg
-                    revise[name] = str(default)
-                    break
-                elif default is not Empty:
-                    arguments_dict[name] = default
-                    break
-                else:
-                    raise UndefinedRequirement(f"{name}'s annotation is undefined")
-        else:
-            if not (kwarg := event_args.get(annotation, {})):
-                if isinstance(annotation, str):
-                    for t in event_args:
-                        if t.__name__ == annotation:
-                            kwarg = event_args[t]
-                            break
-                elif isclass(annotation):
-                    for t in event_args:
-                        if issubclass(t, annotation):
-                            kwarg = event_args[t]
-                            break
-                elif annotation.__class__.__name__ in "_GenericAlias":
-                    for anno in get_args(annotation):
-                        if kwarg := event_args.get(anno, {}):
-                            annotation = anno
-                            break
-                        for t in event_args:
-                            if isclass(anno) and issubclass(t, anno):
-                                kwarg = event_args[t]
-                                break
-
-            if isinstance(annotation, str):
-                annotation_name = annotation
-            else:
-                annotation_name = annotation.__name__
-            if name in revise:
-                real_name = revise[name]
-                arguments_dict[name] = kwarg[real_name]
-            elif arg := kwarg.get(name):
-                arguments_dict[name] = arg
-            elif arg := kwarg.get(annotation_name):
-                arguments_dict[name] = arg
-                revise[name] = annotation_name
-            elif arg := kwarg.get(str(default)):
-                arguments_dict[name] = arg
-                revise[name] = str(default)
-            elif kwarg:
-                k, v = kwarg.popitem()
-                arguments_dict[name] = v
-                revise[name] = k
-            elif (
-                default is not Empty
-            ):  # and isclass(annotation) and isinstance(default, annotation):
-                arguments_dict[name] = default
-
-        if isinstance(default, BaseAuxiliary):
-            aux = default.aux_handlers.get("parsing")
-            if not aux:
-                continue
-            supplys = list(filter(lambda x: x.aux_type == "supply", aux))
-            if default.__class__.__name__ == "Depend":
-                _depend_result = await supplys[0].supply_wrapper(
-                    default, dict, {name: event_args}
-                )
-                if (res := _depend_result.get(name)) != event_args:
-                    arguments_dict[name] = res
-            else:
-                _deco_result = await supplys[0].supply_wrapper(
-                    default, annotation, {name: arguments_dict[name]}
-                )
-                if (res := _deco_result.get(name)) != arguments_dict[name]:
-                    arguments_dict[name] = res
-        if name not in arguments_dict:
-            raise UnexpectedArgument(
-                f"a argument: {{{annotation} {name}}} without value"
-            )
-    return arguments_dict
+    if name in context:
+        return context[name]
+    for _provider in providers:
+        res = await _provider(context)  # type: ignore
+        if res is None:
+            continue
+        if res.__class__ is Force:
+            res = res.value
+        return res
+    if annotation:
+        for key, value in context.items():
+            if generic_isinstance(value, annotation):
+                providers.append(provide(annotation, target=key)())
+                return value
+            if isinstance(annotation, str) and f"{type(value)}" == annotation:
+                providers.append(provide(type(value), target=key)())
+                return value
+    if default is not Empty:
+        return default
+    raise UndefinedRequirement(name, annotation, default, providers)
