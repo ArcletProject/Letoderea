@@ -23,7 +23,9 @@ class Delegate:
         elif isinstance(other, Provider):
             self.publisher.bind_provider(self.etype, other)  # type: ignore
         else:
-            raise TypeError(f"unsupported operand type(s) for +: '{type(self).__name__}' and '{type(other).__name__}'")
+            raise TypeError(
+                f"unsupported operand type(s) for +: '{type(self).__name__}' and '{type(other).__name__}'"
+            )
         return self
 
     def __iadd__(self, other):
@@ -32,7 +34,9 @@ class Delegate:
         elif isinstance(other, Provider):
             self.publisher.bind_provider(self.etype, other)  # type: ignore
         else:
-            raise TypeError(f"unsupported operand type(s) for +: '{type(self).__name__}' and '{type(other).__name__}'")
+            raise TypeError(
+                f"unsupported operand type(s) for +: '{type(self).__name__}' and '{type(other).__name__}'"
+            )
         return self
 
     def __sub__(self, other):
@@ -41,7 +45,9 @@ class Delegate:
         elif isinstance(other, Provider):
             self.publisher.unbind_provider(self.etype, other)  # type: ignore
         else:
-            raise TypeError(f"unsupported operand type(s) for -: '{type(self).__name__}' and '{type(other).__name__}'")
+            raise TypeError(
+                f"unsupported operand type(s) for -: '{type(self).__name__}' and '{type(other).__name__}'"
+            )
         return self
 
     def __isub__(self, other):
@@ -50,7 +56,9 @@ class Delegate:
         elif isinstance(other, Provider):
             self.publisher.unbind_provider(self.etype, other)  # type: ignore
         else:
-            raise TypeError(f"unsupported operand type(s) for -: '{type(self).__name__}' and '{type(other).__name__}'")
+            raise TypeError(
+                f"unsupported operand type(s) for -: '{type(self).__name__}' and '{type(other).__name__}'"
+            )
         return self
 
 

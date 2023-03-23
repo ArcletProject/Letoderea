@@ -1,8 +1,9 @@
 import inspect
-from functools import lru_cache
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Callable, Iterable
-from .typing import get_annotations, TTarget, T
+
+from .typing import TTarget, get_annotations
 
 
 def group_dict(iterable: Iterable, key_callable: Callable[[Any], Any]):
@@ -57,4 +58,5 @@ async def run_always_await(target: TTarget[Any], *args, **kwargs) -> Any:
 @dataclass
 class Force:
     """用于转义在本框架中特殊部分的特殊值"""
+
     value: Any

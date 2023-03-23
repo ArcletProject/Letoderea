@@ -16,7 +16,9 @@ class BaseEvent(Protocol):
 
 
 @lru_cache(4096)
-def get_providers(event: type[BaseEvent] | BaseEvent) -> list[type[Provider] | Provider]:
+def get_providers(
+    event: type[BaseEvent] | BaseEvent,
+) -> list[type[Provider] | Provider]:
     res = getattr(event, "providers", [])
     res.extend(
         p

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from functools import partial
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar, Generic
+from functools import partial
+from typing import Any, Callable, Generic, TypeVar
 
-from .typing import TTarget
-from .auxiliary import BaseAuxiliary, AuxType, SCOPE, Executor, combine
+from .auxiliary import SCOPE, AuxType, BaseAuxiliary, Executor, combine
 from .provider import Param, Provider, provide
+from .typing import TTarget
 from .utils import argument_analysis, run_always_await
 
 
@@ -21,14 +21,14 @@ class CompileParam:
     __slots__ = ("name", "annotation", "default", "providers", "depend")
 
 
-def _compile(
-    target: Callable, providers: list[Provider]
-) -> list[CompileParam]:
+def _compile(target: Callable, providers: list[Provider]) -> list[CompileParam]:
     res = []
     for name, anno, default in argument_analysis(target):
         param = CompileParam(name, anno, default, [], None)
         for _provider in providers:
-            if _provider.validate(Param(name, anno, default, bool(len(param.providers)))):
+            if _provider.validate(
+                Param(name, anno, default, bool(len(param.providers)))
+            ):
                 param.providers.append(_provider)
         if isinstance(default, Provider):
             param.providers.insert(0, default)

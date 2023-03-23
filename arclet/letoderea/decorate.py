@@ -1,11 +1,10 @@
-from typing import Callable, TypeVar, Union, Type
+from typing import Callable, Type, TypeVar, Union
 
-from .subscriber import Subscriber, _compile
-from .provider import Provider
-from .event import BaseEvent
 from .auxiliary import BaseAuxiliary
 from .context import system_ctx
-
+from .event import BaseEvent
+from .provider import Provider
+from .subscriber import Subscriber, _compile
 
 TWrap = TypeVar("TWrap", bound=Union[Callable, Subscriber])
 

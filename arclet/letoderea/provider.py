@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Generic, NamedTuple, TypeVar, get_origin, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Generic, NamedTuple, TypeVar, get_origin
 
 from .typing import Contexts
 from .utils import run_always_await
@@ -62,9 +62,17 @@ def provide(
 
     class _Provider(Provider[origin]):
         def validate(self, param: Param):
-            return validate(param) if validate else param.name == target if target else super().validate(param)
+            return (
+                validate(param)
+                if validate
+                else param.name == target
+                if target
+                else super().validate(param)
+            )
 
         async def __call__(self, context: Contexts):
-            return await run_always_await(call, context) if call else context.get(target)
+            return (
+                await run_always_await(call, context) if call else context.get(target)
+            )
 
     return _Provider

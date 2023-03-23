@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 from functools import partial
-from typing import Optional, Awaitable, Callable, Literal, Protocol, Any, overload
+from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, overload
 
 from .typing import Contexts
 
@@ -61,7 +61,8 @@ class JudgeAuxiliary(BaseAuxiliary):
 
 
 class Executor(Protocol):
-    async def __call__(self, scope: SCOPE, context: Contexts): ...
+    async def __call__(self, scope: SCOPE, context: Contexts):
+        ...
 
 
 class CombineExecutor:
@@ -134,7 +135,8 @@ def auxilia(
     prepare: Callable[[Contexts], Optional[Contexts]] | None = None,
     complete: Callable[[Contexts], Optional[Contexts]] | None = None,
     cleanup: Callable[[Contexts], Optional[Contexts]] | None = None,
-): ...
+):
+    ...
 
 
 @overload
@@ -144,7 +146,8 @@ def auxilia(
     prepare: Callable[[Contexts], Optional[bool]] | None = None,
     complete: Callable[[Contexts], Optional[bool]] | None = None,
     cleanup: Callable[[Contexts], Optional[bool]] | None = None,
-): ...
+):
+    ...
 
 
 def auxilia(

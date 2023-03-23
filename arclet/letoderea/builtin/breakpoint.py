@@ -1,14 +1,14 @@
 import asyncio
 from asyncio import Future
-from typing import Callable, Any, Union, List, Type, Set, Optional
+from typing import Any, Callable, List, Optional, Set, Type, Union
 
-from ..typing import Contexts, TCallable
-from ..handler import depend_handler
+from ..auxiliary import SCOPE, AuxType, BaseAuxiliary
+from ..core import BackendPublisher, EventSystem
 from ..event import BaseEvent
-from ..auxiliary import BaseAuxiliary, AuxType, SCOPE
-from ..provider import Provider
-from ..core import EventSystem, BackendPublisher
 from ..exceptions import PropagationCancelled
+from ..handler import depend_handler
+from ..provider import Provider
+from ..typing import Contexts, TCallable
 
 
 class StepOut(BaseAuxiliary):
@@ -24,7 +24,7 @@ class StepOut(BaseAuxiliary):
         providers: Optional[List[Union[Provider, Type[Provider]]]] = None,
         auxiliaries: Optional[List[BaseAuxiliary]] = None,
         priority: int = 15,
-        handler: Optional[Callable[..., Any]] = None
+        handler: Optional[Callable[..., Any]] = None,
     ):
         self.target = set(events)
         super().__init__(AuxType.judge)
@@ -38,7 +38,7 @@ class StepOut(BaseAuxiliary):
         return {"prepare"}
 
     async def __call__(self, scope: SCOPE, context: Contexts):
-        return type(context['event']) in self.target
+        return type(context["event"]) in self.target
 
     def use(self, func: TCallable) -> TCallable:
         self.handler = func
@@ -67,7 +67,7 @@ class Breakpoint:
                 et,  # type: ignore
                 priority=condition.priority,
                 auxiliaries=[condition],
-                publisher=self.publisher
+                publisher=self.publisher,
             )(callable_target)
 
         try:
@@ -85,7 +85,7 @@ class Breakpoint:
             priority=condition.priority,
             auxiliaries=condition.auxiliaries,
             providers=condition.providers,
-            publisher=self.publisher
+            publisher=self.publisher,
         )(condition.handler)
         self.publisher.remove_subscriber(event_t, sub)  # type: ignore
 

@@ -4,21 +4,21 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Any, Callable, cast, Type
+from typing import Any, Callable, Type, cast
 
-from .provider import Provider, provide
-from .subscriber import Subscriber
+from .auxiliary import Executor
 from .event import BaseEvent, get_providers
 from .exceptions import (
-    UndefinedRequirement,
-    UnexpectedArgument,
+    JudgementError,
     ParsingStop,
     PropagationCancelled,
-    JudgementError,
+    UndefinedRequirement,
+    UnexpectedArgument,
 )
-from .utils import run_always_await, Force
-from .typing import Empty, Contexts, generic_isinstance
-from .auxiliary import Executor
+from .provider import Provider, provide
+from .subscriber import Subscriber
+from .typing import Contexts, Empty, generic_isinstance
+from .utils import Force, run_always_await
 
 
 async def depend_handler(
@@ -30,8 +30,8 @@ async def depend_handler(
     contexts = cast(Contexts, {"event": event, "$subscriber": target})
     await event.gather(contexts)
     try:
-        if 'prepare' in target.auxiliaries:
-            for aux in target.auxiliaries['prepare']:
+        if "prepare" in target.auxiliaries:
+            for aux in target.auxiliaries["prepare"]:
                 await prepare(aux, contexts)
         arguments = cast(Contexts, {})
         for param in target.params:
@@ -39,10 +39,14 @@ async def depend_handler(
                 arguments[param.name] = await param.depend(contexts)
             else:
                 arguments[param.name] = await param_parser(
-                    param.name, param.annotation, param.default, param.providers, contexts
+                    param.name,
+                    param.annotation,
+                    param.default,
+                    param.providers,
+                    contexts,
                 )
-        if 'complete' in target.auxiliaries:
-            for aux in target.auxiliaries['complete']:
+        if "complete" in target.auxiliaries:
+            for aux in target.auxiliaries["complete"]:
                 await complete(aux, arguments)
         result = await run_always_await(target.callable_target, **arguments)
     except UndefinedRequirement as u:
@@ -76,15 +80,15 @@ async def depend_handler(
         traceback.print_exc()
         raise e
     finally:
-        if 'cleanup' in target.auxiliaries:
-            for aux in target.auxiliaries['cleanup']:
+        if "cleanup" in target.auxiliaries:
+            for aux in target.auxiliaries["cleanup"]:
                 await aux("cleanup", contexts)
         contexts.clear()
     return result
 
 
 async def prepare(decorator: Executor, ctx: Contexts):
-    res = await decorator("prepare", ctx.copy()) # type: ignore
+    res = await decorator("prepare", ctx.copy())  # type: ignore
     if res is False:
         raise JudgementError
     if isinstance(res, dict):
@@ -109,13 +113,9 @@ async def complete(decorator: Executor, ctx: Contexts):
             ctx.update(res)
             return
         if len(keys) > len(res):
-            raise UnexpectedArgument(
-                f"Missing requirement in {keys - set(res.keys())}"
-            )
+            raise UnexpectedArgument(f"Missing requirement in {keys - set(res.keys())}")
         if len(keys) < len(res):
-            raise UnexpectedArgument(
-                f"Unexpected argument in {keys - set(res.keys())}"
-            )
+            raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")
 
 
 async def param_parser(
@@ -156,6 +156,4 @@ async def param_parser(
                 return value
     if default is not Empty:
         return default
-    raise UndefinedRequirement(
-        name, annotation, default, providers
-    )
+    raise UndefinedRequirement(name, annotation, default, providers)

@@ -1,21 +1,36 @@
 from __future__ import annotations
 
 import contextlib
-import inspect
 import functools
+import inspect
 import sys
 import types
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Any, Generic, TypeVar, Callable, Mapping, Union, Awaitable, Dict, Literal, TYPE_CHECKING, List
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Literal,
+    Mapping,
+    TypeVar,
+    Union,
+)
 
 from typing_extensions import Annotated, get_args, get_origin
+
 if TYPE_CHECKING:
     from types import GenericAlias  # noqa
 else:
     GenericAlias: type = type(List[int])
 AnnotatedType: type = type(Annotated[int, lambda x: x > 0])
-Unions = (Union, types.UnionType) if sys.version_info >= (3, 10) else (Union,)  # pragma: no cover
+Unions = (
+    (Union, types.UnionType) if sys.version_info >= (3, 10) else (Union,)
+)  # pragma: no cover
 
 
 class Contexts(Dict[str, Any]):

@@ -1,16 +1,14 @@
+from dataclasses import dataclass
 from typing import Any
 
-from dataclasses import dataclass
-
-from ..auxiliary import BaseAuxiliary, AuxType, SCOPE
-from ..subscriber import Subscriber
+from ..auxiliary import SCOPE, AuxType, BaseAuxiliary
 from ..handler import depend_handler
+from ..subscriber import Subscriber
 from ..typing import Contexts, TTarget
 
 
 @dataclass(init=False, eq=True)
 class Depend(BaseAuxiliary):
-
     @property
     def available_scopes(self):
         return {"parsing"}
