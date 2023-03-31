@@ -3,9 +3,10 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Generic, NamedTuple, TypeVar, get_origin
+from tarina import run_always_await
 
 from .typing import Contexts
-from .utils import run_always_await
+
 
 T = TypeVar("T")
 

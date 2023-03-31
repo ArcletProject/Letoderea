@@ -4,6 +4,7 @@ import asyncio
 from contextlib import suppress
 from typing import Callable
 from weakref import finalize
+from tarina import group_dict
 
 from .auxiliary import BaseAuxiliary
 from .context import system_ctx
@@ -14,7 +15,6 @@ from .provider import Param, Provider
 from .publisher import Publisher
 from .subscriber import Subscriber
 from .typing import Contexts
-from .utils import group_dict
 
 
 class BackendPublisher(Publisher):

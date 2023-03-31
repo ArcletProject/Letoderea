@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Generic, TypeVar
+from tarina import signatures, run_always_await
 
 from .auxiliary import SCOPE, AuxType, BaseAuxiliary, Executor, combine
 from .provider import Param, Provider, provide
 from .typing import TTarget
-from .utils import argument_analysis, run_always_await
 
 
 @dataclass
@@ -23,7 +23,7 @@ class CompileParam:
 
 def _compile(target: Callable, providers: list[Provider]) -> list[CompileParam]:
     res = []
-    for name, anno, default in argument_analysis(target):
+    for name, anno, default in signatures(target):
         param = CompileParam(name, anno, default, [], None)
         for _provider in providers:
             if _provider.validate(

@@ -1,12 +1,12 @@
 [project]
 name = "arclet-letoderea"
-version = "0.4.0"
+version = "0.4.1"
 description = "A high-performance, simple-structured event system, relies on asyncio"
 authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
 ]
 dependencies = [
-    "typing-extensions>=4.0.0",
+    "tarina>=0.1.0",
 ]
 requires-python = ">=3.8"
 readme = "README.md"

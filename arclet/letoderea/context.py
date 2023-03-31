@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from .typing import ContextModel
+from tarina import ContextModel
 
 if TYPE_CHECKING:
     from .core import EventSystem
