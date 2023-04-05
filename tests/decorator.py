@@ -1,7 +1,7 @@
 import asyncio
 
-from arclet.letoderea import EventSystem, Contexts, wrap_aux
-from arclet.letoderea.auxiliary import BaseAuxiliary, SCOPE, AuxType
+from arclet.letoderea import EventSystem, Contexts, bind
+from arclet.letoderea.auxiliary import BaseAuxiliary, Scope, AuxType
 
 loop = asyncio.get_event_loop()
 es = EventSystem(loop=loop)
@@ -12,8 +12,8 @@ class TestDecorate(BaseAuxiliary):
     def __init__(self):
         super().__init__(AuxType.supply)
 
-    async def __call__(self, scope: SCOPE, context: Contexts):
-        if scope == "prepare":
+    async def __call__(self, scope: Scope, context: Contexts):
+        if scope == Scope.prepare:
             for k, v in context.items():
                 if isinstance(v, str):
                     context[k] = v * 2
@@ -24,9 +24,10 @@ class TestDecorate(BaseAuxiliary):
             if isinstance(v, str):
                 context[k] = bytes(v, encoding="utf-8")
         return context
+
     @property
-    def available_scopes(self) -> set[SCOPE]:
-        return {"prepare", "complete"}
+    def scopes(self) -> set[Scope]:
+        return {Scope.prepare, Scope.complete}
 
 
 class ExampleEvent:
@@ -40,7 +41,7 @@ class ExampleEvent:
 
 
 @es.register(ExampleEvent)
-@wrap_aux(TestDecorate())
+@bind(TestDecorate())
 async def test(m: int, a: str = TestDecorate()):
     print(m, type(m), end=' ')
     print(a, type(a))

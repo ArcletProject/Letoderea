@@ -2,7 +2,7 @@ import asyncio
 from asyncio import Future
 from typing import Any, Callable, List, Optional, Set, Type, Union
 
-from ..auxiliary import SCOPE, AuxType, BaseAuxiliary
+from ..auxiliary import Scope, AuxType, BaseAuxiliary
 from ..core import BackendPublisher, EventSystem
 from ..event import BaseEvent
 from ..exceptions import PropagationCancelled
@@ -34,10 +34,10 @@ class StepOut(BaseAuxiliary):
         self.handler = handler or (lambda: None)
 
     @property
-    def available_scopes(self) -> Set[SCOPE]:
-        return {"prepare"}
+    def scopes(self) -> Set[Scope]:
+        return {Scope.prepare}
 
-    async def __call__(self, scope: SCOPE, context: Contexts):
+    async def __call__(self, scope: Scope, context: Contexts):
         return type(context["event"]) in self.target
 
     def use(self, func: TCallable) -> TCallable:

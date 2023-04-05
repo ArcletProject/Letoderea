@@ -1,4 +1,4 @@
-from arclet.letoderea import Publisher, EventSystem, provide, Contexts, bind, BaseEvent
+from arclet.letoderea import Publisher, EventSystem, provide, Contexts, BaseEvent
 import asyncio
 
 

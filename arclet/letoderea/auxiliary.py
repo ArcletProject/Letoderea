@@ -4,11 +4,9 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 from functools import partial
-from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, overload
-
+from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, overload, Final
+from tarina import run_always_await
 from .typing import Contexts
-
-SCOPE = Literal["prepare", "parsing", "complete", "cleanup"]
 
 
 class AuxType(Enum):
@@ -23,6 +21,13 @@ class CombineMode(Enum):
     SINGLE = auto()
 
 
+class Scope(Enum):
+    prepare = auto()
+    parsing = auto()
+    complete = auto()
+    cleanup = auto()
+
+
 @dataclass(init=False, eq=True, unsafe_hash=True)
 class BaseAuxiliary(metaclass=ABCMeta):
     type: AuxType
@@ -30,7 +35,7 @@ class BaseAuxiliary(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def available_scopes(self) -> set[SCOPE]:
+    def scopes(self) -> set[Scope]:
         raise NotImplementedError
 
     def __init__(self, atype: AuxType, mode: CombineMode = CombineMode.SINGLE):
@@ -38,7 +43,7 @@ class BaseAuxiliary(metaclass=ABCMeta):
         self.mode = mode
 
     @abstractmethod
-    async def __call__(self, scope: SCOPE, context: Contexts):
+    async def __call__(self, scope: Scope, context: Contexts):
         raise NotImplementedError
 
 
@@ -47,7 +52,7 @@ class SupplyAuxiliary(BaseAuxiliary):
         super().__init__(AuxType.supply, mode)
 
     @abstractmethod
-    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[Contexts]:
+    async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
         raise NotImplementedError
 
 
@@ -56,23 +61,23 @@ class JudgeAuxiliary(BaseAuxiliary):
         super().__init__(AuxType.judge, mode)
 
     @abstractmethod
-    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[bool]:
+    async def __call__(self, scope: Scope, context: Contexts) -> Optional[bool]:
         raise NotImplementedError
 
 
 class Executor(Protocol):
-    async def __call__(self, scope: SCOPE, context: Contexts):
+    async def __call__(self, scope: Scope, context: Contexts):
         ...
 
 
 class CombineExecutor:
-    steps: list[Callable[[SCOPE, Contexts], Awaitable]]
+    steps: list[Callable[[Scope, Contexts], Awaitable]]
 
     def __init__(self, auxes: list[BaseAuxiliary]):
         self.steps = []
         ors = []
 
-        async def _ors(_scope: SCOPE, ctx: Contexts, *, funcs: list[BaseAuxiliary]):
+        async def _ors(_scope: Scope, ctx: Contexts, *, funcs: list[BaseAuxiliary]):
             res = None
             for func in funcs:
                 res = await func(_scope, ctx)
@@ -96,7 +101,7 @@ class CombineExecutor:
             self.steps.append(partial(_ors, funcs=ors.copy()))
             ors.clear()
 
-    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[bool]:
+    async def __call__(self, scope: Scope, context: Contexts) -> Optional[bool]:
         res = None
         ctx = context
         last = None
@@ -158,18 +163,27 @@ def auxilia(
     cleanup: Callable[[Contexts], Any] | None = None,
 ):
     class _Auxiliary(BaseAuxiliary):
-        async def __call__(self, scope: SCOPE, context: Contexts):
+        async def __call__(self, scope: Scope, context: Contexts):
             res = None
-            if scope == "prepare" and prepare:
-                res = prepare(context)
-            if scope == "complete" and complete:
-                res = complete(context)
-            if scope == "cleanup" and cleanup:
-                res = cleanup(context)
+            if scope == Scope.prepare and prepare is not None:
+                res = await run_always_await(prepare, context)
+            if scope == Scope.complete and complete is not None:
+                res = await run_always_await(complete, context)
+            if scope == Scope.cleanup and cleanup is not None:
+                res = await run_always_await(cleanup, context)
             return res if res is False else context
 
         @property
-        def available_scopes(self) -> set[SCOPE]:
-            return {"prepare", "complete", "cleanup"}
+        def scopes(self) -> set[Scope]:
+            return {Prepare, Complete, Cleanup}
 
     return _Auxiliary(atype, mode)
+
+
+And: Final = CombineMode.AND
+Or: Final = CombineMode.OR
+Single: Final = CombineMode.SINGLE
+Prepare: Final = Scope.prepare
+Parsing: Final = Scope.parsing
+Complete: Final = Scope.complete
+Cleanup: Final = Scope.cleanup

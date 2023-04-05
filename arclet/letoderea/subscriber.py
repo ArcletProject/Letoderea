@@ -5,7 +5,7 @@ from functools import partial
 from typing import Any, Callable, Generic, TypeVar
 from tarina import signatures, run_always_await
 
-from .auxiliary import SCOPE, AuxType, BaseAuxiliary, Executor, combine
+from .auxiliary import Scope, AuxType, BaseAuxiliary, Executor, combine
 from .provider import Param, Provider, provide
 from .typing import TTarget
 
@@ -45,7 +45,7 @@ class Subscriber(Generic[R]):
     name: str
     callable_target: TTarget[R]
     priority: int
-    auxiliaries: dict[SCOPE, list[Executor]]
+    auxiliaries: dict[Scope, list[Executor]]
     providers: list[Provider]
     params: list[CompileParam]
 
@@ -70,7 +70,7 @@ class Subscriber(Generic[R]):
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
         for aux in auxiliaries:
-            for scope in aux.available_scopes:
+            for scope in aux.scopes:
                 self.auxiliaries.setdefault(scope, []).append(aux)
         for scope, value in self.auxiliaries.items():
             self.auxiliaries[scope] = combine(value)  # type: ignore

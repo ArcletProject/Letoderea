@@ -45,13 +45,13 @@ c.msg = "wait"
 async def main():
     for i in range(6):
         if i % 3 == 0:
-            print(i, 'event posted with msg: "hello"')
+            print(i+1, 'event posted with msg: "hello"')
             es.publish(a)
         elif (i - 1) % 3 == 0:
-            print(i, 'event posted with msg: "wait"')
+            print(i+1, 'event posted with msg: "wait"')
             es.publish(c)
         else:
-            print(i, 'event posted with msg: "continue!"')
+            print(i+1, 'event posted with msg: "continue!"')
             es.publish(b)
         await asyncio.sleep(1)
 

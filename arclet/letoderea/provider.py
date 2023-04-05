@@ -51,6 +51,7 @@ class Provider(Generic[T], metaclass=ABCMeta):
 
 def provide(
     origin: type[T],
+    name: str = "_Provider",
     call: Callable[[Contexts], T | None | Awaitable[T | None]] | None = None,
     validate: Callable[[Param], bool] | None = None,
     target: str | None = None,
@@ -75,5 +76,8 @@ def provide(
             return (
                 await run_always_await(call, context) if call else context.get(target)
             )
+
+        def __repr__(self):
+            return f"Provider::{name}(origin={origin})"
 
     return _Provider

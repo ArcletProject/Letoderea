@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from arclet.letoderea.auxiliary import JudgeAuxiliary, SCOPE
+from arclet.letoderea.auxiliary import JudgeAuxiliary, Scope
 import asyncio
 from arclet.letoderea import EventSystem, Contexts
 import gc
@@ -18,10 +18,10 @@ class TestTimeLimit(JudgeAuxiliary):
         super().__init__()
 
     @property
-    def available_scopes(self):
-        return {"prepare"}
+    def scopes(self):
+        return {Scope.prepare}
 
-    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[bool]:
+    async def __call__(self, _, context: Contexts) -> Optional[bool]:
         now = datetime.now()
         return now >= datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
 
@@ -34,11 +34,11 @@ class Interval(JudgeAuxiliary):
         super().__init__()
 
     @property
-    def available_scopes(self):
-        return {"prepare", "cleanup"}
+    def scopes(self):
+        return {Scope.prepare, Scope.cleanup}
 
-    async def __call__(self, scope: SCOPE, context: Contexts) -> Optional[bool]:
-        if scope == "prepare":
+    async def __call__(self, scope: Scope, context: Contexts) -> Optional[bool]:
+        if scope == Scope.prepare:
             self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
             return self.success
         if self.success:

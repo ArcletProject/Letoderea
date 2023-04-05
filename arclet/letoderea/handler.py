@@ -7,7 +7,7 @@ import traceback
 from typing import Any, Callable, Type, cast
 from tarina import Empty, generic_isinstance, run_always_await
 
-from .auxiliary import Executor
+from .auxiliary import Executor, Prepare, Complete, Cleanup
 from .event import BaseEvent, get_providers
 from .exceptions import (
     JudgementError,
@@ -30,8 +30,8 @@ async def depend_handler(
     contexts = cast(Contexts, {"event": event, "$subscriber": target})
     await event.gather(contexts)
     try:
-        if "prepare" in target.auxiliaries:
-            for aux in target.auxiliaries["prepare"]:
+        if Prepare in target.auxiliaries:
+            for aux in target.auxiliaries[Prepare]:
                 await prepare(aux, contexts)
         arguments = cast(Contexts, {})
         for param in target.params:
@@ -45,8 +45,8 @@ async def depend_handler(
                     param.providers,
                     contexts,
                 )
-        if "complete" in target.auxiliaries:
-            for aux in target.auxiliaries["complete"]:
+        if Complete in target.auxiliaries:
+            for aux in target.auxiliaries[Complete]:
                 await complete(aux, arguments)
         result = await run_always_await(target.callable_target, **arguments)
     except UndefinedRequirement as u:
@@ -65,8 +65,10 @@ async def depend_handler(
             etype,
             etype(
                 f"\nUnable to parse parameter ({param}) "
+                f"\n--------------------------------------------------"
                 f"\n by providers"
                 f"\n{pprint.pformat(pds)}"
+                f"\n--------------------------------------------------"
                 f"\n with context"
                 f"\n{pprint.pformat(contexts)}",
                 _args,
@@ -80,15 +82,15 @@ async def depend_handler(
         traceback.print_exc()
         raise e
     finally:
-        if "cleanup" in target.auxiliaries:
-            for aux in target.auxiliaries["cleanup"]:
-                await aux("cleanup", contexts)
+        if Cleanup in target.auxiliaries:
+            for aux in target.auxiliaries[Cleanup]:
+                await aux(Cleanup, contexts)
         contexts.clear()
     return result
 
 
 async def prepare(decorator: Executor, ctx: Contexts):
-    res = await decorator("prepare", ctx.copy())  # type: ignore
+    res = await decorator(Prepare, ctx.copy())  # type: ignore
     if res is False:
         raise JudgementError
     if isinstance(res, dict):
@@ -104,7 +106,7 @@ async def complete(decorator: Executor, ctx: Contexts):
         ctx: 事件参数字典
     """
     keys = set(ctx.keys())
-    res = await decorator("complete", ctx.copy())  # type: ignore
+    res = await decorator(Complete, ctx.copy())  # type: ignore
     if res is False:
         raise JudgementError
     if isinstance(res, dict):

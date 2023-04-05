@@ -9,19 +9,9 @@ from .subscriber import Subscriber, _compile
 TWrap = TypeVar("TWrap", bound=Union[Callable, Subscriber])
 
 
-def wrap_aux(*aux: BaseAuxiliary):
-    def wrapper(target: TWrap) -> TWrap:
-        if not isinstance(target, Subscriber):
-            if not hasattr(target, "__auxiliaries__"):
-                setattr(target, "__auxiliaries__", list(aux))
-            else:
-                getattr(target, "__auxiliaries__").extend(aux)
-        return target
-
-    return wrapper
-
-
-def bind(*providers: Union[Provider, Type[Provider]]):
+def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
+    auxiliaries = list(filter(lambda x: isinstance(x, BaseAuxiliary), args))
+    providers = list(filter(lambda x: not isinstance(x, BaseAuxiliary), args))
     providers = [p() if isinstance(p, type) else p for p in providers]
 
     def wrapper(target: TWrap) -> TWrap:
@@ -33,6 +23,10 @@ def bind(*providers: Union[Provider, Type[Provider]]):
                 setattr(target, "__providers__", providers)
             else:
                 getattr(target, "__providers__").extend(providers)
+            if not hasattr(target, "__auxiliaries__"):
+                setattr(target, "__auxiliaries__", auxiliaries)
+            else:
+                getattr(target, "__auxiliaries__").extend(auxiliaries)
         return target
 
     return wrapper
