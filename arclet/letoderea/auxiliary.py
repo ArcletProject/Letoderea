@@ -2,30 +2,30 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum
 from functools import partial
 from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, overload, Final
 from tarina import run_always_await
 from .typing import Contexts
 
 
-class AuxType(Enum):
-    supply = auto()
-    judge = auto()
-    depend = auto()
+class AuxType(str, Enum):
+    supply = "supply"
+    judge = "judge"
+    depend = "depend"
 
 
-class CombineMode(Enum):
-    AND = auto()
-    OR = auto()
-    SINGLE = auto()
+class CombineMode(str, Enum):
+    AND = "and"
+    OR = "or"
+    SINGLE = "single"
 
 
-class Scope(Enum):
-    prepare = auto()
-    parsing = auto()
-    complete = auto()
-    cleanup = auto()
+class Scope(str, Enum):
+    prepare = "prepare"
+    parsing = "parsing"
+    complete = "complete"
+    cleanup = "cleanup"
 
 
 @dataclass(init=False, eq=True, unsafe_hash=True)

@@ -15,15 +15,50 @@ from .exceptions import (
     PropagationCancelled,
     UndefinedRequirement,
     UnexpectedArgument,
+    InnerHandlerException
 )
 from .provider import Provider, provide
 from .subscriber import Subscriber
 from .typing import Contexts, Force
 
 
+def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inner: bool = False):
+    if isinstance(e, UndefinedRequirement):
+        name, *_, pds = e.args
+        param = inspect.signature(target.callable_target).parameters[name]
+        code = target.callable_target.__code__  # type: ignore
+        etype: Type[Exception] = type(  # type: ignore
+            "UndefinedRequirement",
+            (UndefinedRequirement, SyntaxError),
+            {},
+        )
+        _args = (code.co_filename, code.co_firstlineno, 1, str(param))
+        if sys.version_info >= (3, 10):
+            _args += (code.co_firstlineno, len(name) + 1)
+        exc = etype(
+            f"\nUnable to parse parameter ({param}) "
+            f"\n--------------------------------------------------"
+            f"\nproviders on parameter:"
+            f"\n{pprint.pformat(pds)}"
+            f"\n--------------------------------------------------"
+            f"\ncurrent context"
+            f"\n{pprint.pformat(contexts)}",
+            _args,
+        )
+        traceback.print_exception(
+            etype,
+            exc,
+            e.__traceback__,
+        )
+        return InnerHandlerException(exc) if inner else exc
+    if isinstance(e, (ParsingStop, PropagationCancelled, JudgementError, UnexpectedArgument)):
+        return InnerHandlerException(e) if inner else e
+    traceback.print_exception(e.__class__, e, e.__traceback__)
+    return InnerHandlerException(e) if inner else e
+
+
 async def depend_handler(
-    target: Subscriber | Callable,
-    event: BaseEvent,
+    target: Subscriber | Callable, event: BaseEvent, inner: bool = False
 ):
     if target.__class__ != Subscriber:
         target = Subscriber(target, providers=get_providers(event))
@@ -49,38 +84,10 @@ async def depend_handler(
             for aux in target.auxiliaries[Complete]:
                 await complete(aux, arguments)
         result = await run_always_await(target.callable_target, **arguments)
-    except UndefinedRequirement as u:
-        name, *_, pds = u.args
-        param = inspect.signature(target.callable_target).parameters[name]
-        code = target.callable_target.__code__  # type: ignore
-        etype: Type[Exception] = type(  # type: ignore
-            "UndefinedRequirement",
-            (UndefinedRequirement, SyntaxError),
-            {},
-        )
-        _args = (code.co_filename, code.co_firstlineno, 1, str(param))
-        if sys.version_info >= (3, 10):
-            _args += (code.co_firstlineno, len(name) + 1)
-        traceback.print_exception(
-            etype,
-            etype(
-                f"\nUnable to parse parameter ({param}) "
-                f"\n--------------------------------------------------"
-                f"\n by providers"
-                f"\n{pprint.pformat(pds)}"
-                f"\n--------------------------------------------------"
-                f"\n with context"
-                f"\n{pprint.pformat(contexts)}",
-                _args,
-            ),
-            u.__traceback__,
-        )
-        raise
-    except (ParsingStop, PropagationCancelled, JudgementError, UnexpectedArgument):
-        raise
+    except InnerHandlerException as e:
+        raise e.args[0] from e
     except Exception as e:
-        traceback.print_exc()
-        raise e
+        raise exception_handler(e, target, contexts, inner) from e
     finally:
         if Cleanup in target.auxiliaries:
             for aux in target.auxiliaries[Cleanup]:

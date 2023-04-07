@@ -16,3 +16,7 @@ class PropagationCancelled(Exception):
 
 class ParsingStop(Exception):
     pass
+
+
+class InnerHandlerException(Exception):
+    pass
