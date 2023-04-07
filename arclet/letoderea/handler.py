@@ -5,37 +5,43 @@ import pprint
 import sys
 import traceback
 from typing import Any, Callable, Type, cast
+
 from tarina import Empty, generic_isinstance, run_always_await
 
-from .auxiliary import Executor, Prepare, Complete, Cleanup
+from .auxiliary import Cleanup, Complete, Executor, Prepare
 from .event import BaseEvent, get_providers
 from .exceptions import (
+    InnerHandlerException,
     JudgementError,
     ParsingStop,
     PropagationCancelled,
     UndefinedRequirement,
     UnexpectedArgument,
-    InnerHandlerException
 )
 from .provider import Provider, provide
 from .subscriber import Subscriber
 from .typing import Contexts, Force
 
 
-def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inner: bool = False):
-    if isinstance(e, UndefinedRequirement):
+def exception_handler(
+    e: Exception, target: Subscriber, contexts: Contexts, inner: bool = False
+):
+    if isinstance(e, UndefinedRequirement) and not isinstance(e, SyntaxError):
         name, *_, pds = e.args
         param = inspect.signature(target.callable_target).parameters[name]
         code = target.callable_target.__code__  # type: ignore
         etype: Type[Exception] = type(  # type: ignore
             "UndefinedRequirement",
-            (UndefinedRequirement, SyntaxError),
+            (
+                UndefinedRequirement,
+                SyntaxError,
+            ),
             {},
         )
         _args = (code.co_filename, code.co_firstlineno, 1, str(param))
         if sys.version_info >= (3, 10):
             _args += (code.co_firstlineno, len(name) + 1)
-        exc = etype(
+        exc: SyntaxError = etype(
             f"\nUnable to parse parameter ({param}) "
             f"\n--------------------------------------------------"
             f"\nproviders on parameter:"
@@ -45,16 +51,30 @@ def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inne
             f"\n{pprint.pformat(contexts)}",
             _args,
         )
+        exc.__traceback__ = e.__traceback__
+        if inner:
+            return InnerHandlerException(exc)
         traceback.print_exception(
             etype,
             exc,
             e.__traceback__,
         )
-        return InnerHandlerException(exc) if inner else exc
-    if isinstance(e, (ParsingStop, PropagationCancelled, JudgementError, UnexpectedArgument)):
+        return exc
+    if isinstance(
+        e,
+        (
+            ParsingStop,
+            PropagationCancelled,
+            JudgementError,
+            UnexpectedArgument,
+            InnerHandlerException,
+        ),
+    ):
         return InnerHandlerException(e) if inner else e
+    if inner:
+        return InnerHandlerException(e)
     traceback.print_exception(e.__class__, e, e.__traceback__)
-    return InnerHandlerException(e) if inner else e
+    return e
 
 
 async def depend_handler(
@@ -85,7 +105,9 @@ async def depend_handler(
                 await complete(aux, arguments)
         result = await run_always_await(target.callable_target, **arguments)
     except InnerHandlerException as e:
-        raise e.args[0] from e
+        if inner:
+            raise
+        raise exception_handler(e.args[0], target, contexts) from e
     except Exception as e:
         raise exception_handler(e, target, contexts, inner) from e
     finally:
