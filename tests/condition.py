@@ -54,7 +54,7 @@ class ExampleEvent:
         context['index'] = self.msg
 
 
-@es.register(ExampleEvent, auxiliaries=[TestTimeLimit(0, 0), Interval(0.2)])
+@es.on(ExampleEvent, auxiliaries=[TestTimeLimit(0, 0), Interval(0.2)])
 async def test(index: int, a: str = "hello", ):
     gc.collect()
     print(index, a)

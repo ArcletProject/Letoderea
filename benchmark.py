@@ -24,7 +24,7 @@ class TestEvent:
             return "1"
 
 
-@es.register(TestEvent)
+@es.on(TestEvent)
 async def test_subscriber(a):
     pass
 

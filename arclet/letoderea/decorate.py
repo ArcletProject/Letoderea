@@ -32,7 +32,7 @@ def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
     return wrapper
 
 
-def register(*event: Type[BaseEvent]):
+def subscribe(*event: Type[BaseEvent]):
     es = system_ctx.get()
 
     def wrapper(target: TWrap) -> TWrap:
@@ -42,6 +42,6 @@ def register(*event: Type[BaseEvent]):
             for e in event:
                 es._backend_publisher.add_subscriber(e, target)  # noqa
             return target
-        return es.register(*event)(target)
+        return es.on(*event)(target)
 
     return wrapper

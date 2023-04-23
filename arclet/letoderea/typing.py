@@ -9,8 +9,8 @@ class Contexts(Dict[str, Any]):
 
 
 T = TypeVar("T")
-TCallable = TypeVar("TCallable", bound=Callable[..., Any])
-TTarget = Union[Callable[..., T], Callable[..., Awaitable[T]]]
+TTarget = Union[Callable[...,  Awaitable[T]], Callable[..., T]]
+TCallable = TypeVar("TCallable", bound=TTarget[Any])
 
 
 @dataclass

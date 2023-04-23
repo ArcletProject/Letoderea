@@ -27,13 +27,21 @@ class TestEvent:
         context["name"] = "Letoderea"
 
 
-@es.register(TestEvent)
+@es.on(TestEvent)
 async def test_subscriber(name: str):
     print(name)
 
 
 es.loop.run_until_complete(es.publish(TestEvent()))
 ```
+
+## 特性
+
+- 任何实现了 `gather` 方法的类都可以作为事件
+- 通过 `Provider` 实现依赖注入的静态绑定，提高性能
+- 通过 `Contexts` 增强事件传递的灵活性
+- 通过 `Publisher` 实现事件响应的隔离
+- 通过 `Auxiliary` 提供了一系列辅助方法，方便事件的处理
 
 ## 开源协议
 本实现以 MIT 为开源协议。

@@ -21,11 +21,12 @@ class ExampleEvent:
 def wrapper(a: int):  # sourcery skip: raise-specific-error
     return int(a)
 
+
 def wrapper1(a: int = Depend(wrapper)):  # sourcery skip: raise-specific-error
     return int(a)
 
 
-@es.register(ExampleEvent, auxiliaries=[Depend(wrapper)])
+@es.on(ExampleEvent, auxiliaries=[Depend(wrapper)])
 async def handler(a: int = Depend(wrapper1)):
     print(a)
 

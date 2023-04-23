@@ -40,7 +40,7 @@ class ExampleEvent:
         context['a'] = self.msg
 
 
-@es.register(ExampleEvent)
+@es.on(ExampleEvent)
 @bind(TestDecorate())
 async def test(m: int, a: str = TestDecorate()):
     print(m, type(m), end=' ')

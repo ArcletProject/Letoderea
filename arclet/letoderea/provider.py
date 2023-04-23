@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Generic, NamedTuple, TypeVar, get_origin
-from tarina import run_always_await
+from typing import Any, Awaitable, Callable, Generic, NamedTuple, TypeVar, get_args
+
+from tarina import generic_issubclass, run_always_await
+from tarina.generic import Unions, get_origin
 
 from .typing import Contexts
-
 
 T = TypeVar("T")
 
@@ -36,9 +37,16 @@ class Provider(Generic[T], metaclass=ABCMeta):
             )
 
     def validate(self, param: Param):
-        return self.origin == param.annotation or (
-            isinstance(param.annotation, type)
-            and issubclass(param.annotation, get_origin(self.origin) or self.origin)
+        return (
+            self.origin == param.annotation
+            or (
+                isinstance(param.annotation, type)
+                and generic_issubclass(param.annotation, self.origin)
+            )
+            or (
+                get_origin(param.annotation) in Unions
+                and self.origin in get_args(param.annotation)
+            )
         )
 
     @abstractmethod

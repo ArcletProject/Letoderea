@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from arclet.letoderea import EventSystem, BaseEvent, provide, Contexts, bind, register
+from arclet.letoderea import EventSystem, BaseEvent, provide, Contexts, bind, subscribe
 
 es = EventSystem()
 
@@ -10,7 +10,7 @@ class TestEvent(BaseEvent):
         context["name"] = "Letoderea"
 
 
-@register(TestEvent)
+@subscribe(TestEvent)
 @bind(provide(int, "foo", lambda x: x.get('a')))
 @bind(provide(int, "bar", lambda x: x.get('b')))
 @bind(provide(int, "baz", lambda x: x.get('c')))

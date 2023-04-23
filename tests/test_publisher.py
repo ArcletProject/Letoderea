@@ -22,11 +22,12 @@ class MyPublisher(Publisher):
 
 test = provide(str, call=lambda x: x.get("name"))
 my_publisher = MyPublisher("test")
+es.add_publisher(my_publisher)
 my_publisher.unsafe_push(TestEvent("hello world"))
 my_publisher[TestEvent] += test()
 
 
-@es.register(TestEvent)
+@es.on(TestEvent)
 async def test_subscriber(a: str):
     print(a)
 

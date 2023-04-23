@@ -23,7 +23,7 @@ def TestDepend() -> bool:
     return Depends(test_depend)
 
 
-@es.register(ExampleEvent)
+@es.on(ExampleEvent)
 def test(m: bool = TestDepend()):
     print(m)
 

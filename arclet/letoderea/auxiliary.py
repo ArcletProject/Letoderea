@@ -136,7 +136,7 @@ def combine(auxiliaries: list[BaseAuxiliary]) -> list[Executor]:
 @overload
 def auxilia(
     atype: Literal[AuxType.supply],
-    mode: CombineMode,
+    mode: CombineMode = CombineMode.SINGLE,
     prepare: Callable[[Contexts], Optional[Contexts]] | None = None,
     complete: Callable[[Contexts], Optional[Contexts]] | None = None,
     cleanup: Callable[[Contexts], Optional[Contexts]] | None = None,
@@ -147,7 +147,7 @@ def auxilia(
 @overload
 def auxilia(
     atype: Literal[AuxType.judge],
-    mode: CombineMode,
+    mode: CombineMode = CombineMode.SINGLE,
     prepare: Callable[[Contexts], Optional[bool]] | None = None,
     complete: Callable[[Contexts], Optional[bool]] | None = None,
     cleanup: Callable[[Contexts], Optional[bool]] | None = None,
@@ -157,7 +157,7 @@ def auxilia(
 
 def auxilia(
     atype: AuxType,
-    mode: CombineMode,
+    mode: CombineMode = CombineMode.SINGLE,
     prepare: Callable[[Contexts], Any] | None = None,
     complete: Callable[[Contexts], Any] | None = None,
     cleanup: Callable[[Contexts], Any] | None = None,

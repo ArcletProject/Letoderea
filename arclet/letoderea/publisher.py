@@ -72,8 +72,6 @@ class Publisher(metaclass=ABCMeta):
         self.event_queue = Queue(queue_size)
         self.subscribers = {}
         self.providers = {}
-        if es := system_ctx.get():
-            es.add_publisher(self)
 
     def __repr__(self):
         return f"Publisher::{self.id}"

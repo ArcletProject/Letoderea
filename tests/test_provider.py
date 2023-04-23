@@ -34,7 +34,7 @@ class TestEvent(BaseEvent):
             return context['name']
 
 
-@es.register(TestEvent)
+@es.on(TestEvent)
 @bind(IntProvider, BoolProvider, FloatProvider)
 async def test_subscriber(
     name0: str,

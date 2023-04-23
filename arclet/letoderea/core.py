@@ -22,6 +22,18 @@ class BackendPublisher(Publisher):
         return True
 
 
+async def dispatch(subscribers: list[Subscriber], event: BaseEvent):
+    if not subscribers:
+        return
+    grouped: dict[int, list[Subscriber]] = group_dict(subscribers, lambda x: x.priority)
+    for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
+        tasks = [depend_handler(subscriber, event) for subscriber in current_subs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if result.__class__ is PropagationCancelled:
+                return
+
+
 class EventSystem:
     _ref_tasks = set()
     _backend_publisher: Publisher = BackendPublisher("__backend__publisher__")
@@ -87,27 +99,15 @@ class EventSystem:
                 for pub in self.publishers.values()
                 if pub.validate(event.__class__)  # type: ignore
             )
-            if not pubs:
-                pubs.append(self._backend_publisher)
         else:
             pubs.append(publisher)
-        subscribers = sum((pub.subscribers[event.__class__] for pub in pubs), [])
-        task = self.loop.create_task(self.dispatch(subscribers, event))
+        pubs.append(self._backend_publisher)
+        subscribers = sum((pub.subscribers.get(event.__class__, []) for pub in pubs), [])
+        task = self.loop.create_task(dispatch(subscribers, event))
         task.add_done_callback(self._ref_tasks.discard)
         return task
 
-    async def dispatch(self, subscribers: list[Subscriber], event: BaseEvent):
-        grouped: dict[int, list[Subscriber]] = group_dict(
-            subscribers, lambda x: x.priority
-        )
-        for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
-            tasks = [depend_handler(subscriber, event) for subscriber in current_subs]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for result in results:
-                if result is PropagationCancelled:
-                    return
-
-    def register(
+    def on(
         self,
         *events: type[BaseEvent],
         priority: int = 16,
@@ -135,15 +135,18 @@ class EventSystem:
                 for pub in select_pubs:
                     _providers = [
                         *self.global_providers,
-                        *get_providers(event),  # type: ignore
+                        *get_providers(event),
                         *pub.providers.get(event, []),
                         *providers,
                     ]
-                    auxiliaries.extend(get_auxiliaries(event))
+                    _auxiliaries = [
+                        *auxiliaries,
+                        *get_auxiliaries(event)
+                    ]
                     exec_target = Subscriber(
                         exec_target,
                         priority=priority,
-                        auxiliaries=auxiliaries,
+                        auxiliaries=_auxiliaries,
                         providers=_providers,
                     )
                     pub.add_subscriber(event, exec_target)  # type: ignore
