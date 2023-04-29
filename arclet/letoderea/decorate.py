@@ -1,10 +1,13 @@
-from typing import Callable, Type, TypeVar, Union
+from typing import Callable, Type, TypeVar, Union, Optional
 
-from .auxiliary import BaseAuxiliary
+from . import Scope
+from .auxiliary import BaseAuxiliary, AuxType, auxilia
 from .context import system_ctx
 from .event import BaseEvent
 from .provider import Provider
 from .subscriber import Subscriber, _compile
+from .typing import Contexts
+from .exceptions import ParsingStop
 
 TWrap = TypeVar("TWrap", bound=Union[Callable, Subscriber])
 
@@ -43,5 +46,26 @@ def subscribe(*event: Type[BaseEvent]):
                 es._backend_publisher.add_subscriber(e, target)  # noqa
             return target
         return es.on(*event)(target)
+
+    return wrapper
+
+
+def bypass_if(predicate: Callable[[Contexts], bool]):
+    def _prepare(context: Contexts) -> Optional[bool]:
+        if predicate(context):
+            raise ParsingStop()
+        return True
+
+    inner = auxilia(AuxType.judge, prepare=_prepare)
+
+    def wrapper(target: TWrap) -> TWrap:
+        if isinstance(target, Subscriber):
+            target.auxiliaries[Scope.prepare].append(inner)
+        else:
+            if not hasattr(target, "__auxiliaries__"):
+                setattr(target, "__auxiliaries__", [inner])
+            else:
+                getattr(target, "__auxiliaries__").append(inner)
+        return target
 
     return wrapper

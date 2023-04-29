@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Generic, TypeVar
 from tarina import signatures, run_always_await
+from typing_extensions import Annotated, get_origin, get_args
 
 from .auxiliary import Scope, AuxType, BaseAuxiliary, Executor, combine
 from .provider import Param, Provider, provide
@@ -30,6 +31,15 @@ def _compile(target: Callable, providers: list[Provider]) -> list[CompileParam]:
                 Param(name, anno, default, bool(len(param.providers)))
             ):
                 param.providers.append(_provider)
+        if get_origin(anno) is Annotated:
+            org, *meta = get_args(anno)
+            for m in reversed(meta):
+                if isinstance(m, Provider):
+                    param.providers.insert(0, m)
+                elif isinstance(m, str):
+                    param.providers.insert(0, provide(org, name, lambda x: x.get(m))())
+                elif callable(m):
+                    param.providers.insert(0, provide(org, name, m)())
         if isinstance(default, Provider):
             param.providers.insert(0, default)
         if isinstance(default, BaseAuxiliary) and (default.type == AuxType.depend):
