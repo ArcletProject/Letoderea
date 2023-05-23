@@ -24,3 +24,4 @@ from .exceptions import JudgementError, ParsingStop, PropagationCancelled
 from .provider import Param, Provider, provide
 from .publisher import Publisher
 from .typing import Contexts, Force
+from .ref import deref

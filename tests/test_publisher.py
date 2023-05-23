@@ -20,7 +20,7 @@ class MyPublisher(Publisher):
         return event == TestEvent
 
 
-test = provide(str, call=lambda x: x.get("name"))
+test = provide(str, call="name")
 my_publisher = MyPublisher("test")
 es.add_publisher(my_publisher)
 my_publisher.unsafe_push(TestEvent("hello world"))

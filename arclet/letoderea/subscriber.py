@@ -9,6 +9,7 @@ from typing_extensions import Annotated, get_origin, get_args
 from .auxiliary import Scope, AuxType, BaseAuxiliary, Executor, combine
 from .provider import Param, Provider, provide
 from .typing import TTarget
+from .ref import Deref, generate
 
 
 @dataclass
@@ -38,6 +39,8 @@ def _compile(target: Callable, providers: list[Provider]) -> list[CompileParam]:
                     param.providers.insert(0, m)
                 elif isinstance(m, str):
                     param.providers.insert(0, provide(org, name, lambda x: x.get(m))())
+                elif isinstance(m, Deref):
+                    param.providers.insert(0, provide(org, name, generate(m))())
                 elif callable(m):
                     param.providers.insert(0, provide(org, name, m)())
         if isinstance(default, Provider):

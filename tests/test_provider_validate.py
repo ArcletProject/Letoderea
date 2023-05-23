@@ -12,7 +12,7 @@ class TestEvent:
         context['index'] = self.msg
 
 
-@es.on(TestEvent, providers=[provide(int, call=lambda x: x['index'])])
+@es.on(TestEvent, providers=[provide(int, call='index')])
 async def test(index: Union[str, int], a: str = "hello", ):
     print("test:", index, a)
     # test: 0 hello
@@ -20,7 +20,7 @@ async def test(index: Union[str, int], a: str = "hello", ):
     # no provide, a: str = "hello"
 
 
-@es.on(TestEvent, providers=[provide(Union[int, str], call=lambda x: x['index'])])
+@es.on(TestEvent, providers=[provide(Union[int, str], call='index')])
 async def test1(index: int, a: str = "hello", ):
     print("test1:", index, a)
     # test1: 0 0

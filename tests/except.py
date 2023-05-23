@@ -11,9 +11,9 @@ class TestEvent(BaseEvent):
 
 
 @subscribe(TestEvent)
-@bind(provide(int, "foo", lambda x: x.get('a')))
-@bind(provide(int, "bar", lambda x: x.get('b')))
-@bind(provide(int, "baz", lambda x: x.get('c')))
+@bind(provide(int, "age", 'a', _id="foo"))
+@bind(provide(int, "age", 'b', _id="bar"))
+@bind(provide(int, "age", 'c', _id="baz"))
 async def test_subscriber(name: str, age: int):
     print(name, age)
 

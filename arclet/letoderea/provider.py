@@ -59,10 +59,10 @@ class Provider(Generic[T], metaclass=ABCMeta):
 
 def provide(
     origin: type[T],
-    name: str = "_Provider",
-    call: Callable[[Contexts], T | None | Awaitable[T | None]] | None = None,
-    validate: Callable[[Param], bool] | None = None,
     target: str | None = None,
+    call: Callable[[Contexts], T | None | Awaitable[T | None]] | str | None = None,
+    validate: Callable[[Param], bool] | None = None,
+    _id: str = "_Provider",
 ) -> type[Provider[T]]:
     """
     用于动态生成 Provider 的装饰器
@@ -81,11 +81,13 @@ def provide(
             )
 
         async def __call__(self, context: Contexts):
-            return (
-                await run_always_await(call, context) if call else context.get(target)
-            )
+            if not call:
+                return context.get(target)
+            if isinstance(call, str):
+                return context.get(call)
+            return await run_always_await(call, context)
 
         def __repr__(self):
-            return f"Provider::{name}(origin={origin})"
+            return f"Provider::{_id}(origin={origin})"
 
     return _Provider

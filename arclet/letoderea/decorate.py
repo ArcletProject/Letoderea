@@ -1,4 +1,4 @@
-from typing import Callable, Type, TypeVar, Union, Optional
+from typing import Callable, Type, TypeVar, Union, Optional, TYPE_CHECKING
 
 from . import Scope
 from .auxiliary import BaseAuxiliary, AuxType, auxilia
@@ -8,6 +8,7 @@ from .provider import Provider
 from .subscriber import Subscriber, _compile
 from .typing import Contexts
 from .exceptions import ParsingStop
+from .ref import generate, Deref
 
 TWrap = TypeVar("TWrap", bound=Union[Callable, Subscriber])
 
@@ -50,22 +51,28 @@ def subscribe(*event: Type[BaseEvent]):
     return wrapper
 
 
-def bypass_if(predicate: Callable[[Contexts], bool]):
-    def _prepare(context: Contexts) -> Optional[bool]:
-        if predicate(context):
-            raise ParsingStop()
-        return True
+if TYPE_CHECKING:
+    def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]):
+        ...
+else:
+    def bypass_if(predicate: Union[Callable[[Contexts], bool], Deref]):
+        _predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
 
-    inner = auxilia(AuxType.judge, prepare=_prepare)
+        def _prepare(context: Contexts) -> Optional[bool]:
+            if _predicate(context):
+                raise ParsingStop()
+            return True
 
-    def wrapper(target: TWrap) -> TWrap:
-        if isinstance(target, Subscriber):
-            target.auxiliaries[Scope.prepare].append(inner)
-        else:
-            if not hasattr(target, "__auxiliaries__"):
-                setattr(target, "__auxiliaries__", [inner])
+        inner = auxilia(AuxType.judge, prepare=_prepare)
+
+        def wrapper(target: TWrap) -> TWrap:
+            if isinstance(target, Subscriber):
+                target.auxiliaries[Scope.prepare].append(inner)
             else:
-                getattr(target, "__auxiliaries__").append(inner)
-        return target
+                if not hasattr(target, "__auxiliaries__"):
+                    setattr(target, "__auxiliaries__", [inner])
+                else:
+                    getattr(target, "__auxiliaries__").append(inner)
+            return target
 
-    return wrapper
+        return wrapper

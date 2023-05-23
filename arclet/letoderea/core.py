@@ -90,7 +90,7 @@ class EventSystem:
         self.publishers[publisher.id] = publisher
 
     def publish(self, event: BaseEvent, publisher: str | Publisher | None = None):
-        pubs = []
+        pubs = [self._backend_publisher]
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
             pubs.append(pub)
         elif not publisher:
@@ -101,7 +101,6 @@ class EventSystem:
             )
         else:
             pubs.append(publisher)
-        pubs.append(self._backend_publisher)
         subscribers = sum((pub.subscribers.get(event.__class__, []) for pub in pubs), [])
         task = self.loop.create_task(dispatch(subscribers, event))
         task.add_done_callback(self._ref_tasks.discard)
