@@ -6,10 +6,10 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
-from .context import system_ctx
 from .event import BaseEvent
 from .provider import Provider
 from .subscriber import Subscriber
+from .handler import dispatch
 
 
 @dataclass
@@ -82,8 +82,8 @@ class Publisher(metaclass=ABCMeta):
         raise NotImplementedError
 
     async def publish(self, event: BaseEvent) -> Any:
-        """主动提供事件方法， event system 被动接收"""
-        return await system_ctx.get().publish(event, self)
+        """主动向自己的订阅者发布事件"""
+        await dispatch(self.subscribers[event.__class__], event)
 
     def unsafe_push(self, event: BaseEvent) -> None:
         """将事件放入队列，等待被 event system 主动轮询; 该方法可能引发 QueueFull 异常"""

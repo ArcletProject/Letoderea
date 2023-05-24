@@ -4,13 +4,11 @@ import asyncio
 from contextlib import suppress
 from typing import Callable
 from weakref import finalize
-from tarina import group_dict
 
 from .auxiliary import BaseAuxiliary
 from .context import system_ctx
 from .event import BaseEvent, get_auxiliaries, get_providers
-from .exceptions import PropagationCancelled
-from .handler import depend_handler
+from .handler import dispatch
 from .provider import Param, Provider
 from .publisher import Publisher
 from .subscriber import Subscriber
@@ -20,18 +18,6 @@ from .typing import Contexts
 class BackendPublisher(Publisher):
     def validate(self, event: type[BaseEvent]):
         return True
-
-
-async def dispatch(subscribers: list[Subscriber], event: BaseEvent):
-    if not subscribers:
-        return
-    grouped: dict[int, list[Subscriber]] = group_dict(subscribers, lambda x: x.priority)
-    for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
-        tasks = [depend_handler(subscriber, event) for subscriber in current_subs]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for result in results:
-            if result.__class__ is PropagationCancelled:
-                return
 
 
 class EventSystem:

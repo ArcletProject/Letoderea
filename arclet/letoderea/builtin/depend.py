@@ -15,7 +15,7 @@ class Depend(BaseAuxiliary):
 
     async def __call__(self, scope: Scope, context: Contexts):
         sub = Subscriber(self.target, providers=context["$subscriber"].providers)
-        return await depend_handler(sub, context["event"], True)
+        return await depend_handler(sub, context, True)
 
     target: TTarget[Any]
 

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import pprint
 import sys
 import traceback
 from typing import Any, Callable, Type, cast
 
-from tarina import Empty, generic_isinstance, run_always_await
+from tarina import Empty, generic_isinstance, run_always_await, group_dict
 
 from .auxiliary import Cleanup, Complete, Executor, Prepare
 from .event import BaseEvent, get_providers
@@ -21,6 +22,18 @@ from .exceptions import (
 from .provider import Provider, provide
 from .subscriber import Subscriber
 from .typing import Contexts, Force
+
+
+async def dispatch(subscribers: list[Subscriber], event: BaseEvent):
+    if not subscribers:
+        return
+    grouped: dict[int, list[Subscriber]] = group_dict(subscribers, lambda x: x.priority)
+    for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
+        tasks = [depend_handler(subscriber, event) for subscriber in current_subs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if result.__class__ is PropagationCancelled:
+                return
 
 
 def exception_handler(
@@ -78,12 +91,20 @@ def exception_handler(
 
 
 async def depend_handler(
-    target: Subscriber | Callable, event: BaseEvent, inner: bool = False
+    target: Subscriber | Callable,
+    source: BaseEvent | Contexts,
+    inner: bool = False
 ):
-    if target.__class__ != Subscriber:
-        target = Subscriber(target, providers=get_providers(event))
-    contexts = cast(Contexts, {"event": event, "$subscriber": target})
-    await event.gather(contexts)
+    if isinstance(source, dict):
+        contexts = source
+        if target.__class__ != Subscriber:
+            target = Subscriber(target, providers=get_providers(source["event"]))
+        contexts["$subscriber"] = target
+    else:
+        if target.__class__ != Subscriber:
+            target = Subscriber(target, providers=get_providers(source))
+        contexts = cast(Contexts, {"event": source, "$subscriber": target})
+        await source.gather(contexts)
     try:
         if Prepare in target.auxiliaries:
             for aux in target.auxiliaries[Prepare]:
@@ -187,8 +208,12 @@ async def param_parser(
                 return value
         if hasattr(context["event"], name):
             value = getattr(context["event"], name)
-            providers.append(provide(type(value), call=lambda x: getattr(x['event'], name))())
-            return value
+            if generic_isinstance(value, annotation):
+                providers.append(provide(annotation, call=lambda x: getattr(x['event'], name))())
+                return value
+            if isinstance(annotation, str) and f"{type(value)}" == annotation:
+                providers.append(provide(type(value), call=lambda x: getattr(x['event'], name))())
+                return value
     if default is not Empty:
         return default
     raise UndefinedRequirement(name, annotation, default, providers)

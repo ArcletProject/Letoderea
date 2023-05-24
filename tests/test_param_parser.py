@@ -17,8 +17,10 @@ test = Test()
 
 
 async def main():
+    ctx = {'sr': 'world'}
+    pros = [test]
     for _ in range(100000):
-        await param_parser("sr", str, Empty, [test], {'sr': 'world'})
+        await param_parser("sr", str, Empty, pros, ctx)
 
 start = time.perf_counter_ns()
 loop.run_until_complete(main())

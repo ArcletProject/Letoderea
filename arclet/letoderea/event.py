@@ -45,3 +45,12 @@ def get_auxiliaries(event: type[BaseEvent] | BaseEvent) -> list[BaseAuxiliary]:
         )
     )
     return res
+
+
+def make_event(cls: type) -> type[BaseEvent]:
+    async def _gather(self, context: Contexts):
+        for key in cls.__annotations__:
+            context[key] = getattr(self, key)
+
+    cls.gather = _gather
+    return cls  # type: ignore

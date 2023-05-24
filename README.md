@@ -34,7 +34,7 @@ async def test_subscriber(name: str):
 es.loop.run_until_complete(es.publish(TestEvent()))
 ```
 
-## 特性
+## 说明
 
 ### 事件
 
@@ -48,8 +48,8 @@ es.loop.run_until_complete(es.publish(TestEvent()))
 
 - 通过 `EventSystem.on` 或 `subscribe` 装饰器可以将一个函数注册为事件的订阅者
 - 订阅者的参数可以是任何类型，事件系统会尝试从 `Contexts` 中查找对应的值并注入
-- 订阅者的参数可以是 `Contexts` 类型，用于获取事件的上下文信息
 - 默认情况下 `event` 为名字的参数会被注入为事件的实例
+- 订阅者可以设置优先级，值越小优先级越高
 
 ### 上下文
 
@@ -57,20 +57,30 @@ es.loop.run_until_complete(es.publish(TestEvent()))
 - `Contexts` 默认包含 `event` 键，其值为事件的实例
 - `Contexts` 默认包含 `$subscriber` 键，其值为订阅者的实例
 
-### 发布
 
-- 通过 `EventSystem.publish` 方法可以发布一个事件
-- `Publisher` 负责管理订阅者与事件的交互
-- `Publisher.validate` 方法用于验证该事件是否为该发布者的订阅者所关注的事件
-- `Publisher.publish` 方法用于将事件主动分发给订阅者
-- `Publisher.supply` 方法用于给事件系统提供可能的事件
-- `EventSystem.on` 与 `EventSystem.publish` 可以指定 `Publisher`，默认为事件系统内的全局 `Publisher`
-
-### 参数
+### 依赖注入
 
 - `Provider[T]` 负责管理参数的注入, 其会尝试从 `Contexts` 中选择需求的参数返回
-- `Provider.validate` 方法用于验证订阅函数的参数是否为该 `Provider` 所关注的参数
+- 对于订阅者的每个参数，在订阅者注册后，事件系统会遍历该订阅者拥有的所有 `Provider`，
+    并依次调用 `Provider.validate` 方法，如果返回 `True`，则将该 `Provider` 绑定到该参数上。
+    当进行依赖解析时，事件系统会遍历该参数绑定的所有 `Provider`，并依次调用 `Provider.__call__` 方法，
+    如果返回值不为 `None`，则将该返回值注入到该参数中。
+- `Provider.validate` 方法用于验证订阅函数的参数是否为该 `Provider` 可绑定的参数。默认实现为检查目标参数的类型声明是否为 `T`。
+    也可以通过重写该方法来实现自定义的验证逻辑。
 - `Provider.__call__` 方法用于从 `Contexts` 中获取参数
+- 原则上 `Provider` 只负责注入单一类型的参数。若想处理多个类型的参数，可以声明自己为 `Provider[Union[A, B, ...]]` 类型，
+    并在 `Provider.validate` 方法中进行自定义的逻辑判断。但更推荐的做法是构造多个 `Provider`，并将其绑定到同一个参数上。
+- 对于特殊的辅助器 `Depend`，事件系统会将其作为特殊的 `Provider` 处理，绑定了 `Depend` 的参数在解析时将直接调用
+    `Depend.__call__` 方法。
+
+### 事件发布
+
+- 一般情况下通过 `EventSystem.publish` 方法可以发布一个事件让事件系统进行处理
+- `Publisher` 类负责管理订阅者与事件的交互
+- `Publisher.validate` 方法用于验证该事件是否为该发布者的订阅者所关注的事件
+- `Publisher.publish` 方法用于将事件不经过事件系统主动分发给订阅者
+- `Publisher.supply` 方法用于让事件系统主动获取事件并分发给订阅者
+- `EventSystem.on` 与 `EventSystem.publish` 可以指定 `Publisher`，默认为事件系统内的全局 `Publisher`
 
 ### 辅助
 
