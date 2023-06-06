@@ -47,6 +47,20 @@ s = time.perf_counter_ns()
 es.loop.run_until_complete(main())
 e = time.perf_counter_ns()
 n = e - s
+print("RUN 1:")
+print(f"used {n/10e8}, {count*10e8/n}o/s")
+print(f"{n / count} ns per task with {count} tasks gather")
+
+
+async def main1():
+    for _ in range(count):
+        await depend_handler(test_subscriber, a)
+
+s = time.perf_counter_ns()
+es.loop.run_until_complete(main1())
+e = time.perf_counter_ns()
+n = e - s
+print("RUN 2:")
 print(f"used {n/10e8}, {count*10e8/n}o/s")
 print(f"{n / count} ns per loop with {count} loops")
 
@@ -57,12 +71,12 @@ tasks.extend(
 )
 
 
-async def main():
+async def main2():
     await asyncio.gather(*tasks)
 
 prof = Profile()
 prof.enable()
-es.loop.run_until_complete(main())
+es.loop.run_until_complete(main2())
 prof.disable()
 prof.create_stats()
 

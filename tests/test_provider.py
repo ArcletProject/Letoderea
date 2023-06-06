@@ -65,16 +65,14 @@ async def test_subscriber(
     # print(name, age, is_true, num, name1)
     ...
 
-tasks = [
-    es.loop.create_task(depend_handler(test_subscriber, TestEvent()))
-    for _ in range(20000)
-]
 
 pprint(test_subscriber.params)
 
 
 async def main():
-    await asyncio.gather(*tasks)
+    e = TestEvent()
+    for _ in range(20000):
+        await depend_handler(test_subscriber, e)
 
 s = time.perf_counter_ns()
 es.loop.run_until_complete(main())

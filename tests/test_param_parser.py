@@ -24,4 +24,5 @@ async def main():
 
 start = time.perf_counter_ns()
 loop.run_until_complete(main())
-print(round(100000 * 10e8 / (time.perf_counter_ns() - start), 6), 'o/s')
+end = time.perf_counter_ns()
+print(round(100000 * 10e8 / (end - start), 6), 'o/s')

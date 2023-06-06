@@ -16,7 +16,7 @@ class ExampleEvent:
             return context["a"]
 
 
-def test(m: str):
+async def test(m: str):
     ...
 
 
@@ -26,10 +26,12 @@ sub = Subscriber(test, providers=[ExampleEvent.TestProvider()])
 async def main():
     a = ExampleEvent()
     for _ in range(50000):
-        await depend_handler(test, a)
+        await depend_handler(sub, a)
 
-
-start = time.time()
+s = time.perf_counter_ns()
 loop.run_until_complete(main())
+e = time.perf_counter_ns()
+n = e - s
 
-print(50000 / (time.time() - start), "o/s")
+print(f"used {n/10e8}, {50000*10e8/n}o/s")
+print(f"{n / 50000} ns per loop with 50000 loops")

@@ -201,10 +201,10 @@ async def param_parser(
     if annotation:
         for key, value in context.items():
             if generic_isinstance(value, annotation):
-                providers.append(provide(annotation, key)())
+                providers.insert(0, provide(annotation, key)())
                 return value
             if isinstance(annotation, str) and f"{type(value)}" == annotation:
-                providers.append(provide(type(value), key)())
+                providers.insert(0, provide(type(value), key)())
                 return value
         if hasattr(context["event"], name):
             value = getattr(context["event"], name)
