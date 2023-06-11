@@ -1,13 +1,13 @@
-from typing import Generic, TypeVar, Callable, Any
+from typing import TypeVar, Callable, Any, cast, Dict, Optional, Tuple, TYPE_CHECKING
 from .typing import Contexts
 
 T = TypeVar("T")
 
 
-class Deref(Generic[T]):
-    def __init__(self, proxy_type: type[T]):
+class Deref:
+    def __init__(self, proxy_type: type):
         self.__proxy_type = proxy_type
-        self.__items = {}
+        self.__items: Dict[Optional[str], Optional[Tuple[bool, Callable[[Any], Any]]]] = {}
         self.__last_key = None
 
     def __getattr__(self, item):
@@ -16,53 +16,51 @@ class Deref(Generic[T]):
         return self
 
     def __call__(self, *args, **kwargs):
-        if not self.__items:
-            return self.__proxy_type(*args, **kwargs)
-        self.__items[self.__last_key] = ("call", lambda x: x(*args, **kwargs))
+        self.__items[self.__last_key] = (False, lambda x: x(*args, **kwargs))
         return self
 
     def __eq__(self, other):
-        self.__items[self.__last_key] = lambda x: x == other
+        self.__items[self.__last_key] = (True, lambda x: x == other)
         return self
 
     def __ne__(self, other):
-        self.__items[self.__last_key] = lambda x: x != other
+        self.__items[self.__last_key] = (True, lambda x: x != other)
         return self
 
     def __lt__(self, other):
-        self.__items[self.__last_key] = lambda x: x < other
+        self.__items[self.__last_key] = (True, lambda x: x < other)
         return self
 
     def __gt__(self, other):
-        self.__items[self.__last_key] = lambda x: x > other
+        self.__items[self.__last_key] = (True, lambda x: x > other)
         return self
 
     def __le__(self, other):
-        self.__items[self.__last_key] = lambda x: x <= other
+        self.__items[self.__last_key] = (True, lambda x: x <= other)
         return self
 
     def __ge__(self, other):
-        self.__items[self.__last_key] = lambda x: x >= other
+        self.__items[self.__last_key] = (True, lambda x: x >= other)
         return self
 
     def __contains__(self, item):
-        self.__items[self.__last_key] = lambda x: item in x
+        self.__items[self.__last_key] = (True, lambda x: item in x)
         return self
 
     def __getitem__(self, item):
-        self.__items[self.__last_key] = ("getitem", lambda x: x[item])
+        self.__items[self.__last_key] = (False, lambda x: x[item])
         return self
 
     def __or__(self, other):
-        self.__items[self.__last_key] = lambda x: x | other
+        self.__items[self.__last_key] = (True, lambda x: x | other)
         return self
 
     def __and__(self, other):
-        self.__items[self.__last_key] = lambda x: x & other
+        self.__items[self.__last_key] = (True, lambda x: x & other)
         return self
 
     def __xor__(self, other):
-        self.__items[self.__last_key] = lambda x: x ^ other
+        self.__items[self.__last_key] = (True, lambda x: x ^ other)
         return self
 
     def __repr__(self):
@@ -75,26 +73,30 @@ class Deref(Generic[T]):
         return len(self.__items)
 
 
-def generate(ref: Deref) -> Callable[[Contexts], Any]:
-    if len(ref) == 0:
-        return lambda x: x["event"]
+if TYPE_CHECKING:
+    def generate(ref: Any) -> Callable[[Contexts], Any]:
+        ...
 
-    def _get(ctx: Contexts):
-        item = ctx["event"]
-        for key, value in ref:
-            if not (item := getattr(item, key, ctx.get(key, None))):
-                return item
-            if isinstance(value, tuple):
-                if value[0] == "call":
-                    item = value[1](item)
-                elif value[0] == "getitem":
-                    item = value[1](item)
-            elif callable(value):
-                return value(item)
-        return item
+else:
 
-    return _get
+    def generate(ref: Deref) -> Callable[[Contexts], Any]:
+        if len(ref) == 0:
+            return lambda x: x["event"]
+
+        def _get(ctx: Contexts):
+            item = ctx["event"]
+            for key, value in ref:
+                if key and (item := getattr(item, key, ctx.get(key, None))) is None:
+                    return item
+                if not value:
+                    continue
+                if value[0]:
+                    return value[1](item)
+                item = value[1](item)
+            return item
+
+        return _get
 
 
-def deref(proxy_type: type[T]) -> T:  # type: ignore
-    return Deref(proxy_type)  # type: ignore
+def deref(proxy_type: type[T]) -> T:
+    return cast(T, Deref(proxy_type))
