@@ -42,7 +42,7 @@ class ExampleEvent:
 
 @es.on(ExampleEvent)
 @bind(TestDecorate())
-async def test(m: int, a: str = TestDecorate()):
+async def test(m: int, a: str):
     print(m, type(m), end=' ')
     print(a, type(a))
 

@@ -8,6 +8,7 @@ es = EventSystem()
 class TestEvent:
     type: str = "TestEvent"
     index: int = 0
+    msg: str
 
     async def gather(self, context: dict):
         context['index'] = self.index

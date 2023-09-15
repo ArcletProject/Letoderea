@@ -22,8 +22,8 @@ async def handler(msg: str):
 class ExampleEvent:
     msg: str
 
-    async def gather(self, ctx: Contexts):
-        ctx['msg'] = self.msg
+    async def gather(self, context: Contexts):
+        context['msg'] = self.msg
 
 
 @es.on(ExampleEvent, auxiliaries=[auxilia(AuxType.judge, prepare=lambda x: x['msg'] == 'hello')])

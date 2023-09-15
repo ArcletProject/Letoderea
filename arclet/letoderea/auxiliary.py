@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from functools import partial
-from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, overload, Final
+from typing import Any, Awaitable, Callable, Literal, Optional, Protocol, cast, overload, Final
 from tarina import run_always_await
 from .typing import Contexts
 
@@ -101,7 +101,7 @@ class CombineExecutor:
             self.steps.append(partial(_ors, funcs=ors.copy()))
             ors.clear()
 
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[bool]:
+    async def __call__(self, scope: Scope, context: Contexts):
         res = None
         ctx = context
         last = None
@@ -109,7 +109,7 @@ class CombineExecutor:
             if (last := await step(scope, ctx)) is None:
                 continue
             if isinstance(last, dict):
-                ctx = last
+                ctx = cast(Contexts, last)
                 continue
             if last is False:
                 return False

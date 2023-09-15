@@ -38,15 +38,15 @@ def _compile(target: Callable, providers: list[Provider]) -> list[CompileParam]:
                 if isinstance(m, Provider):
                     param.providers.insert(0, m)
                 elif isinstance(m, str):
-                    param.providers.insert(0, provide(org, name, lambda x: x.get(m))())
+                    param.providers.insert(0, provide(org, name, lambda x: x.get(m)))
                 elif isinstance(m, Deref):
-                    param.providers.insert(0, provide(org, name, generate(m))())
+                    param.providers.insert(0, provide(org, name, generate(m)))
                 elif callable(m):
-                    param.providers.insert(0, provide(org, name, m)())
+                    param.providers.insert(0, provide(org, name, m))
         if isinstance(default, Provider):
             param.providers.insert(0, default)
         if isinstance(default, BaseAuxiliary) and (default.type == AuxType.depend):
-            param.depend = provide(anno, call=partial(default, "parsing"))()
+            param.depend = provide(anno, call=partial(default, "parsing"))
         res.append(param)
     return res
 

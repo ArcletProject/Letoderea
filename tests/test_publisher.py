@@ -1,4 +1,4 @@
-from arclet.letoderea import Publisher, EventSystem, provide, Contexts, BaseEvent
+from arclet.letoderea import accept, EventSystem, provide, Contexts
 import asyncio
 
 
@@ -14,23 +14,18 @@ class TestEvent:
         context["name"] = self.name
 
 
-class MyPublisher(Publisher):
-    def validate(self, event: type[BaseEvent]):
-        return event == TestEvent
-
 
 test = provide(str, call="name")
-my_publisher = MyPublisher("test")
-my_publisher[TestEvent] += test()
 
+with accept("test", TestEvent).context() as pub:
+    pub.add_provider(test)
 
-@es.on(TestEvent, publisher=my_publisher)
-async def test_subscriber(a: str):
-    print(a)
+    @es.on(TestEvent)
+    async def test_subscriber(a: str):
+        print(a)
 
-
-async def main():
-    await my_publisher.publish(TestEvent("hello world"))
+    async def main():
+        await pub.publish(TestEvent("hello world"))
 
 
 loop.run_until_complete(main())

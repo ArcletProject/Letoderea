@@ -98,12 +98,12 @@ async def depend_handler(
     if isinstance(source, dict):
         contexts = source
         if target.__class__ != Subscriber:
-            target = Subscriber(target, providers=get_providers(source["event"]))
+            target = Subscriber(target, providers=get_providers(source["$event"]))
         contexts["$subscriber"] = target
     else:
         if target.__class__ != Subscriber:
             target = Subscriber(target, providers=get_providers(source))
-        contexts = cast(Contexts, {"event": source, "$subscriber": target})
+        contexts = cast(Contexts, {"$event": source, "$subscriber": target})
         await source.gather(contexts)
     try:
         if Prepare in target.auxiliaries:
@@ -128,9 +128,9 @@ async def depend_handler(
     except InnerHandlerException as e:
         if inner:
             raise
-        raise exception_handler(e.args[0], target, contexts) from e
+        raise exception_handler(e.args[0], target, contexts) from e  # type: ignore
     except Exception as e:
-        raise exception_handler(e, target, contexts, inner) from e
+        raise exception_handler(e, target, contexts, inner) from e  # type: ignore
     finally:
         if Cleanup in target.auxiliaries:
             for aux in target.auxiliaries[Cleanup]:
@@ -201,18 +201,18 @@ async def param_parser(
     if annotation:
         for key, value in context.items():
             if generic_isinstance(value, annotation):
-                providers.insert(0, provide(annotation, key)())
+                providers.insert(0, provide(annotation, key))  # type: ignore
                 return value
             if isinstance(annotation, str) and f"{type(value)}" == annotation:
-                providers.insert(0, provide(type(value), key)())
+                providers.insert(0, provide(type(value), key))
                 return value
         if hasattr(context["event"], name):
             value = getattr(context["event"], name)
             if generic_isinstance(value, annotation):
-                providers.append(provide(annotation, call=lambda x: getattr(x['event'], name))())
+                providers.append(provide(annotation, call=lambda x: getattr(x['event'], name)))  # type: ignore
                 return value
             if isinstance(annotation, str) and f"{type(value)}" == annotation:
-                providers.append(provide(type(value), call=lambda x: getattr(x['event'], name))())
+                providers.append(provide(type(value), call=lambda x: getattr(x['event'], name)))
                 return value
     if default is not Empty:
         return default

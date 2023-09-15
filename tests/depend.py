@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from arclet.letoderea import EventSystem
-from arclet.letoderea.builtin.depend import Depends
+from arclet.letoderea import Depends
 from arclet.letoderea import Contexts
 from arclet.letoderea.exceptions import ParsingStop
 

@@ -63,7 +63,7 @@ def provide(
     call: Callable[[Contexts], T | None | Awaitable[T | None]] | str | None = None,
     validate: Callable[[Param], bool] | None = None,
     _id: str = "_Provider",
-) -> type[Provider[T]]:
+) -> Provider[T]:
     """
     用于动态生成 Provider 的装饰器
     """
@@ -81,13 +81,13 @@ def provide(
             )
 
         async def __call__(self, context: Contexts):
-            if not call:
+            if not call and target:
                 return context.get(target)
             if isinstance(call, str):
                 return context.get(call)
-            return await run_always_await(call, context)
+            return await run_always_await(call, context)  # type: ignore
 
         def __repr__(self):
             return f"Provider::{_id}(origin={origin})"
 
-    return _Provider
+    return _Provider()

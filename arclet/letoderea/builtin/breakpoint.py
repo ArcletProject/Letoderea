@@ -15,14 +15,16 @@ from typing import (
 
 from ..auxiliary import AuxType, BaseAuxiliary, Scope
 from ..core import BackendPublisher, EventSystem, system_ctx
-from ..event import BaseEvent
+from ..event import BaseEvent, get_providers, get_auxiliaries
+from ..subscriber import Subscriber
 from ..exceptions import PropagationCancelled
 from ..handler import depend_handler
 from ..provider import Provider
-from ..typing import Contexts, TCallable
+from ..typing import Contexts, TCallable, TTarget
 
 _backend = {}
 R = TypeVar("R")
+D = TypeVar("D")
 
 
 class _step_iter(AsyncIterator[R]):
@@ -35,15 +37,15 @@ class _step_iter(AsyncIterator[R]):
 
 
 class StepOut(BaseAuxiliary, Generic[R]):
-    target: Set[Type[BaseEvent]]
+    target: Set[type]
     providers: List[Union[Provider, Type[Provider]]]
     auxiliaries: List[BaseAuxiliary]
-    handler: Union[Callable[..., Awaitable[R]], Callable[..., R]]
+    handler: TTarget[R]
     priority: int
 
     def __init__(
         self,
-        events: List[Type[BaseEvent]],
+        events: List[type],
         handler: Optional[Union[Callable[..., Awaitable[R]], Callable[..., R]]] = None,
         providers: Optional[List[Union[Provider, Type[Provider]]]] = None,
         auxiliaries: Optional[List[BaseAuxiliary]] = None,
@@ -55,7 +57,7 @@ class StepOut(BaseAuxiliary, Generic[R]):
         self.providers = providers or []
         self.auxiliaries = auxiliaries or []
         self.priority = priority
-        self.handler = handler or (lambda: None)
+        self.handler = handler or (lambda: None)  # type: ignore
         self.block = block
 
     @property
@@ -63,7 +65,7 @@ class StepOut(BaseAuxiliary, Generic[R]):
         return {Scope.prepare}
 
     async def __call__(self, scope: Scope, context: Contexts):
-        return type(context["event"]) in self.target
+        return type(context["$event"]) in self.target
 
     def use(self, func: TCallable) -> TCallable:
         self.handler = func
@@ -85,23 +87,26 @@ class Breakpoint:
         self,
         condition: StepOut[R],
         timeout: float = 0.0,
-    ) -> R:
+        default: D = None,
+    ) -> Union[R, D]:
         fut = self.es.loop.create_future()
 
         for et in condition.target:
             callable_target = self.new_target(et, condition, fut)  # type: ignore
-            self.es.on(
-                et,  # type: ignore
-                priority=condition.priority,
-                auxiliaries=[condition],
-                publisher=self.publisher,
-            )(callable_target)
+            self.publisher.subscribers.append(
+                Subscriber(
+                    callable_target,
+                    providers=[*self.es.global_providers, *get_providers(et)],
+                    priority=condition.priority,
+                    auxiliaries=[condition],
+                )
+            )
 
         try:
-            self.es.add_publisher(self.publisher)
+            self.es.register(self.publisher)
             return await asyncio.wait_for(fut, timeout) if timeout else await fut
         except asyncio.TimeoutError:
-            return None
+            return default
         finally:
             if not fut.done():
                 self.publisher.subscribers.clear()
@@ -109,14 +114,19 @@ class Breakpoint:
 
     def new_target(self, event_t: Type[BaseEvent], condition: StepOut, fut: Future):
 
-        sub = self.es.on(
-            event_t,  # type: ignore
+        sub = Subscriber(
+            condition.handler,
+            providers=[
+                *self.es.global_providers,
+                *get_providers(event_t),
+                *condition.providers
+            ],
             priority=condition.priority,
-            auxiliaries=condition.auxiliaries,
-            providers=condition.providers,
-            publisher=self.publisher,
-        )(condition.handler)
-        self.publisher.remove_subscriber(event_t, sub)  # type: ignore
+            auxiliaries=[
+                *condition.auxiliaries,
+                *get_auxiliaries(event_t),
+            ]
+        )
 
         async def inner(event: event_t):
             if fut.done():
@@ -130,5 +140,5 @@ class Breakpoint:
 
         return inner
 
-    def __call__(self, condition: StepOut[R], timeout: float = 0.0) -> Awaitable[R]:
-        return self.wait(condition, timeout)
+    def __call__(self, condition: StepOut[R], timeout: float = 0.0, default: D = None) -> Awaitable[Union[R, D]]:
+        return self.wait(condition, timeout, default=default)
