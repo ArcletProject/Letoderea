@@ -17,7 +17,7 @@ class TestEvent:
 
 @subscribe()
 @bypass_if(lambda x: x['index'] == 0)
-@is_event(TestEvent)
+# @is_event(TestEvent)
 async def test(
     index: Annotated[int, "index"],
     a: Annotated[str, deref(TestEvent).msg]
@@ -27,7 +27,7 @@ async def test(
 
 @subscribe()
 @bypass_if(deref(TestEvent).index != 0)
-@is_event(TestEvent)
+# @is_event(TestEvent)
 async def test1(
     index: Annotated[int, deref(TestEvent).index],
     t: Annotated[int, deref(TestEvent).type],

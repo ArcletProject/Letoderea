@@ -163,14 +163,25 @@ class Publisher:
 
         return register_wrapper
 
+    def __iadd__(self, other):
+        if isinstance(other, Subscriber):
+            self.add_subscriber(other)
+        elif callable(other):
+            self.register()(other)
+        else:
+            raise TypeError(f"unsupported operand type(s) for +=: 'Publisher' and '{other.__class__.__name__}'")
+        return self
 
 class BackendPublisher(Publisher):
-    def __init__(self, id_: str, queue_size: int = -1):
+    def __init__(self, id_: str, predicate: Callable[[BaseEvent], bool] | None = None, queue_size: int = -1):
         self.id = id_
+        if predicate:
+            self.id += f"::{predicate}"
+            self.validator = predicate
+        else:
+            self.validator = lambda e: True
         self.event_queue = Queue(queue_size)
         self.subscribers = []
         self.providers = []
         self.auxiliaries = []
 
-    def validate(self, event: BaseEvent):
-        return True

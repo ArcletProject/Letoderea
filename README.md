@@ -26,7 +26,7 @@ class TestEvent:
         context["name"] = "Letoderea"
 
 
-@es.on(TestEvent)
+@es.on()
 async def test_subscriber(name: str):
     print(name)
 
