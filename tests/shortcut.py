@@ -1,4 +1,4 @@
-from arclet.letoderea import bypass_if, EventSystem, subscribe
+from arclet.letoderea import bypass_if, EventSystem, subscribe, is_event
 from arclet.letoderea.ref import deref
 from typing_extensions import Annotated
 
@@ -15,9 +15,9 @@ class TestEvent:
         context['type'] = self.type
         context['msg'] = "hello"
 
-
-@subscribe(TestEvent)
+@subscribe()
 @bypass_if(lambda x: x['index'] == 0)
+@is_event(TestEvent)
 async def test(
     index: Annotated[int, "index"],
     a: Annotated[str, deref(TestEvent).msg]
@@ -25,9 +25,9 @@ async def test(
     print("enter when index != 0")
     print("test1:", index, a)
 
-
-@subscribe(TestEvent)
+@subscribe()
 @bypass_if(deref(TestEvent).index != 0)
+@is_event(TestEvent)
 async def test1(
     index: Annotated[int, deref(TestEvent).index],
     t: Annotated[int, deref(TestEvent).type],

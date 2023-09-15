@@ -1,4 +1,4 @@
-from arclet.letoderea import accept, EventSystem, provide, Contexts
+from arclet.letoderea import Publisher, EventSystem, provide, Contexts
 import asyncio
 
 
@@ -17,15 +17,22 @@ class TestEvent:
 
 test = provide(str, call="name")
 
-with accept("test", TestEvent).context() as pub:
-    pub.add_provider(test)
+with Publisher("test", TestEvent, predicate=lambda x: x.name == "hello world") as pub1:
+    pub1.bind(test)
+    @pub1.register()
+    async def test_subscriber1(a: str):
+        print(1, a)
 
-    @es.on(TestEvent)
-    async def test_subscriber(a: str):
-        print(a)
+with Publisher("test", TestEvent, predicate=lambda x: x.name == "world hello") as pub2:
+    pub2.bind(test)
 
-    async def main():
-        await pub.publish(TestEvent("hello world"))
+    @pub2.register()
+    async def test_subscriber2(a: str):
+        print(2, a)
 
+async def main():
+    await es.publish(TestEvent("hello world"))
+    await es.publish(TestEvent("world hello"))
 
+es.register(pub1, pub2)
 loop.run_until_complete(main())

@@ -3,10 +3,8 @@ from __future__ import annotations
 import asyncio
 import time
 from pprint import pprint
-from arclet.letoderea import EventSystem, BaseEvent, Provider, Contexts, bind
+from arclet.letoderea import BaseEvent, Provider, Contexts, Subscriber
 from arclet.letoderea.handler import depend_handler
-
-es = EventSystem()
 
 
 class IntProvider(Provider[int]):
@@ -34,8 +32,6 @@ class TestEvent(BaseEvent):
             return context['name']
 
 
-@es.on(TestEvent)
-@bind(IntProvider, BoolProvider, FloatProvider)
 async def test_subscriber(
     name0: str,
     age0: int,
@@ -65,18 +61,18 @@ async def test_subscriber(
     # print(name, age, is_true, num, name1)
     ...
 
-
-pprint(test_subscriber.params)
+sub = Subscriber(test_subscriber, providers=[TestEvent.TestProvider(), IntProvider(), BoolProvider(), FloatProvider()])
+pprint(sub.params)
 
 
 async def main():
-    e = TestEvent()
+    ev = TestEvent()
+    s = time.perf_counter_ns()
     for _ in range(20000):
-        await depend_handler(test_subscriber, e)
+        await depend_handler(sub, ev)
+    e = time.perf_counter_ns()
+    n = e - s
+    print(f"used {n/10e8}, {20000*10e8/n}o/s")
+    print(f"{n / 20000} ns per loop with 20000 loops")
 
-s = time.perf_counter_ns()
-es.loop.run_until_complete(main())
-e = time.perf_counter_ns()
-n = e - s
-print(f"used {n/10e8}, {20000*10e8/n}o/s")
-print(f"{n / 20000} ns per loop with 20000 loops")
+asyncio.run(main())

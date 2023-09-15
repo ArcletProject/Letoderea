@@ -55,5 +55,4 @@ async def main():
         await asyncio.sleep(1)
 
 
-print(es._backend_publisher.subscribers)
 loop.run_until_complete(main())

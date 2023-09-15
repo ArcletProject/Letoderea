@@ -6,18 +6,12 @@ from typing import Callable
 from weakref import finalize
 
 from .auxiliary import BaseAuxiliary
+from .provider import Provider
 from .context import system_ctx, publisher_ctx
-from .event import BaseEvent, get_auxiliaries, get_providers
+from .event import BaseEvent
 from .handler import dispatch
-from .provider import Param, Provider
-from .publisher import Publisher
+from .publisher import Publisher, BackendPublisher
 from .subscriber import Subscriber
-from .typing import Contexts, TCallable
-
-
-class BackendPublisher(Publisher):
-    def validate(self, event: type[BaseEvent] | BaseEvent):
-        return True
 
 
 class EventSystem:
@@ -25,14 +19,12 @@ class EventSystem:
     _backend_publisher: Publisher = BackendPublisher("__backend__publisher__")
     loop: asyncio.AbstractEventLoop
     publishers: dict[str, Publisher]
-    global_providers: list[Provider]
 
     def __init__(self, loop=None, fetch=True):
-        self.loop = loop or asyncio.get_event_loop()
+        self.loop = loop or asyncio.new_event_loop()
         if fetch:
             self.loop_task = self.loop.create_task(self._loop_fetch())
         self.publishers = {}
-        self.global_providers = []
         self._token = system_ctx.set(self)
 
         def _remove(es):
@@ -44,25 +36,6 @@ class EventSystem:
             system_ctx.set(None)  # type: ignore
 
         finalize(self, _remove, self)
-
-        class EventProvider(Provider[BaseEvent]):
-            def validate(self, param: Param):
-                return (
-                    isinstance(param.annotation, type)
-                    and issubclass(param.annotation, BaseEvent)
-                ) or param.name == "event"
-
-            async def __call__(self, context: Contexts) -> BaseEvent | None:
-                return context.get("$event")
-
-        class ContextProvider(Provider[Contexts]):
-            def validate(self, param: Param):
-                return param.annotation == Contexts
-
-            async def __call__(self, context: Contexts) -> Contexts:
-                return context
-            
-        self.global_providers.extend([EventProvider(), ContextProvider()])
 
     async def _loop_fetch(self):
         while True:
@@ -78,7 +51,7 @@ class EventSystem:
             self.publishers[publisher.id] = publisher
 
     def publish(self, event: BaseEvent, publisher: str | Publisher | None = None):
-        pubs = [self._backend_publisher]
+        pubs = []
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
             pubs.append(pub)
         elif isinstance(publisher, Publisher):
@@ -87,7 +60,7 @@ class EventSystem:
             pubs.extend(
                 pub
                 for pub in self.publishers.values()
-                if pub.validate(event.__class__)  # type: ignore
+                if pub.validate(event)  # type: ignore
             )
         subscribers = sum((pub.subscribers for pub in pubs), [])
         task = self.loop.create_task(dispatch(subscribers, event))
@@ -101,35 +74,18 @@ class EventSystem:
         auxiliaries: list[BaseAuxiliary] | None = None,
         providers: list[Provider | type[Provider]] | None = None,
     ):
-        auxiliaries = auxiliaries or []
-        providers = providers or []
+        if not (pub := publisher_ctx.get()):
+            pub = Publisher("temp", *events) if events else self._backend_publisher
+        if pub.id in self.publishers:
+            pub = self.publishers[pub.id]
+        else:
+            self.publishers[pub.id] = pub
 
-        def register_wrapper(exec_target: TCallable) -> TCallable:
-            for event in events:
-                select_pubs = [pub] if (pub := publisher_ctx.get()) else (
-                    [pub for pub in self.publishers.values() if pub.validate(event)]  # type: ignore
-                    or [self._backend_publisher]
-                )
-                for pub in select_pubs:
-                    _providers = [
-                        *self.global_providers,
-                        *get_providers(event),
-                        *pub.providers,
-                        *providers,
-                    ]
-                    _auxiliaries = [
-                        *auxiliaries,
-                        *get_auxiliaries(event)
-                    ]
-                    pub.add_subscriber(
-                        Subscriber(
-                            exec_target,
-                            priority=priority,
-                            auxiliaries=_auxiliaries,
-                            providers=_providers,
-                        )
-                    )
+        def wrapper(exec_target: Callable) -> Subscriber:
+            return pub.register(
+                priority,
+                auxiliaries,
+                providers,
+            )(exec_target)
 
-            return exec_target
-
-        return register_wrapper
+        return wrapper
