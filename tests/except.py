@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from arclet.letoderea import EventSystem, BaseEvent, provide, Contexts, bind, subscribe
 
 es = EventSystem()

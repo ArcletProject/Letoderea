@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from .auxiliary import BaseAuxiliary
-from .provider import Provider
+from .provider import Provider, ProviderFactory
 from .typing import Contexts
 
 
@@ -18,15 +18,13 @@ class BaseEvent(Protocol):
 @lru_cache(4096)
 def get_providers(
     event: type[BaseEvent] | BaseEvent,
-) -> list[Provider]:
+) -> list[Provider | ProviderFactory]:
     res = getattr(event, "providers", [])
     res.extend(
         p
         for _, p in inspect.getmembers(
             event,
-            lambda x: inspect.isclass(x)
-            and issubclass(x, Provider)
-            and x is not Provider,
+            lambda x: inspect.isclass(x) and issubclass(x, (Provider, ProviderFactory)),
         )
     )
     return [p() if isinstance(p, type) else p for p in res]
@@ -35,15 +33,7 @@ def get_providers(
 @lru_cache(4096)
 def get_auxiliaries(event: type[BaseEvent] | BaseEvent) -> list[BaseAuxiliary]:
     res = getattr(event, "auxiliaries", [])
-    res.extend(
-        p
-        for _, p in inspect.getmembers(
-            event,
-            lambda x: inspect.isclass(x)
-            and issubclass(x, BaseAuxiliary)
-            and x is not BaseAuxiliary,
-        )
-    )
+    res.extend(p for _, p in inspect.getmembers(event, lambda x: inspect.isclass(x) and issubclass(x, BaseAuxiliary)))
     return res
 
 

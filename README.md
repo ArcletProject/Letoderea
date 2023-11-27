@@ -16,22 +16,21 @@ pip install arclet-letoderea
 ## 样例
 
 ```python
-from arclet.letoderea import EventSystem, Contexts
+import asyncio
+from arclet.letoderea import EventSystem, make_event
 
 es = EventSystem()
 
-
+@make_event
 class TestEvent:
-    async def gather(self, context: Contexts):
-        context["name"] = "Letoderea"
+    name = "Letoderea"
 
 
 @es.on()
 async def test_subscriber(name: str):
     print(name)
 
-
-es.loop.run_until_complete(es.publish(TestEvent()))
+asyncio.run(es.publish(TestEvent()))
 ```
 
 ## 说明

@@ -1,26 +1,15 @@
 import asyncio
 from asyncio import Future
-from typing import (
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Generic,
-    List,
-    Optional,
-    Set,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import AsyncIterator, Awaitable, Callable, Generic, List, Optional, Set, Type, TypeVar, Union
 
-from ..auxiliary import BaseAuxiliary, auxilia, AuxType
+from ..auxiliary import AuxType, BaseAuxiliary, auxilia
 from ..core import EventSystem, system_ctx
-from ..event import BaseEvent, get_providers, get_auxiliaries
-from ..subscriber import Subscriber
-from ..publisher import Publisher, global_providers
+from ..event import BaseEvent, get_auxiliaries, get_providers
 from ..exceptions import PropagationCancelled
 from ..handler import depend_handler
 from ..provider import Provider
+from ..publisher import Publisher, global_providers
+from ..subscriber import Subscriber
 from ..typing import TCallable, TTarget
 
 _backend = {}
@@ -101,19 +90,18 @@ class Breakpoint:
             self.es.publishers.pop(publisher.id)
 
     def new_target(self, event_t: Type[BaseEvent], condition: StepOut, fut: Future):
-
         sub = Subscriber(
             condition.handler,
             providers=[
                 *global_providers,
                 *get_providers(event_t),
-                *condition.providers
+                *condition.providers,
             ],
             priority=condition.priority,
             auxiliaries=[
                 *condition.auxiliaries,
                 *get_auxiliaries(event_t),
-            ]
+            ],
         )
 
         async def inner(event: event_t):

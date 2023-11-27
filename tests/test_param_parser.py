@@ -2,7 +2,7 @@ import time
 import asyncio
 from tarina import Empty
 from arclet.letoderea.provider import Provider
-from arclet.letoderea.handler import param_parser
+from arclet.letoderea.subscriber import CompileParam
 
 
 loop = asyncio.new_event_loop()
@@ -17,10 +17,10 @@ test = Test()
 
 
 async def main():
+    param = CompileParam('sr', str, Empty, [test], None, None)
     ctx = {'sr': 'world'}
-    pros = [test]
     for _ in range(100000):
-        await param_parser("sr", str, Empty, pros, ctx)
+        await param.solve(ctx)
 
 start = time.perf_counter_ns()
 loop.run_until_complete(main())

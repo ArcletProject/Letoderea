@@ -5,9 +5,9 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Any, Callable, Type, cast
+from typing import Callable, Type
 
-from tarina import Empty, generic_isinstance, run_always_await, group_dict
+from tarina import group_dict
 
 from .auxiliary import Cleanup, Complete, Executor, Prepare
 from .event import BaseEvent, get_providers
@@ -19,9 +19,8 @@ from .exceptions import (
     UndefinedRequirement,
     UnexpectedArgument,
 )
-from .provider import Provider, provide
 from .subscriber import Subscriber
-from .typing import Contexts, Force
+from .typing import Contexts
 
 
 async def dispatch(subscribers: list[Subscriber], event: BaseEvent):
@@ -36,9 +35,7 @@ async def dispatch(subscribers: list[Subscriber], event: BaseEvent):
                 return
 
 
-def exception_handler(
-    e: Exception, target: Subscriber, contexts: Contexts, inner: bool = False
-):
+def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inner: bool = False):
     if isinstance(e, UndefinedRequirement) and not isinstance(e, SyntaxError):
         name, *_, pds = e.args
         param = inspect.signature(target.callable_target).parameters[name]
@@ -91,40 +88,31 @@ def exception_handler(
 
 
 async def depend_handler(
-    target: Subscriber | Callable,
-    source: BaseEvent | Contexts,
-    inner: bool = False
+    target: Subscriber | Callable, event: BaseEvent | None = None, source: Contexts | None = None, inner: bool = False
 ):
-    if isinstance(source, dict):
+    if event:
+        if target.__class__ != Subscriber:
+            target = Subscriber(target, providers=get_providers(source))  # type: ignore
+        contexts: Contexts = {"$event": source, "$subscriber": target}  # type: ignore
+        await event.gather(contexts)
+    elif source:
         contexts = source
         if target.__class__ != Subscriber:
-            target = Subscriber(target, providers=get_providers(source["$event"]))
+            target = Subscriber(target, providers=get_providers(source["$event"]))  # type: ignore
         contexts["$subscriber"] = target
     else:
-        if target.__class__ != Subscriber:
-            target = Subscriber(target, providers=get_providers(source))
-        contexts = cast(Contexts, {"$event": source, "$subscriber": target})
-        await source.gather(contexts)
+        raise ValueError("Empty source")
     try:
         if Prepare in target.auxiliaries:
             for aux in target.auxiliaries[Prepare]:
                 await prepare(aux, contexts)
-        arguments = cast(Contexts, {})
+        arguments: Contexts = {}  # type: ignore
         for param in target.params:
-            if param.depend:
-                arguments[param.name] = await param.depend(contexts)
-            else:
-                arguments[param.name] = await param_parser(
-                    param.name,
-                    param.annotation,
-                    param.default,
-                    param.providers,
-                    contexts,
-                )
+            arguments[param.name] = await param.solve(contexts)
         if Complete in target.auxiliaries:
             for aux in target.auxiliaries[Complete]:
                 await complete(aux, arguments)
-        result = await run_always_await(target.callable_target, **arguments)
+        result = await target.callable_target(**arguments)
     except InnerHandlerException as e:
         if inner:
             raise
@@ -168,52 +156,3 @@ async def complete(decorator: Executor, ctx: Contexts):
             raise UnexpectedArgument(f"Missing requirement in {keys - set(res.keys())}")
         if len(keys) < len(res):
             raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")
-
-
-async def param_parser(
-    name: str,
-    annotation: Any,
-    default: Any,
-    providers: list[Provider],
-    context: Contexts | dict[str, Any],
-):
-    """
-    将调用函数提供的参数字典与事件提供的参数字典进行比对，并返回正确的参数字典
-
-    Args:
-        name: 参数名
-        annotation: 参数类型
-        default: 默认值
-        providers: 参数提供者列表
-        context: 函数可返回的参数字典
-    Returns:
-        函数需要的参数字典
-    """
-    if name in context:
-        return context[name]
-    for _provider in providers:
-        res = await _provider(context)  # type: ignore
-        if res is None:
-            continue
-        if res.__class__ is Force:
-            res = res.value
-        return res
-    if annotation:
-        for key, value in context.items():
-            if generic_isinstance(value, annotation):
-                providers.insert(0, provide(annotation, key))  # type: ignore
-                return value
-            if isinstance(annotation, str) and f"{type(value)}" == annotation:
-                providers.insert(0, provide(type(value), key))
-                return value
-        if hasattr(context["$event"], name):
-            value = getattr(context["$event"], name)
-            if generic_isinstance(value, annotation):
-                providers.append(provide(annotation, call=lambda x: getattr(x['$event'], name)))  # type: ignore
-                return value
-            if isinstance(annotation, str) and f"{type(value)}" == annotation:
-                providers.append(provide(type(value), call=lambda x: getattr(x['$event'], name)))
-                return value
-    if default is not Empty:
-        return default
-    raise UndefinedRequirement(name, annotation, default, providers)

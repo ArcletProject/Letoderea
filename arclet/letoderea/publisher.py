@@ -4,21 +4,20 @@ from asyncio import Queue
 from contextlib import suppress
 from typing import Any, Callable
 
-from .event import BaseEvent, get_providers, get_auxiliaries
-from .provider import Provider, Param
-from .subscriber import Subscriber
-from .handler import dispatch
-from .context import publisher_ctx
 from .auxiliary import BaseAuxiliary
+from .context import publisher_ctx
+from .event import BaseEvent, get_auxiliaries, get_providers
+from .handler import dispatch
+from .provider import Param, Provider, ProviderFactory
+from .subscriber import Subscriber
 from .typing import Contexts
 
 global_providers: list[Provider] = []
+
+
 class EventProvider(Provider[BaseEvent]):
     def validate(self, param: Param):
-        return (
-                isinstance(param.annotation, type)
-                and issubclass(param.annotation, BaseEvent)
-        ) or param.name == "event"
+        return (isinstance(param.annotation, type) and issubclass(param.annotation, BaseEvent)) or param.name == "event"
 
     async def __call__(self, context: Contexts) -> BaseEvent | None:
         return context.get("$event")
@@ -26,7 +25,7 @@ class EventProvider(Provider[BaseEvent]):
 
 class ContextProvider(Provider[Contexts]):
     def validate(self, param: Param):
-        return param.annotation == Contexts
+        return param.annotation is Contexts
 
     async def __call__(self, context: Contexts) -> Contexts:
         return context
@@ -38,7 +37,7 @@ global_providers.extend([EventProvider(), ContextProvider()])
 class Publisher:
     id: str
     subscribers: list[Subscriber]
-    providers: list[Provider]
+    providers: list[Provider | ProviderFactory]
     auxiliaries: list[BaseAuxiliary]
 
     def __init__(
@@ -46,7 +45,7 @@ class Publisher:
         id_: str,
         *events: type[BaseEvent],
         predicate: Callable[[BaseEvent], bool] | None = None,
-        queue_size: int = -1
+        queue_size: int = -1,
     ):
         self.id = f"{id_}::{sorted(events, key=lambda e: id(e))}"
         self.event_queue = Queue(queue_size)
@@ -61,17 +60,12 @@ class Publisher:
             self.auxiliaries.extend(get_auxiliaries(event))
         if predicate:
             self.id += f"::{predicate}"
-            self.validator = lambda e: isinstance(e, events) and predicate(e)
+            self.validate = lambda e: isinstance(e, events) and predicate(e)
         else:
-            self.validator = lambda e: isinstance(e, events)
+            self.validate = lambda e: isinstance(e, events)
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
-
-
-    def validate(self, event: BaseEvent):
-        """验证该事件类型是否符合该发布者"""
-        return self.validator(event)
 
     async def publish(self, event: BaseEvent) -> Any:
         """主动向自己的订阅者发布事件"""
@@ -102,22 +96,24 @@ class Publisher:
         with suppress(ValueError):
             self.subscribers.remove(subscriber)
 
-    def bind(self,  *args: BaseAuxiliary | Provider | type[Provider]) -> None:
+    def bind(
+        self,
+        *args: BaseAuxiliary | Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
+    ) -> None:
         """为发布器增加间接 Provider 或 Auxiliaries"""
-        self.auxiliaries.extend(
-            a for a in args if isinstance(a, BaseAuxiliary)
-        )
+        self.auxiliaries.extend(a for a in args if isinstance(a, BaseAuxiliary))
         providers = [p for p in args if not isinstance(p, BaseAuxiliary)]
-        self.providers.extend(
-            p() if isinstance(p, type) else p for p in providers
-        )
+        self.providers.extend(p() if isinstance(p, type) else p for p in providers)
 
-    def unbind(self, arg: Provider | BaseAuxiliary | type[Provider]) -> None:
+    def unbind(
+        self,
+        arg: Provider | BaseAuxiliary | type[Provider] | ProviderFactory | type[ProviderFactory],
+    ) -> None:
         """移除发布器的间接 Provider 或 Auxiliaries"""
         if isinstance(arg, BaseAuxiliary):
             with suppress(ValueError):
                 self.auxiliaries.remove(arg)
-        elif isinstance(arg, Provider):
+        elif isinstance(arg, (ProviderFactory, Provider)):
             with suppress(ValueError):
                 self.providers.remove(arg)
         else:
@@ -136,14 +132,13 @@ class Publisher:
         self,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider]] | None = None,
+        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
     ):
         """注册一个订阅者"""
         auxiliaries = auxiliaries or []
         providers = providers or []
 
         def register_wrapper(exec_target: Callable) -> Subscriber:
-
             _providers = [
                 *global_providers,
                 *self.providers,
@@ -172,16 +167,21 @@ class Publisher:
             raise TypeError(f"unsupported operand type(s) for +=: 'Publisher' and '{other.__class__.__name__}'")
         return self
 
+
 class BackendPublisher(Publisher):
-    def __init__(self, id_: str, predicate: Callable[[BaseEvent], bool] | None = None, queue_size: int = -1):
+    def __init__(
+        self,
+        id_: str,
+        predicate: Callable[[BaseEvent], bool] | None = None,
+        queue_size: int = -1,
+    ):
         self.id = id_
         if predicate:
             self.id += f"::{predicate}"
-            self.validator = predicate
+            self.validate = predicate
         else:
-            self.validator = lambda e: True
+            self.validate = lambda e: True
         self.event_queue = Queue(queue_size)
         self.subscribers = []
         self.providers = []
         self.auxiliaries = []
-

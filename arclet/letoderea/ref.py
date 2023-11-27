@@ -1,4 +1,5 @@
-from typing import TypeVar, Callable, Any, cast, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar, cast
+
 from .typing import Contexts
 
 T = TypeVar("T")
@@ -74,6 +75,7 @@ class Deref:
 
 
 if TYPE_CHECKING:
+
     def generate(ref: Any) -> Callable[[Contexts], Any]:
         ...
 

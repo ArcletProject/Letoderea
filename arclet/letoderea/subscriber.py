@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Generic, TypeVar
-from tarina import signatures, run_always_await
-from typing_extensions import Annotated, get_origin, get_args
+from typing import Any, Awaitable, Callable, Generic, TypeVar
+from typing_extensions import Annotated, get_args, get_origin
 
-from .auxiliary import Scope, AuxType, BaseAuxiliary, Executor, combine
-from .provider import Param, Provider, provide
-from .typing import TTarget
+from tarina import Empty, is_async, signatures
+
+from .auxiliary import AuxType, BaseAuxiliary, Executor, Scope, combine
+from .exceptions import UndefinedRequirement
+from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
+from .typing import Contexts, Force, TTarget, run_sync
 
 
 @dataclass
@@ -19,18 +21,41 @@ class CompileParam:
     default: Any
     providers: list[Provider]
     depend: Provider | None
+    record: Provider | None
 
-    __slots__ = ("name", "annotation", "default", "providers", "depend")
+    __slots__ = ("name", "annotation", "default", "providers", "depend", "record")
+
+    async def solve(self, context: Contexts | dict[str, Any]):
+        if self.depend:
+            return await self.depend(context)  # type: ignore
+        if self.name in context:
+            return context[self.name]
+        if self.record and (res := await self.record(context)):  # type: ignore
+            if res.__class__ is Force:
+                res = res.value
+            return res
+        for _provider in self.providers:
+            res = await _provider(context)  # type: ignore
+            if res is None:
+                continue
+            if res.__class__ is Force:
+                res = res.value
+            self.record = _provider
+            return res
+        if self.default is not Empty:
+            return self.default
+        raise UndefinedRequirement(self.name, self.annotation, self.default, self.providers)
 
 
-def _compile(target: Callable, providers: list[Provider]) -> list[CompileParam]:
+def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> list[CompileParam]:
     res = []
     for name, anno, default in signatures(target):
-        param = CompileParam(name, anno, default, [], None)
+        param = CompileParam(name, anno, default, [], None, None)
         for _provider in providers:
-            if _provider.validate(
-                Param(name, anno, default, bool(len(param.providers)))
-            ):
+            if isinstance(_provider, ProviderFactory):
+                if result := _provider.validate(Param(name, anno, default, bool(param.providers))):
+                    param.providers.append(result)
+            elif _provider.validate(Param(name, anno, default, bool(param.providers))):
                 param.providers.append(_provider)
         if get_origin(anno) is Annotated:
             org, *meta = get_args(anno)
@@ -56,10 +81,10 @@ R = TypeVar("R")
 
 class Subscriber(Generic[R]):
     name: str
-    callable_target: TTarget[R]
+    callable_target: Callable[..., Awaitable[R]]
     priority: int
     auxiliaries: dict[Scope, list[Executor]]
-    providers: list[Provider]
+    providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
 
     def __init__(
@@ -69,9 +94,8 @@ class Subscriber(Generic[R]):
         priority: int = 16,
         name: str | None = None,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider]] | None = None,
+        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
     ) -> None:
-        self.callable_target = callable_target
         self.name = name or callable_target.__name__
         self.priority = priority
         self.auxiliaries = {}
@@ -88,9 +112,13 @@ class Subscriber(Generic[R]):
         for scope, value in self.auxiliaries.items():
             self.auxiliaries[scope] = combine(value)  # type: ignore
         self.params = _compile(callable_target, self.providers)
+        if is_async(callable_target):
+            self.callable_target = callable_target
+        else:
+            self.callable_target = run_sync(callable_target)
 
     async def __call__(self, *args, **kwargs) -> R:
-        return await run_always_await(self.callable_target, *args, **kwargs)
+        return await self.callable_target(*args, **kwargs)
 
     def __repr__(self):
         return f"Subscriber::{self.name}"

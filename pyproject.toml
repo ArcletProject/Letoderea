@@ -1,6 +1,6 @@
 [project]
 name = "arclet-letoderea"
-version = "0.7.0"
+version = "0.8.0"
 description = "A high-performance, simple-structured event system, relies on asyncio"
 authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
@@ -32,3 +32,16 @@ build-backend = "pdm.pep517.api"
 [tool.pdm]
 [tool.pdm.build]
 includes = ["arclet"]
+
+[tool.black]
+line-length = 120
+target-version = ["py38", "py39", "py310", "py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120
+skip_gitignore = true
+extra_standard_library = ["typing_extensions"]

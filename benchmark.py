@@ -64,15 +64,16 @@ print("RUN 2:")
 print(f"used {n/10e8}, {count*10e8/n}o/s")
 print(f"{n / count} ns per loop with {count} loops")
 
-tasks.clear()
-tasks.extend(
-    es.loop.create_task(depend_handler(test_subscriber, a))
-    for _ in range(count)
-)
+# tasks.clear()
+# tasks.extend(
+#     es.loop.create_task(depend_handler(test_subscriber, a))
+#     for _ in range(count)
+# )
 
 
 async def main2():
-    await asyncio.gather(*tasks)
+    for _ in range(count):
+        await depend_handler(test_subscriber, a)
 
 prof = Profile()
 prof.enable()

@@ -32,21 +32,13 @@ class Provider(Generic[T], metaclass=ABCMeta):
     def __init_subclass__(cls, **kwargs):
         _local_storage[cls] = cls.__orig_bases__[0].__args__[0]  # type: ignore
         if _local_storage[cls] is T:
-            raise TypeError(
-                "Subclass of Provider must be generic. If you need a wildcard, please using `typing.Any`"
-            )
+            raise TypeError("Subclass of Provider must be generic. If you need a wildcard, please using `typing.Any`")
 
     def validate(self, param: Param):
         return (
             self.origin == param.annotation
-            or (
-                isinstance(param.annotation, type)
-                and generic_issubclass(param.annotation, self.origin)
-            )
-            or (
-                get_origin(param.annotation) in Unions
-                and self.origin in get_args(param.annotation)
-            )
+            or (isinstance(param.annotation, type) and generic_issubclass(param.annotation, self.origin))
+            or (get_origin(param.annotation) in Unions and self.origin in get_args(param.annotation))
         )
 
     @abstractmethod
@@ -72,13 +64,7 @@ def provide(
 
     class _Provider(Provider[origin]):
         def validate(self, param: Param):
-            return (
-                validate(param)
-                if validate
-                else param.name == target
-                if target
-                else super().validate(param)
-            )
+            return validate(param) if validate else param.name == target if target else super().validate(param)
 
         async def __call__(self, context: Contexts):
             if not call and target:
@@ -91,3 +77,11 @@ def provide(
             return f"Provider::{_id}(origin={origin})"
 
     return _Provider()
+
+
+class ProviderFactory(metaclass=ABCMeta):
+    @abstractmethod
+    def validate(self, param: Param) -> Provider | None:
+        """
+        依据参数类型自行分配对应 Provider
+        """

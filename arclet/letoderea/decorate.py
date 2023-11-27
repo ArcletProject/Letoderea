@@ -1,13 +1,13 @@
-from typing import Callable, Type, Union, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional, Type, Union
 
-from .auxiliary import BaseAuxiliary, AuxType, auxilia, Scope
+from .auxiliary import AuxType, BaseAuxiliary, Scope, auxilia
 from .context import system_ctx
 from .event import BaseEvent
-from .provider import Provider
-from .typing import Contexts, TCallable, TTarget
 from .exceptions import ParsingStop
+from .provider import Provider
+from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
-from .ref import generate, Deref
+from .typing import Contexts, TTarget
 
 
 def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
@@ -36,16 +36,19 @@ def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
 def subscribe(*event: Type[BaseEvent]):
     es = system_ctx.get()
 
-    def wrapper(target: TCallable) -> TCallable:
+    def wrapper(target: TTarget) -> TTarget:
         return es.on(*event)(target) if es else target
 
     return wrapper
 
 
 if TYPE_CHECKING:
+
     def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]:
         ...
+
 else:
+
     def bypass_if(predicate: Union[Callable[[Contexts], bool], Deref]):
         _predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
 
@@ -68,8 +71,10 @@ else:
 
         return wrapper
 
+
 def is_event(*events: Type[BaseEvent]):
     return bypass_if(lambda ctx: not isinstance(ctx["$event"], events))
+
 
 def not_event(*events: Type[BaseEvent]):
     return bypass_if(lambda ctx: isinstance(ctx["$event"], events))
