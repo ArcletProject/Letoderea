@@ -34,7 +34,7 @@ def get_providers(
 def get_auxiliaries(event: type[BaseEvent] | BaseEvent) -> list[BaseAuxiliary]:
     res = getattr(event, "auxiliaries", [])
     res.extend(p for _, p in inspect.getmembers(event, lambda x: inspect.isclass(x) and issubclass(x, BaseAuxiliary)))
-    return res
+    return [a() if isinstance(a, type) else a for a in res]
 
 
 def make_event(cls: type) -> type:

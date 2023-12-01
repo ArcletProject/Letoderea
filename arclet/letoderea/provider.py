@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Generic, NamedTuple, TypeVar, get_args
+from typing import Any, Awaitable, Callable, ClassVar, Generic, NamedTuple, TypeVar, get_args
 
 from tarina import generic_issubclass, run_always_await
 from tarina.generic import Unions, get_origin
@@ -24,6 +24,7 @@ _local_storage: dict[type["Provider"], type] = {}
 
 @dataclass(init=False, repr=True)
 class Provider(Generic[T], metaclass=ABCMeta):
+    priority: ClassVar[int] = 20
     origin: type[T]
 
     def __init__(self):
@@ -54,6 +55,7 @@ def provide(
     target: str | None = None,
     call: Callable[[Contexts], T | None | Awaitable[T | None]] | str | None = None,
     validate: Callable[[Param], bool] | None = None,
+    priority: int = 20,
     _id: str = "_Provider",
 ) -> Provider[T]:
     """
@@ -76,6 +78,7 @@ def provide(
         def __repr__(self):
             return f"Provider::{_id}(origin={origin})"
 
+    _Provider.priority = priority
     return _Provider()
 
 

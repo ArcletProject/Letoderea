@@ -1,6 +1,7 @@
-from arclet.letoderea import bypass_if, EventSystem, subscribe, is_event
-from arclet.letoderea.ref import deref
 from typing_extensions import Annotated
+
+from arclet.letoderea import EventSystem, bypass_if, is_event, subscribe
+from arclet.letoderea.ref import deref
 
 es = EventSystem()
 
@@ -11,27 +12,24 @@ class TestEvent:
     msg: str
 
     async def gather(self, context: dict):
-        context['index'] = self.index
-        context['type'] = self.type
-        context['msg'] = "hello"
+        context["index"] = self.index
+        context["type"] = self.type
+        context["msg"] = "hello"
+
 
 @subscribe()
-@bypass_if(lambda x: x['index'] == 0)
+@bypass_if(lambda x: x["index"] == 0)
 # @is_event(TestEvent)
-async def test(
-    index: Annotated[int, "index"],
-    a: Annotated[str, deref(TestEvent).msg]
-):
+async def test(index: Annotated[int, "index"], a: Annotated[str, deref(TestEvent).msg]):
     print("enter when index != 0")
     print("test1:", index, a)
+
 
 @subscribe()
 @bypass_if(deref(TestEvent).index != 0)
 # @is_event(TestEvent)
 async def test1(
-    index: Annotated[int, deref(TestEvent).index],
-    t: Annotated[int, deref(TestEvent).type],
-    a: Annotated[str, "msg"]
+    index: Annotated[int, deref(TestEvent).index], t: Annotated[int, deref(TestEvent).type], a: Annotated[str, "msg"]
 ):
     print("enter when index == 0")
     print("test2:", index, a, t)

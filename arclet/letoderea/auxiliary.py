@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from functools import partial
-from typing import Any, Awaitable, Callable, Final, Literal, Optional, Protocol, cast, overload
+from typing import Any, Awaitable, Callable, ClassVar, Final, Literal, Optional, Protocol, cast, overload
 
 from tarina import run_always_await
 
@@ -34,15 +34,17 @@ class Scope(str, Enum):
 class BaseAuxiliary(metaclass=ABCMeta):
     type: AuxType
     mode: CombineMode
+    priority: ClassVar[int] = 20
 
     @property
     @abstractmethod
     def scopes(self) -> set[Scope]:
         raise NotImplementedError
 
-    def __init__(self, atype: AuxType, mode: CombineMode = CombineMode.SINGLE):
+    def __init__(self, atype: AuxType, mode: CombineMode = CombineMode.SINGLE, priority: int = 20):
         self.type = atype
         self.mode = mode
+        self.__class__.priority = priority
 
     @abstractmethod
     async def __call__(self, scope: Scope, context: Contexts):
@@ -50,8 +52,8 @@ class BaseAuxiliary(metaclass=ABCMeta):
 
 
 class SupplyAuxiliary(BaseAuxiliary):
-    def __init__(self, mode: CombineMode = CombineMode.SINGLE):
-        super().__init__(AuxType.supply, mode)
+    def __init__(self, mode: CombineMode = CombineMode.SINGLE, priority: int = 20):
+        super().__init__(AuxType.supply, mode, priority)
 
     @abstractmethod
     async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
@@ -59,8 +61,8 @@ class SupplyAuxiliary(BaseAuxiliary):
 
 
 class JudgeAuxiliary(BaseAuxiliary):
-    def __init__(self, mode: CombineMode = CombineMode.SINGLE):
-        super().__init__(AuxType.judge, mode)
+    def __init__(self, mode: CombineMode = CombineMode.SINGLE, priority: int = 20):
+        super().__init__(AuxType.judge, mode, priority)
 
     @abstractmethod
     async def __call__(self, scope: Scope, context: Contexts) -> Optional[bool]:
@@ -124,6 +126,7 @@ class CombineExecutor:
 def combine(auxiliaries: list[BaseAuxiliary]) -> list[Executor]:
     cb = []
     res = []
+    auxiliaries.sort(key=lambda x: x.priority)
     for aux in auxiliaries:
         if aux.mode == CombineMode.SINGLE:
             if cb:
@@ -139,6 +142,7 @@ def combine(auxiliaries: list[BaseAuxiliary]) -> list[Executor]:
 def auxilia(
     atype: Literal[AuxType.supply],
     mode: CombineMode = CombineMode.SINGLE,
+    priority: int = 20,
     prepare: Callable[[Contexts], Optional[Contexts]] | None = None,
     complete: Callable[[Contexts], Optional[Contexts]] | None = None,
     cleanup: Callable[[Contexts], Optional[Contexts]] | None = None,
@@ -150,6 +154,7 @@ def auxilia(
 def auxilia(
     atype: Literal[AuxType.judge],
     mode: CombineMode = CombineMode.SINGLE,
+    priority: int = 20,
     prepare: Callable[[Contexts], Optional[bool]] | None = None,
     complete: Callable[[Contexts], Optional[bool]] | None = None,
     cleanup: Callable[[Contexts], Optional[bool]] | None = None,
@@ -160,6 +165,7 @@ def auxilia(
 def auxilia(
     atype: AuxType,
     mode: CombineMode = CombineMode.SINGLE,
+    priority: int = 20,
     prepare: Callable[[Contexts], Any] | None = None,
     complete: Callable[[Contexts], Any] | None = None,
     cleanup: Callable[[Contexts], Any] | None = None,
@@ -179,7 +185,7 @@ def auxilia(
         def scopes(self) -> set[Scope]:
             return {Prepare, Complete, Cleanup}
 
-    return _Auxiliary(atype, mode)
+    return _Auxiliary(atype, mode, priority)
 
 
 And: Final = CombineMode.AND

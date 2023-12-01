@@ -111,6 +111,7 @@ class Subscriber(Generic[R]):
                 self.auxiliaries.setdefault(scope, []).append(aux)
         for scope, value in self.auxiliaries.items():
             self.auxiliaries[scope] = combine(value)  # type: ignore
+        self.providers.sort(key=lambda x: x.priority)
         self.params = _compile(callable_target, self.providers)
         if is_async(callable_target):
             self.callable_target = callable_target
