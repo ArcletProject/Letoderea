@@ -30,7 +30,10 @@ class TestEvent:
 async def test_subscriber(name: str):
     print(name)
 
-asyncio.run(es.publish(TestEvent()))
+async def main():
+    await es.publish(TestEvent())
+
+asyncio.run(main())
 ```
 
 ## 说明

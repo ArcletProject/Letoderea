@@ -6,9 +6,8 @@ import asyncio
 from arclet.letoderea import EventSystem, Contexts
 import gc
 
-loop = asyncio.get_event_loop()
 test_stack = [0]
-es = EventSystem(loop=loop)
+es = EventSystem()
 
 
 class TestTimeLimit(JudgeAuxiliary):
@@ -70,4 +69,4 @@ async def main():
         await es.publish(b)
 
 
-loop.run_until_complete(main())
+asyncio.run(main())

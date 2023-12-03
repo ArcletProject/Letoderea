@@ -1,3 +1,5 @@
+import asyncio
+
 from arclet.letoderea import EventSystem, BaseEvent, provide, Contexts, bind, subscribe
 
 es = EventSystem()
@@ -16,4 +18,7 @@ async def test_subscriber(name: str, age: int):
     print(name, age)
 
 
-es.loop.run_until_complete(es.publish(TestEvent()))
+async def main():
+    await es.publish(TestEvent())
+
+asyncio.run(main())

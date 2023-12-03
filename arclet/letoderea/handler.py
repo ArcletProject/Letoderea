@@ -7,8 +7,6 @@ import sys
 import traceback
 from typing import Callable, Type
 
-from tarina import group_dict
-
 from .auxiliary import Cleanup, Complete, Executor, Prepare
 from .event import BaseEvent, get_providers
 from .exceptions import (
@@ -26,9 +24,11 @@ from .typing import Contexts
 async def dispatch(subscribers: list[Subscriber], event: BaseEvent):
     if not subscribers:
         return
-    grouped: dict[int, list[Subscriber]] = group_dict(subscribers, lambda x: x.priority)
-    for _, current_subs in sorted(grouped.items(), key=lambda x: x[0]):
-        tasks = [depend_handler(subscriber, event) for subscriber in current_subs]
+    grouped: dict[int, list[Subscriber]] = {}
+    for s in subscribers:
+        grouped.setdefault(s.priority, []).append(s)
+    for priority in sorted(grouped.keys()):
+        tasks = [depend_handler(subscriber, event) for subscriber in grouped[priority]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for result in results:
             if result.__class__ is PropagationCancelled:
@@ -93,7 +93,7 @@ async def depend_handler(
     if event:
         if target.__class__ != Subscriber:
             target = Subscriber(target, providers=get_providers(source))  # type: ignore
-        contexts: Contexts = {"$event": source, "$subscriber": target}  # type: ignore
+        contexts: Contexts = {"$event": event, "$subscriber": target}  # type: ignore
         await event.gather(contexts)
     elif source:
         contexts = source

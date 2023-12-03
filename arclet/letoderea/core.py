@@ -17,25 +17,25 @@ from .subscriber import Subscriber
 class EventSystem:
     _ref_tasks = set()
     _backend_publisher: Publisher = BackendPublisher("__backend__publisher__")
-    loop: asyncio.AbstractEventLoop
     publishers: dict[str, Publisher]
 
-    def __init__(self, loop=None, fetch=True):
-        self.loop = loop or asyncio.new_event_loop()
-        if fetch:
-            self.loop_task = self.loop.create_task(self._loop_fetch())
+    def __init__(self):
         self.publishers = {}
         self._token = system_ctx.set(self)
 
         def _remove(es):
-            with suppress(Exception):
-                es.loop_task.cancel()
-                es.loop_task = None
+            for task in es._ref_tasks:
+                if not task.done():
+                    task.cancel()
+            es._ref_tasks.clear()
             with suppress(Exception):
                 system_ctx.reset(es._token)
             system_ctx.set(None)  # type: ignore
 
         finalize(self, _remove, self)
+
+    async def setup_fetch(self):
+        self._ref_tasks.add(asyncio.create_task(self._loop_fetch()))
 
     async def _loop_fetch(self):
         while True:
@@ -51,15 +51,20 @@ class EventSystem:
             self.publishers[publisher.id] = publisher
 
     def publish(self, event: BaseEvent, publisher: str | Publisher | None = None):
-        pubs = []
+        loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
-            pubs.append(pub)
-        elif isinstance(publisher, Publisher):
-            pubs.append(publisher)
-        else:
-            pubs.extend(pub for pub in self.publishers.values() if pub.validate(event))  # type: ignore
-        subscribers = sum((pub.subscribers for pub in pubs), [])
-        task = self.loop.create_task(dispatch(subscribers, event))
+            task = loop.create_task(dispatch(pub.subscribers, event))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        if isinstance(publisher, Publisher):
+            task = loop.create_task(dispatch(publisher.subscribers, event))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        subscribers = sum((pub.subscribers for pub in self.publishers.values() if pub.validate(event)), [])
+        task = loop.create_task(dispatch(subscribers, event))
+        self._ref_tasks.add(task)
         task.add_done_callback(self._ref_tasks.discard)
         return task
 

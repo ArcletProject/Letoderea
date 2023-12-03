@@ -1,6 +1,6 @@
 import asyncio
-from arclet.letoderea import EventSystem, Depends, Contexts, Provider, ParsingStop
-from arclet.letoderea.provider import T, Param
+from arclet.letoderea import EventSystem, Depends, Contexts, Provider
+from arclet.letoderea.provider import Param
 
 es = EventSystem()
 
@@ -34,4 +34,4 @@ async def handler(a: int = Depends(wrapper1)):
 async def main():
     await es.publish(ExampleEvent())
 
-es.loop.run_until_complete(main())
+asyncio.run(main())

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from arclet.letoderea import EventSystem
 from arclet.letoderea import Depends
 from arclet.letoderea import Contexts
@@ -35,4 +37,4 @@ async def main():
     except ParsingStop:
         return
 
-es.loop.run_until_complete(main())
+asyncio.run(main())

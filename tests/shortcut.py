@@ -1,3 +1,5 @@
+import asyncio
+
 from typing_extensions import Annotated
 
 from arclet.letoderea import EventSystem, bypass_if, is_event, subscribe
@@ -43,5 +45,4 @@ async def main():
     e2.index = 1
     await es.publish(e2)
 
-
-es.loop.run_until_complete(main())
+asyncio.run(main())

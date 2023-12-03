@@ -1,5 +1,6 @@
 from arclet.letoderea import provide, EventSystem
 from typing import Union
+import asyncio
 
 es = EventSystem()
 
@@ -28,4 +29,7 @@ async def test1(index: int, a: str = "hello", ):
     # provide, 'index' -> Union[int, str] -> a: str
 
 
-es.loop.run_until_complete(es.publish(TestEvent()))
+async def main():
+    await es.publish(TestEvent())
+
+asyncio.run(main())

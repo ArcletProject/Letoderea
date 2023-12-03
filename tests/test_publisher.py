@@ -2,8 +2,7 @@ from arclet.letoderea import BackendPublisher, EventSystem, provide, Contexts
 import asyncio
 
 
-loop = asyncio.new_event_loop()
-es = EventSystem(loop)
+es = EventSystem()
 
 
 class TestEvent:
@@ -12,7 +11,6 @@ class TestEvent:
 
     async def gather(self, context: Contexts):
         context["name"] = self.name
-
 
 
 test = provide(str, call="name")
@@ -32,9 +30,13 @@ with BackendPublisher("test", predicate=lambda x: x.name == "world hello") as pu
     async def test_subscriber2(a: str):
         print(2, a)
 
+
+es.register(pub1, pub2)
+
+
 async def main():
     await es.publish(TestEvent("hello world"))
     await es.publish(TestEvent("world hello"))
 
-es.register(pub1, pub2)
-loop.run_until_complete(main())
+
+asyncio.run(main())

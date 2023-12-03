@@ -1,3 +1,5 @@
+import asyncio
+
 from arclet.letoderea import EventSystem
 from arclet.letoderea.ref import deref
 from typing_extensions import Annotated
@@ -37,4 +39,8 @@ async def test2(
     print("test2:", index, a)
 
 
-es.loop.run_until_complete(es.publish(TestEvent()))
+async def main():
+    await es.publish(TestEvent())
+
+
+asyncio.run(main())

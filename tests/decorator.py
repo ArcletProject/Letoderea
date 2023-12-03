@@ -3,8 +3,7 @@ import asyncio
 from arclet.letoderea import EventSystem, Contexts, bind
 from arclet.letoderea.auxiliary import BaseAuxiliary, Scope, AuxType
 
-loop = asyncio.get_event_loop()
-es = EventSystem(loop=loop)
+es = EventSystem()
 
 
 class TestDecorate(BaseAuxiliary):
@@ -56,4 +55,4 @@ async def main():
         await es.publish(a)
 
 
-loop.run_until_complete(main())
+asyncio.run(main())

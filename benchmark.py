@@ -7,6 +7,8 @@ from arclet.letoderea import EventSystem, Provider, Contexts, Param
 from arclet.letoderea.handler import depend_handler
 from pprint import pprint
 from cProfile import Profile
+
+loop = asyncio.new_event_loop()
 es = EventSystem()
 
 
@@ -35,7 +37,7 @@ count = 20000
 
 
 tasks.extend(
-    es.loop.create_task(depend_handler(test_subscriber, a))
+    loop.create_task(depend_handler(test_subscriber, a))
     for _ in range(count)
 )
 
@@ -44,7 +46,7 @@ async def main():
     await asyncio.gather(*tasks)
 
 s = time.perf_counter_ns()
-es.loop.run_until_complete(main())
+loop.run_until_complete(main())
 e = time.perf_counter_ns()
 n = e - s
 print("RUN 1:")
@@ -57,7 +59,7 @@ async def main1():
         await depend_handler(test_subscriber, a)
 
 s = time.perf_counter_ns()
-es.loop.run_until_complete(main1())
+loop.run_until_complete(main1())
 e = time.perf_counter_ns()
 n = e - s
 print("RUN 2:")
@@ -77,7 +79,7 @@ async def main2():
 
 prof = Profile()
 prof.enable()
-es.loop.run_until_complete(main2())
+loop.run_until_complete(main2())
 prof.disable()
 prof.create_stats()
 

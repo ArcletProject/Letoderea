@@ -69,14 +69,16 @@ class Breakpoint:
         timeout: float = 0.0,
         default: D = None,
     ) -> Union[R, D]:
-        fut = self.es.loop.create_future()
+        fut = asyncio.get_running_loop().create_future()
         publisher = Publisher("__breakpoint__publisher__", *condition.target)
 
         for et in condition.target:
             callable_target = self.new_target(et, condition, fut)  # type: ignore
             publisher.register(
                 priority=condition.priority,
-                auxiliaries=[auxilia(AuxType.judge, prepare=lambda ctx: isinstance(ctx["$event"], et))],
+                auxiliaries=[
+                    auxilia(AuxType.judge, prepare=lambda ctx: isinstance(ctx["$event"], et))
+                ],
             )(callable_target)
 
         try:
@@ -86,8 +88,9 @@ class Breakpoint:
             return default
         finally:
             if not fut.done():
+                fut.cancel()
                 publisher.subscribers.clear()
-            self.es.publishers.pop(publisher.id)
+            self.es.publishers.pop(publisher.id, None)
 
     def new_target(self, event_t: Type[BaseEvent], condition: StepOut, fut: Future):
         sub = Subscriber(

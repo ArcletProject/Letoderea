@@ -4,8 +4,7 @@ from arclet.letoderea.typing import Contexts
 from arclet.letoderea.builtin.breakpoint import StepOut, Breakpoint
 
 event = asyncio.Event()
-loop = asyncio.get_event_loop()
-es = EventSystem(loop=loop)
+es = EventSystem()
 break_point = Breakpoint(es)
 
 
@@ -71,4 +70,4 @@ async def main():
     await asyncio.sleep(1)
 
 
-loop.run_until_complete(main())
+asyncio.run(main())
