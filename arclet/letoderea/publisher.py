@@ -54,15 +54,18 @@ class Publisher:
         self.auxiliaries = []
 
         if not events:
-            raise ValueError("events cannot be None")
-        for event in events:
-            self.providers.extend(get_providers(event))
-            self.auxiliaries.extend(get_auxiliaries(event))
-        if predicate:
-            self.id += f"::{predicate}"
-            self.validate = lambda e: isinstance(e, events) and predicate(e)
+            if not predicate:
+                raise ValueError("events cannot be None")
+            self.validate = predicate
         else:
-            self.validate = lambda e: isinstance(e, events)
+            for event in events:
+                self.providers.extend(get_providers(event))
+                self.auxiliaries.extend(get_auxiliaries(event))
+            if predicate:
+                self.id += f"::{predicate}"
+                self.validate = lambda e: isinstance(e, events) and predicate(e)
+            else:
+                self.validate = lambda e: isinstance(e, events)
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
@@ -145,6 +148,7 @@ class Publisher:
                 *providers,
             ]
             _auxiliaries = [
+                *self.auxiliaries,
                 *auxiliaries,
             ]
             res = Subscriber(

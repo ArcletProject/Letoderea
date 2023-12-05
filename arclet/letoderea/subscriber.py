@@ -57,6 +57,7 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
                     param.providers.append(result)
             elif _provider.validate(Param(name, anno, default, bool(param.providers))):
                 param.providers.append(_provider)
+        param.providers.sort(key=lambda x: x.priority)
         if get_origin(anno) is Annotated:
             org, *meta = get_args(anno)
             for m in reversed(meta):
@@ -111,7 +112,6 @@ class Subscriber(Generic[R]):
                 self.auxiliaries.setdefault(scope, []).append(aux)
         for scope, value in self.auxiliaries.items():
             self.auxiliaries[scope] = combine(value)  # type: ignore
-        self.providers.sort(key=lambda x: x.priority)
         self.params = _compile(callable_target, self.providers)
         if is_async(callable_target):
             self.callable_target = callable_target

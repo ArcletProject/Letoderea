@@ -92,13 +92,13 @@ async def depend_handler(
 ):
     if event:
         if target.__class__ != Subscriber:
-            target = Subscriber(target, providers=get_providers(source))  # type: ignore
+            target = Subscriber(target, providers=get_providers(event.__class__))  # type: ignore
         contexts: Contexts = {"$event": event, "$subscriber": target}  # type: ignore
         await event.gather(contexts)
     elif source:
         contexts = source
         if target.__class__ != Subscriber:
-            target = Subscriber(target, providers=get_providers(source["$event"]))  # type: ignore
+            target = Subscriber(target, providers=get_providers(source["$event"].__class__))  # type: ignore
         contexts["$subscriber"] = target
     else:
         raise ValueError("Empty source")
