@@ -2,7 +2,7 @@ import asyncio
 
 from typing_extensions import Annotated
 
-from arclet.letoderea import EventSystem, bypass_if, is_event, subscribe
+from arclet.letoderea import EventSystem, bypass_if, subscribe
 from arclet.letoderea.ref import deref
 
 es = EventSystem()

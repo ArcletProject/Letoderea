@@ -20,8 +20,8 @@ from .context import system_ctx as system_ctx
 from .core import EventSystem as EventSystem
 from .decorate import bind as bind
 from .decorate import bypass_if as bypass_if
-from .decorate import is_event as is_event
-from .decorate import not_event as not_event
+from .decorate import allow_event as allow_event
+from .decorate import refuse_event as refuse_event
 from .decorate import subscribe as subscribe
 from .event import BaseEvent as BaseEvent
 from .event import make_event as make_event

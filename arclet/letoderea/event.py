@@ -22,13 +22,13 @@ def get_providers(
     res = []
     for cls in reversed(event.__mro__[:-1]):
         res.extend(getattr(cls, "providers", []))
-        res.extend(
-            p
-            for _, p in inspect.getmembers(
-                cls,
-                lambda x: inspect.isclass(x) and issubclass(x, (Provider, ProviderFactory)),
-            )
+    res.extend(
+        p
+        for _, p in inspect.getmembers(
+            event,
+            lambda x: inspect.isclass(x) and issubclass(x, (Provider, ProviderFactory)),
         )
+    )
     return [p() if isinstance(p, type) else p for p in res]
 
 
@@ -37,19 +37,24 @@ def get_auxiliaries(event: type[BaseEvent] | BaseEvent) -> list[BaseAuxiliary]:
     res = []
     for cls in reversed(event.__mro__[:-1]):
         res.extend(getattr(cls, "auxiliaries", []))
-        res.extend(
-            p
-            for _, p in inspect.getmembers(
-                cls,
-                lambda x: inspect.isclass(x) and issubclass(x, BaseAuxiliary),
-            )
+    res.extend(
+        p
+        for _, p in inspect.getmembers(
+            event,
+            lambda x: inspect.isclass(x) and issubclass(x, BaseAuxiliary),
         )
+    )
     return [a() if isinstance(a, type) else a for a in res]
 
 
 def make_event(cls: type) -> type:
+    if not hasattr(cls, "__annotations__"):
+        raise ValueError(f"@make_event can only take effect for class with attribute annotations, not {cls}")
+
     async def _gather(self, context: Contexts):
         for key in cls.__annotations__:
+            if key in ("providers", "auxiliaries"):
+                continue
             context[key] = getattr(self, key, None)
 
     cls.gather = _gather  # type: ignore

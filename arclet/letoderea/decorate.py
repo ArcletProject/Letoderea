@@ -72,9 +72,9 @@ else:
         return wrapper
 
 
-def is_event(*events: Type[BaseEvent]):
+def allow_event(*events: Type[BaseEvent]):
     return bypass_if(lambda ctx: not isinstance(ctx["$event"], events))
 
 
-def not_event(*events: Type[BaseEvent]):
+def refuse_event(*events: Type[BaseEvent]):
     return bypass_if(lambda ctx: isinstance(ctx["$event"], events))
