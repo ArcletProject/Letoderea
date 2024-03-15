@@ -6,7 +6,7 @@ authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
 ]
 dependencies = [
-    "tarina>=0.3.0",
+    "tarina>=0.4.4",
 ]
 requires-python = ">=3.8"
 readme = "README.md"
@@ -26,10 +26,11 @@ Repository = "https://github.com/ArcletProject/Letoderea"
 Homepage = "https://github.com/ArcletProject/Letoderea"
 
 [build-system]
-requires = ["pdm-pep517>=1.0.0"]
-build-backend = "pdm.pep517.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [tool.pdm]
+distribution = true
 [tool.pdm.build]
 includes = ["arclet"]
 

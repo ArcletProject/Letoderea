@@ -20,7 +20,7 @@ def get_providers(
     event: type[BaseEvent] | BaseEvent,
 ) -> list[Provider | ProviderFactory]:
     res = []
-    for cls in reversed(event.__mro__[:-1]):
+    for cls in reversed(event.__mro__[:-1]):  # type: ignore
         res.extend(getattr(cls, "providers", []))
     res.extend(
         p
@@ -35,7 +35,7 @@ def get_providers(
 @lru_cache(4096)
 def get_auxiliaries(event: type[BaseEvent] | BaseEvent) -> list[BaseAuxiliary]:
     res = []
-    for cls in reversed(event.__mro__[:-1]):
+    for cls in reversed(event.__mro__[:-1]):  # type: ignore
         res.extend(getattr(cls, "auxiliaries", []))
     res.extend(
         p

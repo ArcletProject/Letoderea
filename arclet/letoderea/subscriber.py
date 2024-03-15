@@ -114,9 +114,9 @@ class Subscriber(Generic[R]):
             self.auxiliaries[scope] = combine(value)  # type: ignore
         self.params = _compile(callable_target, self.providers)
         if is_async(callable_target):
-            self.callable_target = callable_target
+            self.callable_target = callable_target  # type: ignore
         else:
-            self.callable_target = run_sync(callable_target)
+            self.callable_target = run_sync(callable_target)  # type: ignore
 
     async def __call__(self, *args, **kwargs) -> R:
         return await self.callable_target(*args, **kwargs)
