@@ -18,9 +18,9 @@ from .builtin.depend import Depend as Depend
 from .builtin.depend import Depends as Depends
 from .context import system_ctx as system_ctx
 from .core import EventSystem as EventSystem
+from .decorate import allow_event as allow_event
 from .decorate import bind as bind
 from .decorate import bypass_if as bypass_if
-from .decorate import allow_event as allow_event
 from .decorate import refuse_event as refuse_event
 from .decorate import subscribe as subscribe
 from .event import BaseEvent as BaseEvent

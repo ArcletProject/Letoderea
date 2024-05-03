@@ -1,13 +1,13 @@
+import asyncio
 from typing import Optional
 
-from arclet.letoderea import SupplyAuxiliary, Scope, Contexts, And, Or
+from arclet.letoderea import And, Contexts, Or, Scope, SupplyAuxiliary
 from arclet.letoderea.auxiliary import CombineExecutor, Prepare
-import asyncio
 
 
 class Foo(SupplyAuxiliary):
     async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        context['a'] = 1
+        context["a"] = 1
         return context
 
     @property
@@ -17,8 +17,8 @@ class Foo(SupplyAuxiliary):
 
 class Bar(SupplyAuxiliary):
     async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        if 'a' in context:
-            context['b'] = context['a'] * 2
+        if "a" in context:
+            context["b"] = context["a"] * 2
             return context
 
     @property
@@ -28,7 +28,7 @@ class Bar(SupplyAuxiliary):
 
 class Bar1(SupplyAuxiliary):
     async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        context['b'] = 3
+        context["b"] = 3
         return context
 
     @property
@@ -38,8 +38,8 @@ class Bar1(SupplyAuxiliary):
 
 class Baz(SupplyAuxiliary):
     async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        if 'a' in context:
-            context['c'] = context['a'] - 5
+        if "a" in context:
+            context["c"] = context["a"] - 5
             return context
 
     @property
@@ -49,8 +49,8 @@ class Baz(SupplyAuxiliary):
 
 class Qux(SupplyAuxiliary):
     async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        if 'b' in context:
-            context['d'] = context['b'] + 5
+        if "b" in context:
+            context["d"] = context["b"] + 5
             return context
 
     @property
@@ -82,5 +82,6 @@ async def main():
     ctx.clear()
     exe5 = CombineExecutor([foo, bar_1, bar1, baz, qux])
     print(await exe5(Prepare, ctx))
+
 
 asyncio.run(main())

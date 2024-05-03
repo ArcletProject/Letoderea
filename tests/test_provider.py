@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import time
 from pprint import pprint
-from arclet.letoderea import Provider, Contexts, Publisher
+
+from arclet.letoderea import Contexts, Provider, Publisher
 from arclet.letoderea.handler import depend_handler
 
 
@@ -25,7 +26,7 @@ class TestEvent:
 
     class TestProvider(Provider[str]):
         async def __call__(self, context: Contexts) -> str | None:
-            return context['name']
+            return context["name"]
 
 
 class TestEvent1(TestEvent):
@@ -36,7 +37,7 @@ class TestEvent1(TestEvent):
 
     class Test1Provider(Provider[bool]):
         async def __call__(self, context: Contexts) -> str | None:
-            return context['is_true']
+            return context["is_true"]
 
 
 with Publisher("test", TestEvent1) as pub:
@@ -71,6 +72,7 @@ with Publisher("test", TestEvent1) as pub:
         # print(name, age, is_true, num, name1)
         ...
 
+
 pprint(test_subscriber.params)
 
 
@@ -83,5 +85,6 @@ async def main():
     n = e - s
     print(f"used {n/10e8}, {20000*10e8/n}o/s")
     print(f"{n / 20000} ns per loop with 20000 loops")
+
 
 asyncio.run(main())

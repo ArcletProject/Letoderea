@@ -1,7 +1,7 @@
 import asyncio
 
-from arclet.letoderea import EventSystem, Contexts, bind
-from arclet.letoderea.auxiliary import BaseAuxiliary, Scope, AuxType
+from arclet.letoderea import Contexts, EventSystem, bind
+from arclet.letoderea.auxiliary import AuxType, BaseAuxiliary, Scope
 
 es = EventSystem()
 
@@ -35,20 +35,20 @@ class ExampleEvent:
     msg: str
 
     async def gather(self, context: dict):
-        context['m'] = self.num
-        context['a'] = self.msg
+        context["m"] = self.num
+        context["a"] = self.msg
 
 
 @es.on(ExampleEvent)
 @bind(TestDecorate())
 async def test(m: int, a: str):
-    print(m, type(m), end=' ')
+    print(m, type(m), end=" ")
     print(a, type(a))
 
 
 async def main():
     a = ExampleEvent()
-    a.msg = 'a'
+    a.msg = "a"
     a.num = 2
     for _ in range(6):
         await asyncio.sleep(0.1)

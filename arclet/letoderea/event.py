@@ -11,8 +11,7 @@ from .typing import Contexts
 
 @runtime_checkable
 class BaseEvent(Protocol):
-    async def gather(self, context: Contexts):
-        ...
+    async def gather(self, context: Contexts): ...
 
 
 @lru_cache(4096)

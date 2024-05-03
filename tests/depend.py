@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from arclet.letoderea import EventSystem
-from arclet.letoderea import Depends
-from arclet.letoderea import Contexts
+from arclet.letoderea import Contexts, Depends, EventSystem
 from arclet.letoderea.exceptions import ParsingStop
 
 es = EventSystem()
@@ -12,11 +10,11 @@ es = EventSystem()
 
 class ExampleEvent:
     async def gather(self, context: Contexts):
-        context['m'] = 'aa'
+        context["m"] = "aa"
 
 
 def test_depend(m: str):
-    if m == 'aa':
+    if m == "aa":
         return False
     raise ParsingStop
 
@@ -36,5 +34,6 @@ async def main():
         await es.publish(a)
     except ParsingStop:
         return
+
 
 asyncio.run(main())

@@ -9,8 +9,7 @@ from typing import Any, Awaitable, Callable, Dict, TypeVar, Union
 from typing_extensions import ParamSpec
 
 
-class Contexts(Dict[str, Any]):
-    ...
+class Contexts(Dict[str, Any]): ...
 
 
 T = TypeVar("T")

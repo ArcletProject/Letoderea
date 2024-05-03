@@ -76,8 +76,7 @@ class Deref:
 
 if TYPE_CHECKING:
 
-    def generate(ref: Any) -> Callable[[Contexts], Any]:
-        ...
+    def generate(ref: Any) -> Callable[[Contexts], Any]: ...
 
 else:
 

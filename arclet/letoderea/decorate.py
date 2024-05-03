@@ -44,8 +44,7 @@ def subscribe(*event: Type[BaseEvent]):
 
 if TYPE_CHECKING:
 
-    def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]:
-        ...
+    def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]: ...
 
 else:
 

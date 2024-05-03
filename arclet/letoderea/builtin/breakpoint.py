@@ -1,6 +1,6 @@
 import asyncio
 from asyncio import Future
-from typing import AsyncIterator, Awaitable, Callable, Generic, List, Optional, Set, Type, TypeVar, Union
+from typing import Awaitable, Callable, Generic, List, Optional, Set, Type, TypeVar, Union, overload
 
 from ..auxiliary import AuxType, BaseAuxiliary, auxilia
 from ..core import EventSystem, system_ctx
@@ -14,16 +14,29 @@ from ..typing import TCallable, TTarget
 
 _backend = {}
 R = TypeVar("R")
+R1 = TypeVar("R1")
 D = TypeVar("D")
+D1 = TypeVar("D1")
 
 
-class _step_iter(AsyncIterator[R]):
-    def __init__(self, step: "StepOut[R]"):
+class _step_iter(Generic[R, D]):
+    def __init__(self, step: "StepOut[R]", default: D, timeout: float):
         self.step = step
+        self.default = default
+        self.timeout = timeout
 
-    def __anext__(self) -> Awaitable[R]:
+    def __aiter__(self):
+        return self
+
+    @overload
+    def __anext__(self: "_step_iter[R1, None]") -> Awaitable[Optional[R1]]: ...
+
+    @overload
+    def __anext__(self: "_step_iter[R1, D1]") -> Awaitable[Union[R1, D1]]: ...
+
+    def __anext__(self):  # type: ignore
         bp = _backend.setdefault(0, Breakpoint(system_ctx.get()))
-        return bp(self.step)
+        return bp.wait(self.step, timeout=self.timeout, default=self.default)
 
 
 class StepOut(Generic[R]):
@@ -53,8 +66,64 @@ class StepOut(Generic[R]):
         self.handler = func
         return func
 
-    def __aiter__(self) -> _step_iter[R]:
-        return _step_iter(self)
+    @overload
+    def __call__(self, *, default: D, timeout: float = 120) -> _step_iter[R, D]: ...
+
+    @overload
+    def __call__(self, *, timeout: float = 120) -> _step_iter[R, None]: ...
+
+    def __call__(
+        self, *, timeout: float = 120, default: Optional[D] = None
+    ) -> Union[_step_iter[R, D], _step_iter[R, None]]:
+        """等待用户输入并返回结果
+
+        参数:
+            default: 超时时返回的默认值
+            timeout: 等待超时时间
+        """
+        return _step_iter(self, default, timeout)  # type: ignore
+
+    @overload
+    async def wait(self, *, default: Union[R, D], timeout: float = 120) -> Union[R, D]: ...
+
+    @overload
+    async def wait(self, *, timeout: float = 120) -> Optional[R]: ...
+
+    async def wait(
+        self,
+        timeout: float = 0.0,
+        default: D = None,
+    ) -> Union[R, D]:
+        bp = _backend.setdefault(0, Breakpoint(system_ctx.get()))
+        return await bp.wait(self, timeout, default=default)
+
+
+def new_target(event_t: Type[BaseEvent], condition: StepOut, fut: Future):
+    sub = Subscriber(
+        condition.handler,
+        providers=[
+            *global_providers,
+            *get_providers(event_t),
+            *condition.providers,
+        ],
+        priority=condition.priority,
+        auxiliaries=[
+            *condition.auxiliaries,
+            *get_auxiliaries(event_t),
+        ],
+    )
+
+    async def inner(event: event_t):
+        if fut.done():
+            return False
+
+        result = await depend_handler(sub, event)
+        if result is not None and not fut.done():
+            fut.set_result(result)
+            if condition.block:
+                raise PropagationCancelled()
+
+    return inner
 
 
 class Breakpoint:
@@ -73,12 +142,10 @@ class Breakpoint:
         publisher = Publisher("__breakpoint__publisher__", *condition.target)
 
         for et in condition.target:
-            callable_target = self.new_target(et, condition, fut)  # type: ignore
+            callable_target = new_target(et, condition, fut)  # type: ignore
             publisher.register(
                 priority=condition.priority,
-                auxiliaries=[
-                    auxilia(AuxType.judge, prepare=lambda ctx: isinstance(ctx["$event"], et))
-                ],
+                auxiliaries=[auxilia(AuxType.judge, prepare=lambda ctx: isinstance(ctx["$event"], et))],
             )(callable_target)
 
         try:
@@ -91,33 +158,3 @@ class Breakpoint:
                 fut.cancel()
                 publisher.subscribers.clear()
             self.es.publishers.pop(publisher.id, None)
-
-    def new_target(self, event_t: Type[BaseEvent], condition: StepOut, fut: Future):
-        sub = Subscriber(
-            condition.handler,
-            providers=[
-                *global_providers,
-                *get_providers(event_t),
-                *condition.providers,
-            ],
-            priority=condition.priority,
-            auxiliaries=[
-                *condition.auxiliaries,
-                *get_auxiliaries(event_t),
-            ],
-        )
-
-        async def inner(event: event_t):
-            if fut.done():
-                return False
-
-            result = await depend_handler(sub, event)
-            if result is not None and not fut.done():
-                fut.set_result(result)
-                if condition.block:
-                    raise PropagationCancelled()
-
-        return inner
-
-    def __call__(self, condition: StepOut[R], timeout: float = 0.0, default: D = None) -> Awaitable[Union[R, D]]:
-        return self.wait(condition, timeout, default=default)

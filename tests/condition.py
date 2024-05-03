@@ -1,10 +1,10 @@
+import asyncio
+import gc
 from datetime import datetime
 from typing import Optional
 
+from arclet.letoderea import Contexts, EventSystem
 from arclet.letoderea.auxiliary import JudgeAuxiliary, Scope
-import asyncio
-from arclet.letoderea import EventSystem, Contexts
-import gc
 
 test_stack = [0]
 es = EventSystem()
@@ -50,11 +50,14 @@ class ExampleEvent:
     msg: int = 0
 
     async def gather(self, context: dict):
-        context['index'] = self.msg
+        context["index"] = self.msg
 
 
 @es.on(ExampleEvent, auxiliaries=[TestTimeLimit(0, 0), Interval(0.2)])
-async def test(index: int, a: str = "hello", ):
+async def test(
+    index: int,
+    a: str = "hello",
+):
     gc.collect()
     print(index, a)
 

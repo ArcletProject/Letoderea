@@ -70,8 +70,7 @@ class JudgeAuxiliary(BaseAuxiliary):
 
 
 class Executor(Protocol):
-    async def __call__(self, scope: Scope, context: Contexts):
-        ...
+    async def __call__(self, scope: Scope, context: Contexts): ...
 
 
 class CombineExecutor:
@@ -146,8 +145,7 @@ def auxilia(
     prepare: Callable[[Contexts], Optional[Contexts]] | None = None,
     complete: Callable[[Contexts], Optional[Contexts]] | None = None,
     cleanup: Callable[[Contexts], Optional[Contexts]] | None = None,
-):
-    ...
+): ...
 
 
 @overload
@@ -158,8 +156,7 @@ def auxilia(
     prepare: Callable[[Contexts], Optional[bool]] | None = None,
     complete: Callable[[Contexts], Optional[bool]] | None = None,
     cleanup: Callable[[Contexts], Optional[bool]] | None = None,
-):
-    ...
+): ...
 
 
 def auxilia(

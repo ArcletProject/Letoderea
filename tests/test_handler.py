@@ -1,8 +1,9 @@
 import asyncio
 import time
+
+from arclet.letoderea import Contexts, Provider
 from arclet.letoderea.handler import depend_handler
 from arclet.letoderea.subscriber import Subscriber
-from arclet.letoderea import Provider, Contexts
 
 loop = asyncio.new_event_loop()
 
@@ -16,8 +17,7 @@ class ExampleEvent:
             return context["a"]
 
 
-async def test(m: str):
-    ...
+async def test(m: str): ...
 
 
 sub = Subscriber(test, providers=[ExampleEvent.TestProvider()])
@@ -27,6 +27,7 @@ async def main():
     a = ExampleEvent()
     for _ in range(50000):
         await depend_handler(sub, a)
+
 
 s = time.perf_counter_ns()
 loop.run_until_complete(main())
