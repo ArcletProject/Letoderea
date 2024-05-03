@@ -92,36 +92,40 @@ async def depend_handler(
 ):
     if event:
         if target.__class__ != Subscriber:
-            target = Subscriber(target, providers=get_providers(event.__class__))  # type: ignore
-        contexts: Contexts = {"$event": event, "$subscriber": target}  # type: ignore
+            _target = Subscriber(target, providers=get_providers(event.__class__))  # type: ignore
+        else:
+            _target: Subscriber = target  # type: ignore
+        contexts: Contexts = {"$event": event, "$subscriber": _target}  # type: ignore
         await event.gather(contexts)
     elif source:
         contexts = source
         if target.__class__ != Subscriber:
-            target = Subscriber(target, providers=get_providers(source["$event"].__class__))  # type: ignore
-        contexts["$subscriber"] = target
+            _target = Subscriber(target, providers=get_providers(source["$event"].__class__))  # type: ignore
+        else:
+            _target: Subscriber = target  # type: ignore
+        contexts["$subscriber"] = _target
     else:
         raise ValueError("Empty source")
     try:
-        if Prepare in target.auxiliaries:
-            for aux in target.auxiliaries[Prepare]:
+        if Prepare in _target.auxiliaries:
+            for aux in _target.auxiliaries[Prepare]:
                 await prepare(aux, contexts)
         arguments: Contexts = {}  # type: ignore
-        for param in target.params:
+        for param in _target.params:
             arguments[param.name] = await param.solve(contexts)
-        if Complete in target.auxiliaries:
-            for aux in target.auxiliaries[Complete]:
+        if Complete in _target.auxiliaries:
+            for aux in _target.auxiliaries[Complete]:
                 await complete(aux, arguments)
-        result = await target.callable_target(**arguments)
+        result = await _target.callable_target(**arguments)
     except InnerHandlerException as e:
         if inner:
             raise
-        raise exception_handler(e.args[0], target, contexts) from e  # type: ignore
+        raise exception_handler(e.args[0], _target, contexts) from e  # type: ignore
     except Exception as e:
-        raise exception_handler(e, target, contexts, inner) from e  # type: ignore
+        raise exception_handler(e, _target, contexts, inner) from e  # type: ignore
     finally:
-        if Cleanup in target.auxiliaries:
-            for aux in target.auxiliaries[Cleanup]:
+        if Cleanup in _target.auxiliaries:
+            for aux in _target.auxiliaries[Cleanup]:
                 await aux(Cleanup, contexts)
         contexts.clear()
     return result

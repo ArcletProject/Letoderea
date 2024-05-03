@@ -27,7 +27,8 @@ async def test(msg: str):
         print('[subscriber] >>> wait for msg: "continue!" ')
         out = StepOut([ExampleEvent], handler)
         print("[subscriber] >>> current out:", out)
-        res = await out.wait()
+        with break_point:
+            res = await out.wait(default="default")
         print("[subscriber] >>> wait result:", f'"{res}"')
         print("[subscriber] >>> finish!")
 

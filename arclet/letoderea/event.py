@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from functools import lru_cache
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from .auxiliary import BaseAuxiliary
 from .provider import Provider, ProviderFactory
@@ -11,7 +11,7 @@ from .typing import Contexts
 
 @runtime_checkable
 class BaseEvent(Protocol):
-    async def gather(self, context: Contexts): ...
+    async def gather(self, context: Contexts) -> Any: ...
 
 
 @lru_cache(4096)

@@ -158,3 +158,11 @@ class Breakpoint:
                 fut.cancel()
                 publisher.subscribers.clear()
             self.es.publishers.pop(publisher.id, None)
+
+    def __enter__(self):
+        _backend[0] = self
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        _backend.pop(0, None)
+        return False
