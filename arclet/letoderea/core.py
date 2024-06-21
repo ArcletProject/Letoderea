@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from typing import Callable
+from typing import Any, Callable, TypeVar
 from weakref import finalize
 
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx, system_ctx
-from .event import BaseEvent
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import BackendPublisher, Publisher
+from .publisher import BackendPublisher, ExternalPublisher, Publisher
 from .subscriber import Subscriber
+from .typing import Contexts
+
+T = TypeVar("T")
 
 
 class EventSystem:
@@ -50,7 +52,17 @@ class EventSystem:
         for publisher in publishers:
             self.publishers[publisher.id] = publisher
 
-    def publish(self, event: BaseEvent, publisher: str | Publisher | None = None):
+    def define(
+        self,
+        target: type[T],
+        supplier: Callable[[T], dict[str, Any]] | None = None,
+        predicate: Callable[[T], bool] | None = None,
+    ):
+        publisher = ExternalPublisher(target, supplier, predicate)
+        self.register(publisher)
+        return publisher
+
+    def publish(self, event: Any, publisher: str | Publisher | None = None):
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
             task = loop.create_task(dispatch(pub.subscribers, event))

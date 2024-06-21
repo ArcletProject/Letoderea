@@ -8,6 +8,7 @@ from typing_extensions import Annotated, get_args, get_origin
 from tarina import Empty, is_async, signatures
 
 from .auxiliary import AuxType, BaseAuxiliary, Executor, Scope, combine
+from .event import BaseEvent
 from .exceptions import UndefinedRequirement
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -87,6 +88,7 @@ class Subscriber(Generic[R]):
     auxiliaries: dict[Scope, list[Executor]]
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
+    external_source: Callable[[Any], BaseEvent] | None = None
 
     def __init__(
         self,
@@ -117,6 +119,10 @@ class Subscriber(Generic[R]):
             self.callable_target = callable_target  # type: ignore
         else:
             self.callable_target = run_sync(callable_target)  # type: ignore
+        self.external_source = None
+
+    def _recompile(self):
+        self.params = _compile(self.callable_target, self.providers)
 
     async def __call__(self, *args, **kwargs) -> R:
         return await self.callable_target(*args, **kwargs)
@@ -129,3 +135,4 @@ class Subscriber(Generic[R]):
             return other.name == self.name
         elif isinstance(other, str):
             return other == self.name
+        return False

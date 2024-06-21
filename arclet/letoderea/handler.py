@@ -88,7 +88,10 @@ def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inne
 
 
 async def depend_handler(
-    target: Subscriber | Callable, event: BaseEvent | None = None, source: Contexts | None = None, inner: bool = False
+    target: Subscriber | Callable,
+    event: BaseEvent | None = None,
+    source: Contexts | None = None,
+    inner: bool = False,
 ):
     if event:
         if target.__class__ != Subscriber:
@@ -96,6 +99,8 @@ async def depend_handler(
         else:
             _target: Subscriber = target  # type: ignore
         contexts: Contexts = {"$event": event, "$subscriber": _target}  # type: ignore
+        if _target.external_source:
+            event = _target.external_source(event)
         await event.gather(contexts)
     elif source:
         contexts = source

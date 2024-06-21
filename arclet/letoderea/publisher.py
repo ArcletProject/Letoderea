@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from asyncio import Queue
 from contextlib import suppress
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
@@ -13,6 +13,8 @@ from .subscriber import Subscriber
 from .typing import Contexts
 
 global_providers: list[Provider] = []
+
+T = TypeVar("T")
 
 
 class EventProvider(Provider[BaseEvent]):
@@ -189,3 +191,37 @@ class BackendPublisher(Publisher):
         self.subscribers = []
         self.providers = []
         self.auxiliaries = []
+
+
+class ExternalPublisher(Publisher):
+
+    def __init__(
+        self,
+        target: type[T],
+        supplier: Callable[[T], dict[str, Any]] | None = None,
+        predicate: Callable[[T], bool] | None = None,
+        queue_size: int = -1,
+    ):
+        self.id = f"{target.__name__}_{id(target)}"
+        if predicate:
+            self.id += f"::{predicate}"
+            self.validate = lambda e: isinstance(e, target) and predicate(e)
+        else:
+            self.validate = lambda e: isinstance(e, target)
+        self.event_queue = Queue(queue_size)
+        self.subscribers = []
+        self.providers = []
+        self.auxiliaries = []
+        self.target = target
+
+        class _FakeEvent:
+            async def gather(self, context):
+                if supplier:
+                    context.update(supplier(context["$event"]))
+                return context
+
+        self._fake_event_cls = _FakeEvent
+
+    def add_subscriber(self, subscriber: Subscriber) -> None:
+        subscriber.external_source = lambda e: self._fake_event_cls()
+        self.subscribers.append(subscriber)

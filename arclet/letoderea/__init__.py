@@ -32,6 +32,7 @@ from .provider import Param as Param
 from .provider import Provider as Provider
 from .provider import provide as provide
 from .publisher import BackendPublisher as BackendPublisher
+from .publisher import ExternalPublisher as ExternalPublisher
 from .publisher import ProviderFactory as ProviderFactory
 from .publisher import Publisher as Publisher
 from .publisher import global_providers as global_providers
