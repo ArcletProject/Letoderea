@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import Any
 
-from ..auxiliary import AuxType, BaseAuxiliary, Scope
+from ..auxiliary import AuxType, BaseAuxiliary, Scope, Interface
 from ..handler import depend_handler
 from ..subscriber import Subscriber
-from ..typing import Contexts, TTarget
+from ..typing import TTarget
 
 
 @dataclass(init=False, eq=True)
@@ -13,9 +13,9 @@ class Depend(BaseAuxiliary):
     def scopes(self):
         return {Scope.parsing}
 
-    async def __call__(self, scope: Scope, context: Contexts):
-        sub = Subscriber(self.target, providers=context["$subscriber"].providers)
-        return await depend_handler(sub, source=context, inner=True)
+    async def __call__(self, scope: Scope, interface: Interface):
+        sub = Subscriber(self.target, providers=interface.providers)  # type: ignore
+        return await depend_handler(sub, source=interface.ctx, inner=True)
 
     target: TTarget[Any]
 

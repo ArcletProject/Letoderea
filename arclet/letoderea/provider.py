@@ -36,10 +36,12 @@ class Provider(Generic[T], metaclass=ABCMeta):
             raise TypeError("Subclass of Provider must be generic. If you need a wildcard, please using `typing.Any`")
 
     def validate(self, param: Param):
+        anno = get_origin(param.annotation)
         return (
             self.origin == param.annotation
-            or (isinstance(param.annotation, type) and generic_issubclass(param.annotation, self.origin))
-            or (get_origin(param.annotation) in Unions and self.origin in get_args(param.annotation))
+            or (isinstance(anno, type) and generic_issubclass(anno, self.origin))
+            or (anno in Unions and self.origin in get_args(param.annotation))
+
         )
 
     @abstractmethod

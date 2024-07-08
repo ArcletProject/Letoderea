@@ -20,11 +20,11 @@ class Deref:
         self.__items[self.__last_key] = (False, lambda x: x(*args, **kwargs))
         return self
 
-    def __eq__(self, other):
+    def __eq__(self, other):  # type: ignore
         self.__items[self.__last_key] = (True, lambda x: x == other)
         return self
 
-    def __ne__(self, other):
+    def __ne__(self, other):  # type: ignore
         self.__items[self.__last_key] = (True, lambda x: x != other)
         return self
 

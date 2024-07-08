@@ -7,7 +7,7 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from tarina import Empty, is_async, signatures
 
-from .auxiliary import AuxType, BaseAuxiliary, Executor, Scope, combine
+from .auxiliary import AuxType, BaseAuxiliary, Executor, Scope, combine, Interface
 from .event import BaseEvent
 from .exceptions import UndefinedRequirement
 from .provider import Param, Provider, ProviderFactory, provide
@@ -73,7 +73,10 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
         if isinstance(default, Provider):
             param.providers.insert(0, default)
         if isinstance(default, BaseAuxiliary) and (default.type == AuxType.depend):
-            param.depend = provide(anno, call=partial(default, "parsing"))
+            param.depend = provide(
+                anno,
+                call=lambda ctx: default("parsing", Interface(ctx, providers))
+            )
         res.append(param)
     return res
 

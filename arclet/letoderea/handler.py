@@ -7,7 +7,7 @@ import sys
 import traceback
 from typing import Callable, Type
 
-from .auxiliary import Cleanup, Complete, Executor, Prepare
+from .auxiliary import Interface, Cleanup, Complete, Executor, Prepare
 from .event import BaseEvent, get_providers
 from .exceptions import (
     InnerHandlerException,
@@ -113,14 +113,16 @@ async def depend_handler(
         raise ValueError("Empty source")
     try:
         if Prepare in _target.auxiliaries:
+            interface = Interface(contexts, _target.providers)
             for aux in _target.auxiliaries[Prepare]:
-                await prepare(aux, contexts)
+                await prepare(aux, interface)
         arguments: Contexts = {}  # type: ignore
         for param in _target.params:
             arguments[param.name] = await param.solve(contexts)
         if Complete in _target.auxiliaries:
+            interface = Interface(arguments, _target.providers)
             for aux in _target.auxiliaries[Complete]:
-                await complete(aux, arguments)
+                await complete(aux, interface)
         result = await _target.callable_target(**arguments)
     except InnerHandlerException as e:
         if inner:
@@ -131,37 +133,26 @@ async def depend_handler(
     finally:
         if Cleanup in _target.auxiliaries:
             for aux in _target.auxiliaries[Cleanup]:
-                await aux(Cleanup, contexts)
+                await aux(Cleanup, Interface(contexts, _target.providers))
         contexts.clear()
     return result
 
 
-async def prepare(decorator: Executor, ctx: Contexts):
-    res = await decorator(Prepare, ctx.copy())  # type: ignore
+async def prepare(decorator: Executor, interface: Interface):
+    res = await decorator(Prepare, interface)
     if res is False:
         raise JudgementError
     if isinstance(res, dict):
-        ctx.update(res)
+        interface.ctx.update(res)
 
 
-async def complete(decorator: Executor, ctx: Contexts):
-    """
-    在解析前执行的操作
-
-    Args:
-        decorator: 解析器列表
-        ctx: 事件参数字典
-    """
-    keys = set(ctx.keys())
-    res = await decorator(Complete, ctx.copy())  # type: ignore
+async def complete(decorator: Executor, interface: Interface):
+    keys = set(interface.ctx.keys())
+    res = await decorator(Complete, interface)
     if res is False:
         raise JudgementError
     if isinstance(res, dict):
-        if set(res.keys()) == keys:
-            ctx.clear()
-            ctx.update(res)
+        if keys.issuperset(res.keys()):
+            interface.ctx.update(res)
             return
-        if len(keys) > len(res):
-            raise UnexpectedArgument(f"Missing requirement in {keys - set(res.keys())}")
-        if len(keys) < len(res):
-            raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")
+        raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")

@@ -1,3 +1,4 @@
+from .auxiliary import Interface as Interface
 from .auxiliary import And as And
 from .auxiliary import AuxType as AuxType
 from .auxiliary import BaseAuxiliary as BaseAuxiliary

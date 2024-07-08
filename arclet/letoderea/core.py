@@ -11,7 +11,6 @@ from .handler import dispatch
 from .provider import Provider, ProviderFactory
 from .publisher import BackendPublisher, ExternalPublisher, Publisher
 from .subscriber import Subscriber
-from .typing import Contexts
 
 T = TypeVar("T")
 

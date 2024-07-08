@@ -20,8 +20,7 @@ class FloatProvider(Provider[float]):
 
 class TestEvent:
 
-    @staticmethod
-    async def gather(context: Contexts):
+    async def gather(self, context: Contexts):
         context["name"] = "Letoderea"
 
     class TestProvider(Provider[str]):
@@ -32,11 +31,11 @@ class TestEvent:
 class TestEvent1(TestEvent):
 
     async def gather(self, context: Contexts):
-        await TestEvent.gather(context)
+        await super().gather(context)
         context["is_true"] = True
 
     class Test1Provider(Provider[bool]):
-        async def __call__(self, context: Contexts) -> str | None:
+        async def __call__(self, context: Contexts) -> bool | None:
             return context["is_true"]
 
 

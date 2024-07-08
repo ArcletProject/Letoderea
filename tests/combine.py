@@ -1,14 +1,13 @@
 import asyncio
 from typing import Optional
 
-from arclet.letoderea import And, Contexts, Or, Scope, SupplyAuxiliary
+from arclet.letoderea import And, Interface, Or, Scope, SupplyAuxiliary
 from arclet.letoderea.auxiliary import CombineExecutor, Prepare
 
 
 class Foo(SupplyAuxiliary):
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        context["a"] = 1
-        return context
+    async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
+        return interface.update(a=1)
 
     @property
     def scopes(self) -> set[Scope]:
@@ -16,10 +15,9 @@ class Foo(SupplyAuxiliary):
 
 
 class Bar(SupplyAuxiliary):
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        if "a" in context:
-            context["b"] = context["a"] * 2
-            return context
+    async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
+        if (a := interface.query(int, "a")) is not None:
+            return interface.update(b=a * 2)
 
     @property
     def scopes(self) -> set[Scope]:
@@ -27,9 +25,8 @@ class Bar(SupplyAuxiliary):
 
 
 class Bar1(SupplyAuxiliary):
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        context["b"] = 3
-        return context
+    async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
+        return interface.update(b=3)
 
     @property
     def scopes(self) -> set[Scope]:
@@ -37,10 +34,9 @@ class Bar1(SupplyAuxiliary):
 
 
 class Baz(SupplyAuxiliary):
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        if "a" in context:
-            context["c"] = context["a"] - 5
-            return context
+    async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
+        if (b := interface.query(int, "b")) is not None:
+            return interface.update(c=b - 5)
 
     @property
     def scopes(self) -> set[Scope]:
@@ -48,10 +44,9 @@ class Baz(SupplyAuxiliary):
 
 
 class Qux(SupplyAuxiliary):
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
-        if "b" in context:
-            context["d"] = context["b"] + 5
-            return context
+    async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
+        if (b := interface.query(int, "b")) is not None:
+            return interface.update(d=b + 5)
 
     @property
     def scopes(self) -> set[Scope]:
@@ -67,21 +62,21 @@ qux = Qux(Or)
 
 
 async def main():
-    ctx = Contexts()
+    interface = Interface({}, [])  # type: ignore
     exe1 = CombineExecutor([foo, bar])
-    print(await exe1(Prepare, ctx))
-    ctx.clear()
+    print(await exe1(Prepare, interface))
+    interface.clear()
     exe2 = CombineExecutor([foo, bar, baz, qux])
-    print(await exe2(Prepare, ctx))
-    ctx.clear()
+    print(await exe2(Prepare, interface))
+    interface.clear()
     exe3 = CombineExecutor([bar1, baz, qux])
-    print(await exe3(Prepare, ctx))
-    ctx.clear()
+    print(await exe3(Prepare, interface))
+    interface.clear()
     exe4 = CombineExecutor([bar_1, bar1, baz, qux])
-    print(await exe4(Prepare, ctx))
-    ctx.clear()
+    print(await exe4(Prepare, interface))
+    interface.clear()
     exe5 = CombineExecutor([foo, bar_1, bar1, baz, qux])
-    print(await exe5(Prepare, ctx))
+    print(await exe5(Prepare, interface))
 
 
 asyncio.run(main())

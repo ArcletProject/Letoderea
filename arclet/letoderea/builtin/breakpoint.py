@@ -84,15 +84,16 @@ class StepOut(Generic[R]):
         return _step_iter(self, default, timeout)  # type: ignore
 
     @overload
-    async def wait(self, *, default: Union[R, D], timeout: float = 120) -> Union[R, D]: ...
+    async def wait(self, *, timeout: float = 120) -> Optional[R]: ...
 
     @overload
-    async def wait(self, *, timeout: float = 120) -> Optional[R]: ...
+    async def wait(self, *, default: Union[R, D], timeout: float = 120) -> Union[R, D]: ...
 
     async def wait(
         self,
+        *,
         timeout: float = 0.0,
-        default: D = None,
+        default: Union[R, D, None] = None,
     ) -> Union[R, D]:
         bp = _backend.setdefault(0, Breakpoint(system_ctx.get()))
         return await bp.wait(self, timeout, default=default)
@@ -145,7 +146,7 @@ class Breakpoint:
             callable_target = new_target(et, condition, fut)  # type: ignore
             publisher.register(
                 priority=condition.priority,
-                auxiliaries=[auxilia(AuxType.judge, prepare=lambda ctx: isinstance(ctx["$event"], et))],
+                auxiliaries=[auxilia(AuxType.judge, prepare=lambda interface: isinstance(interface.event, et))],
             )(callable_target)
 
         try:

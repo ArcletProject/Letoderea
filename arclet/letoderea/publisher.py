@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from asyncio import Queue
 from contextlib import suppress
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, ClassVar
 
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
@@ -18,8 +18,10 @@ T = TypeVar("T")
 
 
 class EventProvider(Provider[BaseEvent]):
+    EVENT_CLASS: ClassVar[type] = BaseEvent
+
     def validate(self, param: Param):
-        return (isinstance(param.annotation, type) and issubclass(param.annotation, BaseEvent)) or param.name == "event"
+        return (isinstance(param.annotation, type) and issubclass(param.annotation, self.EVENT_CLASS)) or param.name == "event"
 
     async def __call__(self, context: Contexts) -> BaseEvent | None:
         return context.get("$event")
@@ -46,7 +48,7 @@ class Publisher:
         self,
         id_: str,
         *events: type[BaseEvent],
-        predicate: Callable[[BaseEvent], bool] | None = None,
+        predicate: Callable[[Any], bool] | None = None,
         queue_size: int = -1,
     ):
         self.id = f"{id_}::{sorted(events, key=lambda e: id(e))}"
@@ -178,7 +180,7 @@ class BackendPublisher(Publisher):
     def __init__(
         self,
         id_: str,
-        predicate: Callable[[BaseEvent], bool] | None = None,
+        predicate: Callable[[Any], bool] | None = None,
         queue_size: int = -1,
     ):
         self.id = id_

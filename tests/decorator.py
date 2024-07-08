@@ -1,7 +1,7 @@
 import asyncio
 
-from arclet.letoderea import Contexts, EventSystem, bind
-from arclet.letoderea.auxiliary import AuxType, BaseAuxiliary, Scope
+from arclet.letoderea import EventSystem, bind
+from arclet.letoderea.auxiliary import AuxType, BaseAuxiliary, Scope, Interface
 
 es = EventSystem()
 
@@ -11,18 +11,20 @@ class TestDecorate(BaseAuxiliary):
     def __init__(self):
         super().__init__(AuxType.supply)
 
-    async def __call__(self, scope: Scope, context: Contexts):
+    async def __call__(self, scope: Scope, interface: Interface):
         if scope == Scope.prepare:
-            for k, v in context.items():
+            ans = {}
+            for k, v in interface.ctx.items():
                 if isinstance(v, str):
-                    context[k] = v * 2
+                    ans[k] = v * 2
                 if isinstance(v, int):
-                    context[k] = v * 3
-            return context
-        for k, v in context.items():
+                    ans[k] = v * 3
+            return interface.update(**ans)
+        ans = {}
+        for k, v in interface.ctx.items():
             if isinstance(v, str):
-                context[k] = bytes(v, encoding="utf-8")
-        return context
+                ans[k] = bytes(v, encoding="utf-8")
+        return interface.update(**ans)
 
     @property
     def scopes(self) -> set[Scope]:

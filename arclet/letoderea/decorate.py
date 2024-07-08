@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Callable, Optional, Type, Union
 
-from .auxiliary import AuxType, BaseAuxiliary, Scope, auxilia
+from .auxiliary import Interface, AuxType, BaseAuxiliary, Scope, auxilia
 from .context import system_ctx
 from .event import BaseEvent
 from .exceptions import ParsingStop
@@ -51,8 +51,8 @@ else:
     def bypass_if(predicate: Union[Callable[[Contexts], bool], Deref]):
         _predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
 
-        def _prepare(context: Contexts) -> Optional[bool]:
-            if _predicate(context):
+        def _prepare(interface: Interface) -> Optional[bool]:
+            if _predicate(interface.ctx):
                 raise ParsingStop()
             return True
 

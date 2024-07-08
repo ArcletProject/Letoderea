@@ -4,11 +4,55 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from functools import partial
-from typing import Any, Awaitable, Callable, ClassVar, Final, Literal, Optional, Protocol, cast, overload
+from typing import Any, Awaitable, Callable, ClassVar, Final, Literal, Optional, Protocol, overload, TypeVar, Generic
 
 from tarina import run_always_await
 
+from .provider import Provider, ProviderFactory, Param
 from .typing import Contexts
+
+T = TypeVar("T")
+Q = TypeVar("Q")
+D = TypeVar("D")
+
+
+class Interface(Generic[T]):
+    def __init__(self, ctx: Contexts, providers: list[Provider | ProviderFactory]):
+        self.ctx = ctx
+        self.providers = providers
+
+    def clear(self):
+        self.ctx.clear()
+
+    class Update(dict):
+        pass
+
+    @classmethod
+    def update(cls, **kwargs):
+        return cls.Update(kwargs)
+
+    @property
+    def event(self) -> T:
+        return self.ctx["$event"]
+
+    @overload
+    def query(self, typ: type[Q], name: str) -> Q | None:
+        ...
+
+    @overload
+    def query(self, typ: type[Q], name: str, default: D) -> Q | D:
+        ...
+
+    def query(self, typ: type, name: str, default: Any = None):
+        if name in self.ctx:
+            return self.ctx[name]
+        for _provider in self.providers:
+            if isinstance(_provider, ProviderFactory):
+                if result := _provider.validate(Param(name, typ, default, False)):
+                    return result(self.ctx)
+            elif _provider.validate(Param(name, typ, default, False)):
+                return _provider(self.ctx)
+        return default
 
 
 class AuxType(str, Enum):
@@ -47,7 +91,7 @@ class BaseAuxiliary(metaclass=ABCMeta):
         self.__class__.priority = priority
 
     @abstractmethod
-    async def __call__(self, scope: Scope, context: Contexts):
+    async def __call__(self, scope: Scope, interface: Interface):
         raise NotImplementedError
 
 
@@ -56,7 +100,7 @@ class SupplyAuxiliary(BaseAuxiliary):
         super().__init__(AuxType.supply, mode, priority)
 
     @abstractmethod
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[Contexts]:
+    async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
         raise NotImplementedError
 
 
@@ -65,25 +109,25 @@ class JudgeAuxiliary(BaseAuxiliary):
         super().__init__(AuxType.judge, mode, priority)
 
     @abstractmethod
-    async def __call__(self, scope: Scope, context: Contexts) -> Optional[bool]:
+    async def __call__(self, scope: Scope, interface: Interface) -> Optional[bool]:
         raise NotImplementedError
 
 
 class Executor(Protocol):
-    async def __call__(self, scope: Scope, context: Contexts): ...
+    async def __call__(self, scope: Scope, interface: Interface): ...
 
 
 class CombineExecutor:
-    steps: list[Callable[[Scope, Contexts], Awaitable]]
+    steps: list[Callable[[Scope, Interface], Awaitable]]
 
     def __init__(self, auxes: list[BaseAuxiliary]):
         self.steps = []
         ors = []
 
-        async def _ors(_scope: Scope, ctx: Contexts, *, funcs: list[BaseAuxiliary]):
+        async def _ors(_scope: Scope, interface: Interface, *, funcs: list[BaseAuxiliary]):
             res = None
             for func in funcs:
-                res = await func(_scope, ctx)
+                res = await func(_scope, interface)
                 if res is None:
                     continue
                 if res:
@@ -104,22 +148,19 @@ class CombineExecutor:
             self.steps.append(partial(_ors, funcs=ors.copy()))
             ors.clear()
 
-    async def __call__(self, scope: Scope, context: Contexts):
-        res = None
-        ctx = context
-        last = None
+    async def __call__(self, scope: Scope, interface: Interface):
+        res = {}
         for step in self.steps:
-            if (last := await step(scope, ctx)) is None:
+            if (last := await step(scope, interface)) is None:
                 continue
             if isinstance(last, dict):
-                ctx = cast(Contexts, last)
-                continue
-            if last is False:
+                interface.ctx.update(last)
+                res.update(last)
+            elif last is False:
                 return False
-            if res is None:
-                res = last
-            res &= last
-        return ctx if isinstance(last, dict) else res
+            elif last is True:
+                continue
+        return res or True
 
 
 def combine(auxiliaries: list[BaseAuxiliary]) -> list[Executor]:
@@ -142,9 +183,9 @@ def auxilia(
     atype: Literal[AuxType.supply],
     mode: CombineMode = CombineMode.SINGLE,
     priority: int = 20,
-    prepare: Callable[[Contexts], Optional[Contexts]] | None = None,
-    complete: Callable[[Contexts], Optional[Contexts]] | None = None,
-    cleanup: Callable[[Contexts], Optional[Contexts]] | None = None,
+    prepare: Callable[[Interface], Optional[Interface.Update]] | None = None,
+    complete: Callable[[Interface], Optional[Interface.Update]] | None = None,
+    cleanup: Callable[[Interface], Optional[Interface.Update]] | None = None,
 ): ...
 
 
@@ -153,9 +194,9 @@ def auxilia(
     atype: Literal[AuxType.judge],
     mode: CombineMode = CombineMode.SINGLE,
     priority: int = 20,
-    prepare: Callable[[Contexts], Optional[bool]] | None = None,
-    complete: Callable[[Contexts], Optional[bool]] | None = None,
-    cleanup: Callable[[Contexts], Optional[bool]] | None = None,
+    prepare: Callable[[Interface], Optional[bool]] | None = None,
+    complete: Callable[[Interface], Optional[bool]] | None = None,
+    cleanup: Callable[[Interface], Optional[bool]] | None = None,
 ): ...
 
 
@@ -163,20 +204,20 @@ def auxilia(
     atype: AuxType,
     mode: CombineMode = CombineMode.SINGLE,
     priority: int = 20,
-    prepare: Callable[[Contexts], Any] | None = None,
-    complete: Callable[[Contexts], Any] | None = None,
-    cleanup: Callable[[Contexts], Any] | None = None,
+    prepare: Callable[[Interface], Any] | None = None,
+    complete: Callable[[Interface], Any] | None = None,
+    cleanup: Callable[[Interface], Any] | None = None,
 ):
     class _Auxiliary(BaseAuxiliary):
-        async def __call__(self, scope: Scope, context: Contexts):
+        async def __call__(self, scope: Scope, interface: Interface):
             res = None
             if scope == Scope.prepare and prepare is not None:
-                res = await run_always_await(prepare, context)
+                res = await run_always_await(prepare, interface)
             if scope == Scope.complete and complete is not None:
-                res = await run_always_await(complete, context)
+                res = await run_always_await(complete, interface)
             if scope == Scope.cleanup and cleanup is not None:
-                res = await run_always_await(cleanup, context)
-            return res if res is False else context
+                res = await run_always_await(cleanup, interface)
+            return res
 
         @property
         def scopes(self) -> set[Scope]:
