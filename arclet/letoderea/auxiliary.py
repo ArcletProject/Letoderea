@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable, ClassVar, Final, Literal, Optional,
 
 from tarina import run_always_await
 
+from .exceptions import UndefinedRequirement
 from .provider import Provider, ProviderFactory, Param
 from .typing import Contexts
 
@@ -36,14 +37,18 @@ class Interface(Generic[T]):
         return self.ctx["$event"]
 
     @overload
-    def query(self, typ: type[Q], name: str) -> Q | None:
+    def query(self, typ: type[Q], name: str) -> Q:
+        ...
+
+    @overload
+    def query(self, typ: type[Q], name: str, *, force_return: Literal[True]) -> Q | None:
         ...
 
     @overload
     def query(self, typ: type[Q], name: str, default: D) -> Q | D:
         ...
 
-    def query(self, typ: type, name: str, default: Any = None):
+    def query(self, typ: type, name: str, default: Any = None, force_return: bool = False):
         if name in self.ctx:
             return self.ctx[name]
         for _provider in self.providers:
@@ -52,7 +57,9 @@ class Interface(Generic[T]):
                     return result(self.ctx)
             elif _provider.validate(Param(name, typ, default, False)):
                 return _provider(self.ctx)
-        return default
+        if force_return:
+            return default
+        raise UndefinedRequirement(name, typ, default, self.providers)
 
 
 class AuxType(str, Enum):

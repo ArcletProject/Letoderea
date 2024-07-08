@@ -16,7 +16,7 @@ class Foo(SupplyAuxiliary):
 
 class Bar(SupplyAuxiliary):
     async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
-        if (a := interface.query(int, "a")) is not None:
+        if (a := interface.query(int, "a", force_return=True)) is not None:
             return interface.update(b=a * 2)
 
     @property
@@ -35,7 +35,7 @@ class Bar1(SupplyAuxiliary):
 
 class Baz(SupplyAuxiliary):
     async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
-        if (b := interface.query(int, "b")) is not None:
+        if (b := interface.query(int, "b", force_return=True)) is not None:
             return interface.update(c=b - 5)
 
     @property
@@ -45,7 +45,7 @@ class Baz(SupplyAuxiliary):
 
 class Qux(SupplyAuxiliary):
     async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
-        if (b := interface.query(int, "b")) is not None:
+        if (b := interface.query(int, "b", force_return=True)) is not None:
             return interface.update(d=b + 5)
 
     @property
