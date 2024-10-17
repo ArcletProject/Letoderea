@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, Awaitable, Callable, Generic, TypeVar
 from typing_extensions import Annotated, get_args, get_origin
 

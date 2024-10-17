@@ -4,6 +4,7 @@ import asyncio
 from contextlib import suppress
 from typing import Any, Callable, TypeVar
 from weakref import finalize
+from itertools import chain
 
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx, system_ctx
@@ -73,8 +74,14 @@ class EventSystem:
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
-        subscribers = sum((pub.subscribers for pub in self.publishers.values() if pub.validate(event)), [])
-        task = loop.create_task(dispatch(subscribers, event))
+        task = loop.create_task(
+            dispatch(
+                chain.from_iterable(
+                    pub.subscribers for pub in self.publishers.values() if pub.validate(event)
+                ),
+                event
+            )
+        )
         self._ref_tasks.add(task)
         task.add_done_callback(self._ref_tasks.discard)
         return task

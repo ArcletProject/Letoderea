@@ -5,7 +5,7 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Callable, Type
+from typing import Callable, Type, Iterable
 
 from .auxiliary import Interface, Cleanup, Complete, Executor, Prepare
 from .event import BaseEvent, get_providers
@@ -21,7 +21,7 @@ from .subscriber import Subscriber
 from .typing import Contexts
 
 
-async def dispatch(subscribers: list[Subscriber], event: BaseEvent):
+async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent):
     if not subscribers:
         return
     grouped: dict[int, list[Subscriber]] = {}
