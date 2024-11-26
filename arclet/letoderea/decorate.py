@@ -6,6 +6,7 @@ from .exceptions import ParsingStop
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
+from .context import publisher_ctx
 from .typing import Contexts, TTarget
 from .core import es
 
@@ -36,6 +37,8 @@ def bind(*args: Union[BaseAuxiliary, Provider, type[Provider]]):
 def subscribe(*event: type[BaseEvent]):
 
     def wrapper(target: TTarget) -> TTarget:
+        if pub := publisher_ctx.get():
+            return pub.register()(target)
         return es.on(event)(target)
 
     return wrapper

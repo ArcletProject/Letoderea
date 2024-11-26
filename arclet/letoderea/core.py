@@ -58,7 +58,8 @@ class EventSystem:
         self.register(publisher)
         return publisher
 
-    def post(self, event: Any, publisher: str | Publisher | None = None):
+    def publish(self, event: Any, publisher: str | Publisher | None = None):
+        """发布事件"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
             task = loop.create_task(dispatch(pub.subscribers, event))
@@ -76,6 +77,32 @@ class EventSystem:
                     pub.subscribers for pub in self.publishers.values() if pub.validate(event)
                 ),
                 event
+            )
+        )
+        self._ref_tasks.add(task)
+        task.add_done_callback(self._ref_tasks.discard)
+        return task
+
+    def post(self, event: Any, publisher: str | Publisher | None = None):
+        """发布事件并返回第一个响应结果"""
+        loop = asyncio.get_running_loop()
+        if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
+            task = loop.create_task(dispatch(pub.subscribers, event, return_result=True))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        if isinstance(publisher, Publisher):
+            task = loop.create_task(dispatch(publisher.subscribers, event, return_result=True))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        task = loop.create_task(
+            dispatch(
+                chain.from_iterable(
+                    pub.subscribers for pub in self.publishers.values() if pub.validate(event)
+                ),
+                event,
+                return_result=True
             )
         )
         self._ref_tasks.add(task)

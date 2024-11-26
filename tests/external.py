@@ -19,8 +19,8 @@ with es.define(int, lambda x: {"name": str(x)}) as pub2:
 
 
 async def main():
-    await es.post(1)
-    await es.post(2)
+    await es.publish(1)
+    await es.publish(2)
 
 
 asyncio.run(main())

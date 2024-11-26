@@ -33,7 +33,7 @@ es.on(ExampleEvent, handler)
 
 
 async def main():
-    await es.post(ExampleEvent())
+    await es.publish(ExampleEvent())
 
 
 asyncio.run(main())

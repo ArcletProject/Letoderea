@@ -41,13 +41,13 @@ async def main():
     for i in range(6):
         if i % 3 == 0:
             print(i + 1, 'event posted with msg: "hello"')
-            es.post(a)
+            es.publish(a)
         elif (i - 1) % 3 == 0:
             print(i + 1, 'event posted with msg: "wait"')
-            es.post(c)
+            es.publish(c)
         else:
             print(i + 1, 'event posted with msg: "continue!"')
-            es.post(b)
+            es.publish(b)
         await asyncio.sleep(1)
 
 

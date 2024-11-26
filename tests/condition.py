@@ -78,7 +78,7 @@ async def main():
     for _ in range(11):
         await asyncio.sleep(0.2)
         b.msg += 1
-        await es.post(b)
+        await es.publish(b)
 
 
 asyncio.run(main())

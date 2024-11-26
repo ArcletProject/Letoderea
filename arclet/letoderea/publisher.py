@@ -11,7 +11,7 @@ from .event import BaseEvent, get_auxiliaries, get_providers
 from .handler import dispatch
 from .provider import Param, Provider, ProviderFactory
 from .subscriber import Subscriber
-from .typing import Contexts
+from .typing import Contexts, Result
 
 global_providers: list[Provider] = []
 global_auxiliaries: list[BaseAuxiliary] = []
@@ -51,7 +51,7 @@ class Publisher:
     def __init__(
         self,
         id_: str,
-        *events: type[BaseEvent],
+        *events: type[Any],
         predicate: Callable[[Any], bool] | None = None,
         queue_size: int = -1,
     ):
@@ -78,15 +78,19 @@ class Publisher:
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
-    async def emit(self, event: BaseEvent) -> Any:
+    async def emit(self, event: Any) -> None:
         """主动向自己的订阅者发布事件"""
         await dispatch(self.subscribers, event)
 
-    def unsafe_push(self, event: BaseEvent) -> None:
+    async def bail(self, event: Any) -> Result | None:
+        """主动向自己的订阅者发布事件, 并返回结果"""
+        return await dispatch(self.subscribers, event, return_result=True)
+
+    def unsafe_push(self, event: Any) -> None:
         """将事件放入队列，等待被 event system 主动轮询; 该方法可能引发 QueueFull 异常"""
         self.event_queue.put_nowait(event)
 
-    async def push(self, event: BaseEvent):
+    async def push(self, event: Any):
         """将事件放入队列，等待被 event system 主动轮询"""
         await self.event_queue.put(event)
 

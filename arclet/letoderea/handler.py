@@ -5,7 +5,7 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Callable
+from typing import Literal, Callable, overload
 from collections.abc import Iterable
 
 from .auxiliary import Interface, Cleanup, Complete, Prepare, OnError, prepare, cleanup, complete, onerror
@@ -19,10 +19,20 @@ from .exceptions import (
     UnexpectedArgument,
 )
 from .subscriber import Subscriber
-from .typing import Contexts
+from .typing import Contexts, Result
 
 
-async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent):
+@overload
+async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent) -> None:
+    ...
+
+
+@overload
+async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent, return_result: Literal[True]) -> Result | None:
+    ...
+
+
+async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent, return_result: bool = False):
     if not subscribers:
         return
     grouped: dict[int, list[Subscriber]] = {}
@@ -34,6 +44,12 @@ async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent):
         for result in results:
             if result.__class__ is PropagationCancelled:
                 return
+            if not return_result:
+                continue
+            if isinstance(result, Result):
+                return result
+            if not isinstance(result, BaseException) and result is not None and result is not False:
+                return Result(result)
 
 
 def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inner: bool = False):

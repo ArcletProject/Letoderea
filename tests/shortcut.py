@@ -37,10 +37,10 @@ async def test1(
 async def main():
     e1 = TestEvent()
     e1.index = 0
-    await es.post(e1)
+    await es.publish(e1)
     e2 = TestEvent()
     e2.index = 1
-    await es.post(e2)
+    await es.publish(e2)
 
 
 asyncio.run(main())

@@ -5,7 +5,7 @@ from collections.abc import Coroutine
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
-from typing import Any, Callable, TypeVar, Union
+from typing import Any, Callable, TypeVar, Generic, Union
 from collections.abc import Awaitable
 from typing_extensions import ParamSpec
 
@@ -25,6 +25,13 @@ class Force:
     """用于转义在本框架中特殊部分的特殊值"""
 
     value: Any
+
+
+@dataclass
+class Result(Generic[T]):
+    """用于标记一个事件响应器的处理结果，通常应用在某个事件响应器的处理结果需要被事件发布者使用的情况"""
+
+    value: T
 
 
 def run_sync(call: Callable[P, T]) -> Callable[P, Coroutine[None, None, T]]:

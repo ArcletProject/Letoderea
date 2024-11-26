@@ -29,7 +29,7 @@ def test(m: bool = TestDepend()):
 async def main():
     try:
         a = ExampleEvent()
-        await es.post(a)
+        await es.publish(a)
     except ParsingStop:
         return
 

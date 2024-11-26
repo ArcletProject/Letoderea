@@ -17,9 +17,8 @@ pip install arclet-letoderea
 
 ```python
 import asyncio
-from arclet.letoderea import EventSystem, make_event
+from arclet.letoderea import es, make_event
 
-es = EventSystem()
 
 @make_event
 class TestEvent:

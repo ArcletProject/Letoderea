@@ -56,7 +56,7 @@ async def main():
     a.num = 2
     for _ in range(6):
         await asyncio.sleep(0.1)
-        await es.post(a)
+        await es.publish(a)
 
 
 asyncio.run(main())

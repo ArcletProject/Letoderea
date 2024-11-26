@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from functools import lru_cache
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from .auxiliary import BaseAuxiliary
 from .provider import Provider, ProviderFactory
@@ -16,7 +16,7 @@ class BaseEvent(Protocol):
 
 @lru_cache(4096)
 def get_providers(
-    event: type[BaseEvent] | BaseEvent,
+    event: Any,
 ) -> list[Provider | ProviderFactory]:
     res = []
     for cls in reversed(event.__mro__[:-1]):  # type: ignore
@@ -32,7 +32,7 @@ def get_providers(
 
 
 @lru_cache(4096)
-def get_auxiliaries(event: type[BaseEvent] | BaseEvent) -> list[BaseAuxiliary]:
+def get_auxiliaries(event: Any) -> list[BaseAuxiliary]:
     res = []
     for cls in reversed(event.__mro__[:-1]):  # type: ignore
         res.extend(getattr(cls, "auxiliaries", []))
@@ -46,7 +46,10 @@ def get_auxiliaries(event: type[BaseEvent] | BaseEvent) -> list[BaseAuxiliary]:
     return [a() if isinstance(a, type) else a for a in res]
 
 
-def make_event(cls: type) -> type:
+C = TypeVar("C")
+
+
+def make_event(cls: type[C]) -> type[C]:
     if not hasattr(cls, "__annotations__"):
         raise ValueError(f"@make_event can only take effect for class with attribute annotations, not {cls}")
 
