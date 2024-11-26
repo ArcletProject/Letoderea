@@ -5,9 +5,10 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Callable, Type, Iterable
+from typing import Callable
+from collections.abc import Iterable
 
-from .auxiliary import Interface, Cleanup, Complete, Executor, Prepare
+from .auxiliary import Interface, Cleanup, Complete, Prepare, OnError, prepare, cleanup, complete, onerror
 from .event import BaseEvent, get_providers
 from .exceptions import (
     InnerHandlerException,
@@ -40,7 +41,7 @@ def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inne
         name, *_, pds = e.args
         param = inspect.signature(target.callable_target).parameters[name]
         code = target.callable_target.__code__  # type: ignore
-        etype: Type[Exception] = type(  # type: ignore
+        etype: type[Exception] = type(  # type: ignore
             "UndefinedRequirement",
             (
                 UndefinedRequirement,
@@ -52,9 +53,9 @@ def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inne
         if sys.version_info >= (3, 10):
             _args += (code.co_firstlineno, len(name) + 1)
         exc: SyntaxError = etype(
-            f"\nUnable to parse parameter ({param}) "
+            f"Unable to parse parameter ({param})"
             f"\n--------------------------------------------------"
-            f"\nproviders on parameter:"
+            f"\nproviders on parameter ({param}):"
             f"\n{pprint.pformat(pds)}"
             f"\n--------------------------------------------------"
             f"\ncurrent context"
@@ -114,15 +115,16 @@ async def depend_handler(
     try:
         if Prepare in _target.auxiliaries:
             interface = Interface(contexts, _target.providers)
-            for aux in _target.auxiliaries[Prepare]:
-                await prepare(aux, interface)
+            await prepare(_target.auxiliaries[Prepare], interface)
         arguments: Contexts = {}  # type: ignore
         for param in _target.params:
-            arguments[param.name] = await param.solve(contexts)
+            if param.depend:
+                arguments[param.name] = await depend_handler(param.depend.sub, source=contexts, inner=True)
+            else:
+                arguments[param.name] = await param.solve(contexts)
         if Complete in _target.auxiliaries:
             interface = Interface(arguments, _target.providers)
-            for aux in _target.auxiliaries[Complete]:
-                await complete(aux, interface)
+            await complete(_target.auxiliaries[Complete], interface)
         result = await _target.callable_target(**arguments)
     except InnerHandlerException as e:
         if inner:
@@ -131,28 +133,14 @@ async def depend_handler(
     except Exception as e:
         raise exception_handler(e, _target, contexts, inner) from e  # type: ignore
     finally:
-        if Cleanup in _target.auxiliaries:
-            for aux in _target.auxiliaries[Cleanup]:
-                await aux(Cleanup, Interface(contexts, _target.providers))
-        contexts.clear()
+        _, exception, tb = sys.exc_info()
+        if exception and OnError in _target.auxiliaries:
+            contexts["$error"] = exception
+            interface = Interface(contexts, _target.providers)
+            await onerror(_target.auxiliaries[OnError], interface)
+    if Cleanup in _target.auxiliaries:
+        contexts["$result"] = result
+        interface = Interface(contexts, _target.providers)
+        await cleanup(_target.auxiliaries[Cleanup], interface)
+    contexts.clear()
     return result
-
-
-async def prepare(decorator: Executor, interface: Interface):
-    res = await decorator(Prepare, interface)
-    if res is False:
-        raise JudgementError
-    if isinstance(res, dict):
-        interface.ctx.update(res)
-
-
-async def complete(decorator: Executor, interface: Interface):
-    keys = set(interface.ctx.keys())
-    res = await decorator(Complete, interface)
-    if res is False:
-        raise JudgementError
-    if isinstance(res, dict):
-        if keys.issuperset(res.keys()):
-            interface.ctx.update(res)
-            return
-        raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")

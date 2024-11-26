@@ -5,11 +5,12 @@ from collections.abc import Coroutine
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
-from typing import Any, Awaitable, Callable, Dict, TypeVar, Union
+from typing import Any, Callable, TypeVar, Union
+from collections.abc import Awaitable
 from typing_extensions import ParamSpec
 
 
-class Contexts(Dict[str, Any]):
+class Contexts(dict[str, Any]):
     ...
 
 

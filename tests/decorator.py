@@ -1,15 +1,21 @@
 import asyncio
 
-from arclet.letoderea import EventSystem, bind
+from arclet.letoderea import es, bind
 from arclet.letoderea.auxiliary import AuxType, BaseAuxiliary, Scope, Interface
-
-es = EventSystem()
 
 
 class TestDecorate(BaseAuxiliary):
 
     def __init__(self):
         super().__init__(AuxType.supply)
+
+    @property
+    def id(self) -> str:
+        return "TestDecorate"
+
+    @property
+    def scopes(self) -> set[Scope]:
+        return {Scope.prepare, Scope.complete}
 
     async def __call__(self, scope: Scope, interface: Interface):
         if scope == Scope.prepare:
@@ -25,10 +31,6 @@ class TestDecorate(BaseAuxiliary):
             if isinstance(v, str):
                 ans[k] = bytes(v, encoding="utf-8")
         return interface.update(**ans)
-
-    @property
-    def scopes(self) -> set[Scope]:
-        return {Scope.prepare, Scope.complete}
 
 
 class ExampleEvent:

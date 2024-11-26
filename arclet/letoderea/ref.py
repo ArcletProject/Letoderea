@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast
 
 from .typing import Contexts
 
@@ -8,7 +8,7 @@ T = TypeVar("T")
 class Deref:
     def __init__(self, proxy_type: type):
         self.__proxy_type = proxy_type
-        self.__items: Dict[Optional[str], Optional[Tuple[bool, Callable[[Any], Any]]]] = {}
+        self.__items: dict[Optional[str], Optional[tuple[bool, Callable[[Any], Any]]]] = {}
         self.__last_key = None
 
     def __getattr__(self, item):

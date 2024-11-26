@@ -3,6 +3,7 @@ from __future__ import annotations
 from asyncio import Queue
 from contextlib import suppress
 from typing import Any, Callable, TypeVar, ClassVar, overload
+from collections.abc import Sequence
 
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
@@ -13,6 +14,7 @@ from .subscriber import Subscriber
 from .typing import Contexts
 
 global_providers: list[Provider] = []
+global_auxiliaries: list[BaseAuxiliary] = []
 
 T = TypeVar("T")
 
@@ -21,7 +23,9 @@ class EventProvider(Provider[BaseEvent]):
     EVENT_CLASS: ClassVar[type] = BaseEvent
 
     def validate(self, param: Param):
-        return (isinstance(param.annotation, type) and issubclass(param.annotation, self.EVENT_CLASS)) or param.name == "event"
+        if param.name == "event":
+            return True
+        return isinstance(param.annotation, type) and issubclass(param.annotation, self.EVENT_CLASS)
 
     async def __call__(self, context: Contexts) -> BaseEvent | None:
         return context.get("$event")
@@ -74,7 +78,7 @@ class Publisher:
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
-    async def publish(self, event: BaseEvent) -> Any:
+    async def emit(self, event: BaseEvent) -> Any:
         """主动向自己的订阅者发布事件"""
         await dispatch(self.subscribers, event)
 
@@ -142,7 +146,9 @@ class Publisher:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[
+                Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
     ) -> Subscriber:
         ...
 
@@ -152,7 +158,9 @@ class Publisher:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[
+            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
     ) -> Callable[[Callable[..., Any]], Subscriber]:
         ...
 
@@ -162,7 +170,9 @@ class Publisher:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[
+            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
     ):
         """注册一个订阅者"""
         auxiliaries = auxiliaries or []
@@ -175,6 +185,7 @@ class Publisher:
                 *providers,
             ]
             _auxiliaries = [
+                *global_auxiliaries,
                 *self.auxiliaries,
                 *auxiliaries,
             ]

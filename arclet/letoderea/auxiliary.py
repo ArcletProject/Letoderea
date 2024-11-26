@@ -1,14 +1,12 @@
-from __future__ import annotations
-
+import asyncio
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from functools import partial
-from typing import Any, Awaitable, Callable, ClassVar, Final, Literal, Optional, Protocol, overload, TypeVar, Generic
+from typing import Any, Callable, ClassVar, Final, Literal, Optional, overload, TypeVar, Generic, Union
 
 from tarina import run_always_await
 
-from .exceptions import UndefinedRequirement
+from .exceptions import UndefinedRequirement, JudgementError, UnexpectedArgument
 from .provider import Provider, ProviderFactory, Param
 from .typing import Contexts
 
@@ -18,9 +16,10 @@ D = TypeVar("D")
 
 
 class Interface(Generic[T]):
-    def __init__(self, ctx: Contexts, providers: list[Provider | ProviderFactory]):
+    def __init__(self, ctx: Contexts, providers: list[Union[Provider, ProviderFactory]]):
         self.ctx = ctx
         self.providers = providers
+        self.executed: set[str] = set()
 
     def clear(self):
         self.ctx.clear()
@@ -36,16 +35,24 @@ class Interface(Generic[T]):
     def event(self) -> T:
         return self.ctx["$event"]
 
+    @property
+    def result(self) -> T:
+        return self.ctx["$result"]
+
+    @property
+    def error(self) -> Exception:
+        return self.ctx["$error"]
+
     @overload
     def query(self, typ: type[Q], name: str) -> Q:
         ...
 
     @overload
-    def query(self, typ: type[Q], name: str, *, force_return: Literal[True]) -> Q | None:
+    def query(self, typ: type[Q], name: str, *, force_return: Literal[True]) -> Optional[Q]:
         ...
 
     @overload
-    def query(self, typ: type[Q], name: str, default: D) -> Q | D:
+    def query(self, typ: type[Q], name: str, default: D) -> Union[Q, D]:
         ...
 
     def query(self, typ: type, name: str, default: Any = None, force_return: bool = False):
@@ -68,23 +75,16 @@ class AuxType(str, Enum):
     depend = "depend"
 
 
-class CombineMode(str, Enum):
-    AND = "and"
-    OR = "or"
-    SINGLE = "single"
-
-
 class Scope(str, Enum):
     prepare = "prepare"
-    parsing = "parsing"
     complete = "complete"
+    onerror = "onerror"
     cleanup = "cleanup"
 
 
 @dataclass(init=False, eq=True, unsafe_hash=True)
 class BaseAuxiliary(metaclass=ABCMeta):
     type: AuxType
-    mode: CombineMode
     priority: ClassVar[int] = 20
 
     @property
@@ -92,9 +92,13 @@ class BaseAuxiliary(metaclass=ABCMeta):
     def scopes(self) -> set[Scope]:
         raise NotImplementedError
 
-    def __init__(self, atype: AuxType, mode: CombineMode = CombineMode.SINGLE, priority: int = 20):
+    @property
+    @abstractmethod
+    def id(self) -> str:
+        raise NotImplementedError
+
+    def __init__(self, atype: AuxType, priority: int = 20):
         self.type = atype
-        self.mode = mode
         self.__class__.priority = priority
 
     @abstractmethod
@@ -103,8 +107,8 @@ class BaseAuxiliary(metaclass=ABCMeta):
 
 
 class SupplyAuxiliary(BaseAuxiliary):
-    def __init__(self, mode: CombineMode = CombineMode.SINGLE, priority: int = 20):
-        super().__init__(AuxType.supply, mode, priority)
+    def __init__(self, priority: int = 20):
+        super().__init__(AuxType.supply, priority)
 
     @abstractmethod
     async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
@@ -112,108 +116,44 @@ class SupplyAuxiliary(BaseAuxiliary):
 
 
 class JudgeAuxiliary(BaseAuxiliary):
-    def __init__(self, mode: CombineMode = CombineMode.SINGLE, priority: int = 20):
-        super().__init__(AuxType.judge, mode, priority)
+    def __init__(self, priority: int = 20):
+        super().__init__(AuxType.judge, priority)
 
     @abstractmethod
     async def __call__(self, scope: Scope, interface: Interface) -> Optional[bool]:
         raise NotImplementedError
 
 
-class Executor(Protocol):
-    async def __call__(self, scope: Scope, interface: Interface): ...
-
-
-class CombineExecutor:
-    steps: list[Callable[[Scope, Interface], Awaitable]]
-
-    def __init__(self, auxes: list[BaseAuxiliary]):
-        self.steps = []
-        ors = []
-
-        async def _ors(_scope: Scope, interface: Interface, *, funcs: list[BaseAuxiliary]):
-            res = None
-            for func in funcs:
-                res = await func(_scope, interface)
-                if res is None:
-                    continue
-                if res:
-                    return res
-            return res
-
-        for aux in auxes:
-            if aux.mode == CombineMode.AND:
-                if ors:
-                    ors.append(aux)
-                    self.steps.append(partial(_ors, funcs=ors.copy()))
-                    ors.clear()
-                else:
-                    self.steps.append(aux)
-            elif aux.mode == CombineMode.OR:
-                ors.append(aux)
-        if ors:
-            self.steps.append(partial(_ors, funcs=ors.copy()))
-            ors.clear()
-
-    async def __call__(self, scope: Scope, interface: Interface):
-        res = {}
-        for step in self.steps:
-            if (last := await step(scope, interface)) is None:
-                continue
-            if isinstance(last, dict):
-                interface.ctx.update(last)
-                res.update(last)
-            elif last is False:
-                return False
-            elif last is True:
-                continue
-        return res or True
-
-
-def combine(auxiliaries: list[BaseAuxiliary]) -> list[Executor]:
-    cb = []
-    res = []
-    auxiliaries.sort(key=lambda x: x.priority)
-    for aux in auxiliaries:
-        if aux.mode == CombineMode.SINGLE:
-            if cb:
-                res.append(CombineExecutor(cb))
-                cb.clear()
-            res.append(aux)
-        else:
-            cb.append(aux)
-    return res
-
-
 @overload
 def auxilia(
+    name: str,
     atype: Literal[AuxType.supply],
-    mode: CombineMode = CombineMode.SINGLE,
     priority: int = 20,
-    prepare: Callable[[Interface], Optional[Interface.Update]] | None = None,
-    complete: Callable[[Interface], Optional[Interface.Update]] | None = None,
-    cleanup: Callable[[Interface], Optional[Interface.Update]] | None = None,
+    prepare: Optional[Callable[[Interface], Optional[Interface.Update]]] = None,
+    complete: Optional[Callable[[Interface], Optional[Interface.Update]]] = None,
 ): ...
 
 
 @overload
 def auxilia(
+    name: str,
     atype: Literal[AuxType.judge],
-    mode: CombineMode = CombineMode.SINGLE,
     priority: int = 20,
-    prepare: Callable[[Interface], Optional[bool]] | None = None,
-    complete: Callable[[Interface], Optional[bool]] | None = None,
-    cleanup: Callable[[Interface], Optional[bool]] | None = None,
+    prepare: Optional[Callable[[Interface], Optional[bool]]] = None,
+    complete: Optional[Callable[[Interface], Optional[bool]]] = None,
+    cleanup: Optional[Callable[[Interface], Optional[bool]]] = None,
+    onerror: Optional[Callable[[Interface], Optional[bool]]] = None,
 ): ...
 
 
 def auxilia(
+    name: str,
     atype: AuxType,
-    mode: CombineMode = CombineMode.SINGLE,
     priority: int = 20,
-    prepare: Callable[[Interface], Any] | None = None,
-    complete: Callable[[Interface], Any] | None = None,
-    cleanup: Callable[[Interface], Any] | None = None,
+    prepare: Optional[Callable[[Interface], Any]] = None,
+    complete: Optional[Callable[[Interface], Any]] = None,
+    cleanup: Optional[Callable[[Interface], Any]] = None,
+    onerror: Optional[Callable[[Interface], Any]] = None,
 ):
     class _Auxiliary(BaseAuxiliary):
         async def __call__(self, scope: Scope, interface: Interface):
@@ -224,19 +164,68 @@ def auxilia(
                 res = await run_always_await(complete, interface)
             if scope == Scope.cleanup and cleanup is not None:
                 res = await run_always_await(cleanup, interface)
+            if scope == Scope.onerror and onerror is not None:
+                res = await run_always_await(onerror, interface)
             return res
 
         @property
         def scopes(self) -> set[Scope]:
             return {Prepare, Complete, Cleanup}
 
-    return _Auxiliary(atype, mode, priority)
+        @property
+        def id(self) -> str:
+            return name
+
+    return _Auxiliary(atype, priority)
 
 
-And: Final = CombineMode.AND
-Or: Final = CombineMode.OR
-Single: Final = CombineMode.SINGLE
 Prepare: Final = Scope.prepare
-Parsing: Final = Scope.parsing
 Complete: Final = Scope.complete
+OnError: Final = Scope.onerror
 Cleanup: Final = Scope.cleanup
+
+
+async def prepare(aux: list[BaseAuxiliary], interface: Interface):
+    for _aux in aux:
+        res = await _aux(Prepare, interface)
+        if res is None:
+            continue
+        if res is False:
+            raise JudgementError
+        interface.executed.add(_aux.id)
+        if isinstance(res, interface.Update):
+            interface.ctx.update(res)
+
+
+async def complete(aux: list[BaseAuxiliary], interface: Interface):
+    keys = set(interface.ctx.keys())
+    for _aux in aux:
+        res = await _aux(Complete, interface)
+        if res is None:
+            continue
+        if res is False:
+            raise JudgementError
+        interface.executed.add(_aux.id)
+        if isinstance(res, interface.Update):
+            if keys.issuperset(res.keys()):
+                interface.ctx.update(res)
+                continue
+            raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")
+
+
+async def onerror(aux: list[BaseAuxiliary], interface: Interface):
+    res = await asyncio.gather(*[_aux(OnError, interface) for _aux in aux], return_exceptions=True)
+    if False in res:
+        raise JudgementError
+    for _res in res:
+        if isinstance(_res, Exception):
+            raise _res
+
+
+async def cleanup(aux: list[BaseAuxiliary], interface: Interface):
+    res = await asyncio.gather(*[_aux(Cleanup, interface) for _aux in aux], return_exceptions=True)
+    if False in res:
+        raise JudgementError
+    for _res in res:
+        if isinstance(_res, Exception):
+            raise _res

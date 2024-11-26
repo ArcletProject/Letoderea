@@ -1,11 +1,8 @@
 import asyncio
 
-from arclet.letoderea import EventSystem
-from arclet.letoderea.builtin.breakpoint import Breakpoint, StepOut
+from arclet.letoderea import es
+from arclet.letoderea.breakpoint import StepOut
 from arclet.letoderea.typing import Contexts
-
-es = EventSystem()
-break_point = Breakpoint(es)
 
 
 async def handler(msg: str):
@@ -27,8 +24,7 @@ async def test(msg: str):
         print('[subscriber] >>> wait for msg: "continue!" ')
         out = StepOut([ExampleEvent], handler)
         print("[subscriber] >>> current out:", out)
-        with break_point:
-            res = await out.wait(default="default")
+        res = await out.wait(default="default")
         print("[subscriber] >>> wait result:", f'"{res}"')
         print("[subscriber] >>> finish!")
 

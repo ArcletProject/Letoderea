@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, Callable, TypeVar, overload
+from collections.abc import Sequence
 from weakref import finalize
 from itertools import chain
 
@@ -89,7 +90,9 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[
+            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
     ) -> Subscriber:
         ...
 
@@ -100,7 +103,9 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[
+            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
     ) -> Callable[[Callable[..., Any]], Subscriber]:
         ...
 
@@ -110,7 +115,9 @@ class EventSystem:
         func: Callable[..., Any] | None = None,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[
+            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
     ):
         events = events if isinstance(events, tuple) else (events,)
         if not (pub := publisher_ctx.get()):

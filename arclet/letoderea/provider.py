@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, ClassVar, Generic, NamedTuple, TypeVar, get_args
+from typing import Any, Callable, ClassVar, Generic, NamedTuple, TypeVar
+from collections.abc import Awaitable
 
 from tarina import generic_issubclass, run_always_await
-from tarina.generic import Unions, get_origin
+from tarina.generic import get_origin
 
 from .typing import Contexts
 
@@ -39,9 +40,7 @@ class Provider(Generic[T], metaclass=ABCMeta):
         anno = get_origin(param.annotation)
         return (
             self.origin == param.annotation
-            or (isinstance(anno, type) and generic_issubclass(anno, self.origin))
-            or (anno in Unions and self.origin in get_args(param.annotation))
-
+            or (isinstance(anno, type) and anno is not bool and generic_issubclass(anno, self.origin))
         )
 
     @abstractmethod

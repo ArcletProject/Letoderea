@@ -1,12 +1,10 @@
 import asyncio
 
-from arclet.letoderea import AuxType, EventSystem, auxilia
-from arclet.letoderea.builtin.breakpoint import Breakpoint, StepOut
+from arclet.letoderea import AuxType, es, auxilia
+from arclet.letoderea.breakpoint import StepOut
 from arclet.letoderea.typing import Contexts
 
 event = asyncio.Event()
-es = EventSystem()
-break_point = Breakpoint(es)
 
 
 async def handler(msg: str):
@@ -26,7 +24,7 @@ class ExampleEvent:
         context["msg"] = self.msg
 
 
-@es.on(ExampleEvent, auxiliaries=[auxilia(AuxType.judge, prepare=lambda x: x.query(str, "msg") == "hello")])
+@es.on(ExampleEvent, auxiliaries=[auxilia("hello", AuxType.judge, prepare=lambda x: x.query(str, "msg") == "hello")])
 async def test():
     if event.is_set():
         print("[subscriber] >>> program already running")
@@ -39,9 +37,9 @@ async def test():
         if res is None:
             continue
         if res is False:
+            print("[subscriber] >>> finish!")
             break
         print("[subscriber] >>> wait result:", f'"{res}"')
-        print("[subscriber] >>> finish!")
     event.clear()
 
 
@@ -67,6 +65,7 @@ async def main():
             print(i + 1, 'event posted with msg: "continue!"')
             es.post(b)
         await asyncio.sleep(1)
+    print(7, 'event posted with msg: "end."')
     es.post(d)
     await asyncio.sleep(1)
 

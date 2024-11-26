@@ -1,17 +1,36 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Generic, TypeVar
-from typing_extensions import Self, Annotated, get_args, get_origin
+from typing import Any, Callable, Generic, TypeVar
+from collections.abc import Awaitable, Sequence
+from typing_extensions import Self, get_args, get_origin
+from typing import Annotated
 
 from tarina import Empty, is_async, signatures
 
-from .auxiliary import AuxType, BaseAuxiliary, Executor, Scope, combine, Interface
+from .auxiliary import BaseAuxiliary, Scope
 from .event import BaseEvent
 from .exceptions import UndefinedRequirement
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
 from .typing import Contexts, Force, TTarget, run_sync
+
+
+@dataclass(init=False, eq=True)
+class Depend:
+    target: TTarget[Any]
+    sub: Subscriber[Any]
+
+    def __init__(self, callable_func: TTarget[Any]):
+        self.target = callable_func
+
+    def init_subscriber(self, provider: list[Provider | ProviderFactory]):
+        self.sub = Subscriber(self.target, providers=provider)
+        return self
+
+
+def Depends(target: TTarget[Any]) -> Any:
+    return Depend(target)
 
 
 @dataclass
@@ -20,14 +39,14 @@ class CompileParam:
     annotation: Any
     default: Any
     providers: list[Provider]
-    depend: Provider | None
+    depend: Depend | None
     record: Provider | None
 
     __slots__ = ("name", "annotation", "default", "providers", "depend", "record")
 
     async def solve(self, context: Contexts | dict[str, Any]):
         if self.depend:
-            return await self.depend(context)  # type: ignore
+            return await self.depend.sub.handle(context)  # type: ignore
         if self.name in context:
             return context[self.name]
         if self.record and (res := await self.record(context)):  # type: ignore
@@ -71,11 +90,9 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
                     param.providers.insert(0, provide(org, name, m))
         if isinstance(default, Provider):
             param.providers.insert(0, default)
-        if isinstance(default, BaseAuxiliary) and (default.type == AuxType.depend):
-            param.depend = provide(
-                anno,
-                call=lambda ctx: default("parsing", Interface(ctx, providers))
-            )
+        if isinstance(default, Depend):
+            default.init_subscriber(providers)
+            param.depend = default
         res.append(param)
     return res
 
@@ -87,7 +104,7 @@ class Subscriber(Generic[R]):
     name: str
     callable_target: Callable[..., Awaitable[R]]
     priority: int
-    auxiliaries: dict[Scope, list[Executor]]
+    auxiliaries: dict[Scope, list[BaseAuxiliary]]
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
     external_source: Callable[[Any], BaseEvent] | None = None
@@ -99,7 +116,7 @@ class Subscriber(Generic[R]):
         priority: int = 16,
         name: str | None = None,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         dispose: Callable[[Self], None] | None = None,
     ) -> None:
         self.name = name or callable_target.__name__
@@ -116,7 +133,7 @@ class Subscriber(Generic[R]):
             for scope in aux.scopes:
                 self.auxiliaries.setdefault(scope, []).append(aux)
         for scope, value in self.auxiliaries.items():
-            self.auxiliaries[scope] = combine(value)  # type: ignore
+            self.auxiliaries[scope] = sorted(value, key=lambda a: a.priority)  # type: ignore
         self.params = _compile(callable_target, self.providers)
         if is_async(callable_target):
             self.callable_target = callable_target  # type: ignore
@@ -144,3 +161,9 @@ class Subscriber(Generic[R]):
     def dispose(self):
         if self._dispose:
             self._dispose(self)
+
+    async def handle(self, context: Contexts) -> R:
+        arguments = {}
+        for param in self.params:
+            arguments[param.name] = await param.solve(context)
+        return await self.callable_target(**arguments)

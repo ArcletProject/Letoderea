@@ -1,8 +1,6 @@
 import asyncio
 
-from arclet.letoderea import BackendPublisher, Contexts, EventSystem, provide
-
-es = EventSystem()
+from arclet.letoderea import BackendPublisher, Contexts, es, provide
 
 
 class TestEvent:

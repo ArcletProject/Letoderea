@@ -1,9 +1,7 @@
 import asyncio
 from typing import Union
 
-from arclet.letoderea import EventSystem, provide
-
-es = EventSystem()
+from arclet.letoderea import es, provide
 
 
 class TestEvent:

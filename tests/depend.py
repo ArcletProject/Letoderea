@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-from arclet.letoderea import Contexts, Depends, EventSystem
+from arclet.letoderea import Contexts, Depends, es
 from arclet.letoderea.exceptions import ParsingStop
-
-es = EventSystem()
 
 
 class ExampleEvent:
@@ -15,7 +13,7 @@ class ExampleEvent:
 
 def test_depend(m: str):
     if m == "aa":
-        return False
+        return True
     raise ParsingStop
 
 

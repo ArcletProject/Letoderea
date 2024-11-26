@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Optional, Type, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 from .auxiliary import Interface, AuxType, BaseAuxiliary, Scope, auxilia
 from .event import BaseEvent
@@ -10,7 +10,7 @@ from .typing import Contexts, TTarget
 from .core import es
 
 
-def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
+def bind(*args: Union[BaseAuxiliary, Provider, type[Provider]]):
     auxiliaries = [a for a in args if isinstance(a, BaseAuxiliary)]
     providers = [p for p in args if not isinstance(p, BaseAuxiliary)]
     providers = [p() if isinstance(p, type) else p for p in providers]
@@ -33,7 +33,7 @@ def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
     return wrapper
 
 
-def subscribe(*event: Type[BaseEvent]):
+def subscribe(*event: type[BaseEvent]):
 
     def wrapper(target: TTarget) -> TTarget:
         return es.on(event)(target)
@@ -55,7 +55,7 @@ else:
                 raise ParsingStop()
             return True
 
-        inner = auxilia(AuxType.judge, prepare=_prepare)
+        inner = auxilia("bypass_if", AuxType.judge, prepare=_prepare)
 
         def wrapper(target: TTarget) -> TTarget:
             if isinstance(target, Subscriber):
@@ -70,9 +70,9 @@ else:
         return wrapper
 
 
-def allow_event(*events: Type[BaseEvent]):
+def allow_event(*events: type[BaseEvent]):
     return bypass_if(lambda ctx: not isinstance(ctx["$event"], events))
 
 
-def refuse_event(*events: Type[BaseEvent]):
+def refuse_event(*events: type[BaseEvent]):
     return bypass_if(lambda ctx: isinstance(ctx["$event"], events))

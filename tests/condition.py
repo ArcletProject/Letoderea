@@ -3,18 +3,21 @@ import gc
 from datetime import datetime
 from typing import Optional
 
-from arclet.letoderea import EventSystem, Interface
+from arclet.letoderea import es, Interface
 from arclet.letoderea.auxiliary import JudgeAuxiliary, Scope
 
 test_stack = [0]
-es = EventSystem()
 
 
 class TestTimeLimit(JudgeAuxiliary):
     def __init__(self, hour, minute):
         self.hour = hour
         self.minute = minute
-        super().__init__()
+        super().__init__(priority=10)
+
+    @property
+    def id(self):
+        return "TestTimeLimit"
 
     @property
     def scopes(self):
@@ -28,9 +31,13 @@ class TestTimeLimit(JudgeAuxiliary):
 class Interval(JudgeAuxiliary):
     def __init__(self, interval: float):
         self.success = True
-        self.last_time = datetime.now()
+        self.last_time = None
         self.interval = interval
-        super().__init__()
+        super().__init__(priority=20)
+
+    @property
+    def id(self):
+        return "Interval"
 
     @property
     def scopes(self):
@@ -38,6 +45,8 @@ class Interval(JudgeAuxiliary):
 
     async def __call__(self, scope: Scope, interface: Interface) -> Optional[bool]:
         if scope == Scope.prepare:
+            if not self.last_time:
+                return True
             self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
             return self.success
         if self.success:
@@ -53,7 +62,7 @@ class ExampleEvent:
         context["index"] = self.msg
 
 
-@es.on(ExampleEvent, auxiliaries=[TestTimeLimit(0, 0), Interval(0.2)])
+@es.on(ExampleEvent, auxiliaries=[TestTimeLimit(0, 0), Interval(0.3)])
 async def test(
     index: int,
     a: str = "hello",
@@ -67,7 +76,7 @@ b = ExampleEvent()
 
 async def main():
     for _ in range(11):
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.2)
         b.msg += 1
         await es.post(b)
 

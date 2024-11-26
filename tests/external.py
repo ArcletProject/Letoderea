@@ -1,9 +1,6 @@
 import asyncio
 
-from arclet.letoderea import EventSystem
-
-es = EventSystem()
-
+from arclet.letoderea import es
 
 with es.define(int, predicate=lambda x: x == 1) as pub1:
 
