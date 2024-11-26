@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from asyncio import Queue
 from contextlib import suppress
+from dataclasses import asdict, is_dataclass
 from typing import Any, Callable, TypeVar, ClassVar, overload
 from collections.abc import Sequence, Mapping
 
@@ -238,6 +239,14 @@ class BackendPublisher(Publisher):
         self.auxiliaries = []
 
 
+def _supplier(event: Any) -> dict[str, Any]:
+    if isinstance(event, dict):
+        return event
+    if is_dataclass(event) and not isinstance(event, type):
+        return asdict(event)
+    return {}
+
+
 class ExternalPublisher(Publisher):
     """宽松的发布器，任意对象都可以作为事件被发布"""
 
@@ -260,14 +269,11 @@ class ExternalPublisher(Publisher):
         self.providers = []
         self.auxiliaries = []
         self.target = target
-        self.supplier = supplier
+        self.supplier = supplier or _supplier
 
     def add_subscriber(self, subscriber: Subscriber) -> None:
         async def _(event):
-            return {
-                "$event": event,
-                **(self.supplier(event) if self.supplier else event if isinstance(event, dict) else {})
-            }
+            return {"$event": event, **(self.supplier(event))}
 
         subscriber.external_gather = _  # type: ignore
         self.subscribers.append(subscriber)

@@ -6,11 +6,10 @@ import time
 from cProfile import Profile
 from pprint import pprint
 
-from arclet.letoderea import Contexts, EventSystem, Param, Provider
+from arclet.letoderea import Contexts, es, Param, Provider
 from arclet.letoderea.handler import depend_handler
 
 loop = asyncio.new_event_loop()
-es = EventSystem()
 
 
 class TestEvent:
