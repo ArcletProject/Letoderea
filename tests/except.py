@@ -19,7 +19,7 @@ async def test_subscriber(name: str, age: int):
 
 
 async def main():
-    await es.publish(TestEvent())
+    await es.post(TestEvent())
 
 
 asyncio.run(main())

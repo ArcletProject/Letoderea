@@ -3,7 +3,7 @@ from asyncio import Future
 from typing import Awaitable, Callable, Generic, List, Optional, Set, Type, TypeVar, Union, overload
 
 from ..auxiliary import AuxType, BaseAuxiliary, auxilia
-from ..core import EventSystem, system_ctx
+from ..core import EventSystem, es
 from ..event import BaseEvent, get_auxiliaries, get_providers
 from ..exceptions import PropagationCancelled
 from ..handler import depend_handler
@@ -35,7 +35,7 @@ class _step_iter(Generic[R, D]):
     def __anext__(self: "_step_iter[R1, D1]") -> Awaitable[Union[R1, D1]]: ...
 
     def __anext__(self):  # type: ignore
-        bp = _backend.setdefault(0, Breakpoint(system_ctx.get()))
+        bp = _backend.setdefault(0, Breakpoint(es))
         return bp.wait(self.step, timeout=self.timeout, default=self.default)
 
 
@@ -95,7 +95,7 @@ class StepOut(Generic[R]):
         timeout: float = 0.0,
         default: Union[R, D, None] = None,
     ) -> Union[R, D]:
-        bp = _backend.setdefault(0, Breakpoint(system_ctx.get()))
+        bp = _backend.setdefault(0, Breakpoint(es))
         return await bp.wait(self, timeout, default=default)
 
 

@@ -1,13 +1,13 @@
 from typing import TYPE_CHECKING, Callable, Optional, Type, Union
 
 from .auxiliary import Interface, AuxType, BaseAuxiliary, Scope, auxilia
-from .context import system_ctx
 from .event import BaseEvent
 from .exceptions import ParsingStop
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
 from .typing import Contexts, TTarget
+from .core import es
 
 
 def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
@@ -34,10 +34,9 @@ def bind(*args: Union[BaseAuxiliary, Provider, Type[Provider]]):
 
 
 def subscribe(*event: Type[BaseEvent]):
-    es = system_ctx.get()
 
     def wrapper(target: TTarget) -> TTarget:
-        return es.on(*event)(target) if es else target
+        return es.on(event)(target)
 
     return wrapper
 

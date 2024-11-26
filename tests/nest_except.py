@@ -33,7 +33,7 @@ async def handler(a: int = Depends(wrapper1)):
 
 
 async def main():
-    await es.publish(ExampleEvent())
+    await es.post(ExampleEvent())
 
 
 asyncio.run(main())

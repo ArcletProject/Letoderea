@@ -17,7 +17,6 @@ from .builtin.breakpoint import Breakpoint as Breakpoint
 from .builtin.breakpoint import StepOut as StepOut
 from .builtin.depend import Depend as Depend
 from .builtin.depend import Depends as Depends
-from .context import system_ctx as system_ctx
 from .core import EventSystem as EventSystem
 from .decorate import allow_event as allow_event
 from .decorate import bind as bind

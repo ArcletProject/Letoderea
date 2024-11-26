@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Generic, TypeVar
-from typing_extensions import Annotated, get_args, get_origin
+from typing_extensions import Self, Annotated, get_args, get_origin
 
 from tarina import Empty, is_async, signatures
 
@@ -100,6 +100,7 @@ class Subscriber(Generic[R]):
         name: str | None = None,
         auxiliaries: list[BaseAuxiliary] | None = None,
         providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        dispose: Callable[[Self], None] | None = None,
     ) -> None:
         self.name = name or callable_target.__name__
         self.priority = priority
@@ -122,6 +123,7 @@ class Subscriber(Generic[R]):
         else:
             self.callable_target = run_sync(callable_target)  # type: ignore
         self.external_source = None
+        self._dispose = dispose
 
     def _recompile(self):
         self.params = _compile(self.callable_target, self.providers)
@@ -138,3 +140,7 @@ class Subscriber(Generic[R]):
         elif isinstance(other, str):
             return other == self.name
         return False
+
+    def dispose(self):
+        if self._dispose:
+            self._dispose(self)

@@ -31,7 +31,7 @@ async def test2(index: Annotated[int, deref(TestEvent).index], a: str = "hello")
 
 
 async def main():
-    await es.publish(TestEvent())
+    await es.post(TestEvent())
 
 
 asyncio.run(main())

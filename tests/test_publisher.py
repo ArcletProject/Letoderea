@@ -35,8 +35,8 @@ es.register(pub1, pub2)
 
 
 async def main():
-    await es.publish(TestEvent("hello world"))
-    await es.publish(TestEvent("world hello"))
+    await es.post(TestEvent("hello world"))
+    await es.post(TestEvent("world hello"))
 
 
 asyncio.run(main())

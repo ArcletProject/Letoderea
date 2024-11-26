@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from asyncio import Queue
 from contextlib import suppress
-from typing import Any, Callable, TypeVar, ClassVar
+from typing import Any, Callable, TypeVar, ClassVar, overload
 
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
@@ -135,8 +135,31 @@ class Publisher:
     def __exit__(self, exc_type, exc_val, exc_tb):
         publisher_ctx.reset(self._token)
 
+    @overload
     def register(
         self,
+        func: Callable[..., Any],
+        *,
+        priority: int = 16,
+        auxiliaries: list[BaseAuxiliary] | None = None,
+        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+    ) -> Subscriber:
+        ...
+
+    @overload
+    def register(
+        self,
+        *,
+        priority: int = 16,
+        auxiliaries: list[BaseAuxiliary] | None = None,
+        providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]:
+        ...
+
+    def register(
+        self,
+        func: Callable[..., Any] | None = None,
+        *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
         providers: list[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
@@ -145,7 +168,7 @@ class Publisher:
         auxiliaries = auxiliaries or []
         providers = providers or []
 
-        def register_wrapper(exec_target: Callable) -> Subscriber:
+        def register_wrapper(exec_target: Callable, /) -> Subscriber:
             _providers = [
                 *global_providers,
                 *self.providers,
@@ -160,10 +183,13 @@ class Publisher:
                 priority=priority,
                 auxiliaries=_auxiliaries,
                 providers=_providers,
+                dispose=self.remove_subscriber,
             )
             self.add_subscriber(res)
             return res
 
+        if func:
+            return register_wrapper(func)
         return register_wrapper
 
     def __iadd__(self, other):
@@ -196,6 +222,7 @@ class BackendPublisher(Publisher):
 
 
 class ExternalPublisher(Publisher):
+    """宽松的发布器，任意对象都可以作为事件被发布"""
 
     def __init__(
         self,

@@ -37,7 +37,7 @@ async def test1(
 
 
 async def main():
-    await es.publish(TestEvent())
+    await es.post(TestEvent())
 
 
 asyncio.run(main())
