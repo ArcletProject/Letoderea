@@ -1,6 +1,7 @@
 import asyncio
+from typing import TypedDict
 from dataclasses import dataclass
-from arclet.letoderea import Publisher, make_event
+from arclet.letoderea import es, make_event
 
 
 @make_event
@@ -9,35 +10,35 @@ class TestEvent:
     index: int
 
 
-@make_event
-@dataclass
-class PluginEventA:
+class Data(TypedDict):
     query: str
 
 
-plugin_publisher = Publisher("plugin_publisher", PluginEventA)
-test_publisher = Publisher("test_publisher", TestEvent)
+es.define("pluginA", Data)
 
 
+@es.on(TestEvent)
 async def test(index: int):
     print("test:", index)
-    print("send PluginEventA for query")
-    res = await plugin_publisher.bail(PluginEventA("query"))
-    print("PluginEventA res:", res)
+    print("send pluginA Data")
+    res = await es.post({"query": "abcd"})
+    if res:
+        print("pluginA query res:", res.value)
+    else:
+        print("pluginA query failed")
 
 
+@es.use("pluginA")
 async def test1(query: str):
-    print("test1:", query)
-    return "res"
+    print("pluginA query:", query)
+    return "efgh"
 
 
 async def main():
-    test_publisher.register(test)
-    sub = plugin_publisher.register(test1)
-    await test_publisher.emit(TestEvent(0))
+    await es.publish(TestEvent(0))
     await asyncio.sleep(1)
-    sub.dispose()
-    await test_publisher.emit(TestEvent(1))
+    test1.dispose()
+    await es.publish(TestEvent(1))
 
 
 asyncio.run(main())

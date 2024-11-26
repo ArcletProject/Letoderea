@@ -5,7 +5,7 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Literal, Callable, overload
+from typing import Literal, Callable, overload, Any
 from collections.abc import Iterable
 
 from .auxiliary import Interface, Cleanup, Complete, Prepare, OnError, prepare, cleanup, complete, onerror
@@ -106,7 +106,7 @@ def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inne
 
 async def depend_handler(
     target: Subscriber | Callable,
-    event: BaseEvent | None = None,
+    event: Any | None = None,
     source: Contexts | None = None,
     inner: bool = False,
 ):
@@ -115,10 +115,12 @@ async def depend_handler(
             _target = Subscriber(target, providers=get_providers(event.__class__))  # type: ignore
         else:
             _target: Subscriber = target  # type: ignore
-        contexts: Contexts = {"$event": event, "$subscriber": _target}  # type: ignore
-        if _target.external_source:
-            event = _target.external_source(event)
-        await event.gather(contexts)
+        if _target.external_gather:
+            contexts = await _target.external_gather(event)
+            contexts["$subscriber"] = _target
+        else:
+            contexts: Contexts = {"$event": event, "$subscriber": _target}  # type: ignore
+            await event.gather(contexts)
     elif source:
         contexts = source
         if target.__class__ != Subscriber:

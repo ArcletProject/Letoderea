@@ -4,12 +4,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Generic, TypeVar
 from collections.abc import Awaitable, Sequence
 from typing_extensions import Self, get_args, get_origin
-from typing import Annotated
+from typing import Annotated, final
 
 from tarina import Empty, is_async, signatures
 
 from .auxiliary import BaseAuxiliary, Scope
-from .event import BaseEvent
 from .exceptions import UndefinedRequirement
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -100,6 +99,7 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
 R = TypeVar("R")
 
 
+@final
 class Subscriber(Generic[R]):
     name: str
     callable_target: Callable[..., Awaitable[R]]
@@ -107,7 +107,7 @@ class Subscriber(Generic[R]):
     auxiliaries: dict[Scope, list[BaseAuxiliary]]
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
-    external_source: Callable[[Any], BaseEvent] | None = None
+    external_gather: Callable[[Any], Awaitable[Contexts]] | None = None
 
     def __init__(
         self,
@@ -139,7 +139,7 @@ class Subscriber(Generic[R]):
             self.callable_target = callable_target  # type: ignore
         else:
             self.callable_target = run_sync(callable_target)  # type: ignore
-        self.external_source = None
+        self.external_gather = None
         self._dispose = dispose
 
     def _recompile(self):

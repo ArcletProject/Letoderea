@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, Callable, TypeVar, overload
-from collections.abc import Sequence
+from collections.abc import Sequence, Mapping
 from weakref import finalize
 from itertools import chain
 
+from .event import BaseEvent
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
 from .handler import dispatch
@@ -50,11 +51,17 @@ class EventSystem:
 
     def define(
         self,
-        target: type[T],
-        supplier: Callable[[T], dict[str, Any]] | None = None,
+        name: str,
+        target: type[T] | None = None,
+        supplier: Callable[[T], Mapping[str, Any]] | None = None,
         predicate: Callable[[T], bool] | None = None,
     ):
-        publisher = ExternalPublisher(target, supplier, predicate)
+        if not target:
+            publisher = BackendPublisher(name, predicate)
+        elif issubclass(target, BaseEvent):
+            publisher = Publisher(name, target, predicate=predicate)
+        else:
+            publisher = ExternalPublisher(name, target, supplier, predicate)
         self.register(publisher)
         return publisher
 
@@ -148,7 +155,7 @@ class EventSystem:
     ):
         events = events if isinstance(events, tuple) else (events,)
         if not (pub := publisher_ctx.get()):
-            pub = Publisher("temp", *events) if events else self._backend_publisher
+            pub = Publisher(f"global::{sorted(events, key=lambda e: id(e))}", *events) if events else self._backend_publisher
         if pub.id in self.publishers:
             pub = self.publishers[pub.id]
         else:
@@ -157,6 +164,63 @@ class EventSystem:
         if not func:
             return pub.register(priority=priority, auxiliaries=auxiliaries, providers=providers)
         return pub.register(func, priority=priority, auxiliaries=auxiliaries, providers=providers)
+
+    @overload
+    def use(
+        self,
+        pub: str | Publisher,
+        func: Callable[..., Any],
+        *,
+        priority: int = 16,
+        auxiliaries: list[BaseAuxiliary] | None = None,
+        providers: Sequence[
+           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
+    ) -> Subscriber:
+        ...
+
+    @overload
+    def use(
+        self,
+        pub: str | Publisher,
+        *,
+        priority: int = 16,
+        auxiliaries: list[BaseAuxiliary] | None = None,
+        providers: Sequence[
+           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]:
+        ...
+
+    @overload
+    def use(
+        self,
+        *,
+        priority: int = 16,
+        auxiliaries: list[BaseAuxiliary] | None = None,
+        providers: Sequence[
+           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]:
+        ...
+
+    def use(
+        self,
+        pub: str | Publisher | None = None,
+        func: Callable[..., Any] | None = None,
+        priority: int = 16,
+        auxiliaries: list[BaseAuxiliary] | None = None,
+        providers: Sequence[
+           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
+    ):
+        if not pub:
+            publisher = publisher_ctx.get() or self._backend_publisher
+        else:
+            publisher = pub if isinstance(pub, Publisher) else self.publishers[pub]
+        if not func:
+            return publisher.register(priority=priority, auxiliaries=auxiliaries, providers=providers)
+        return publisher.register(func, priority=priority, auxiliaries=auxiliaries, providers=providers)
 
 
 es = EventSystem()

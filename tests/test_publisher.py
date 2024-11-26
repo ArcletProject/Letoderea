@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import BackendPublisher, Contexts, es, provide
+from arclet.letoderea import Contexts, es, provide
 
 
 class TestEvent:
@@ -13,7 +13,7 @@ class TestEvent:
 
 test = provide(str, call="name")
 
-with BackendPublisher("test", predicate=lambda x: x.name == "hello world") as pub1:
+with es.define("test", predicate=lambda x: x.name == "hello world") as pub1:
     pub1.bind(test)
 
     async def test_subscriber1(a: str):
@@ -21,15 +21,10 @@ with BackendPublisher("test", predicate=lambda x: x.name == "hello world") as pu
 
     pub1 += test_subscriber1
 
-with BackendPublisher("test", predicate=lambda x: x.name == "world hello") as pub2:
-    pub2.bind(test)
-
-    @pub2.register()
+with es.define("test", TestEvent, predicate=lambda x: x.name == "world hello"):
+    @es.use(providers=[test])
     async def test_subscriber2(a: str):
         print(2, a)
-
-
-es.register(pub1, pub2)
 
 
 async def main():

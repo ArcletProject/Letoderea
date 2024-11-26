@@ -3,7 +3,9 @@ from __future__ import annotations
 from asyncio import Queue
 from contextlib import suppress
 from typing import Any, Callable, TypeVar, ClassVar, overload
-from collections.abc import Sequence
+from collections.abc import Sequence, Mapping
+
+from tarina import generic_isinstance
 
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
@@ -55,7 +57,7 @@ class Publisher:
         predicate: Callable[[Any], bool] | None = None,
         queue_size: int = -1,
     ):
-        self.id = f"{id_}::{sorted(events, key=lambda e: id(e))}"
+        self.id = id_
         self.event_queue = Queue(queue_size)
         self.subscribers = []
         self.providers = []
@@ -241,31 +243,31 @@ class ExternalPublisher(Publisher):
 
     def __init__(
         self,
+        id_: str,
         target: type[T],
-        supplier: Callable[[T], dict[str, Any]] | None = None,
+        supplier: Callable[[T], Mapping[str, Any]] | None = None,
         predicate: Callable[[T], bool] | None = None,
         queue_size: int = -1,
     ):
-        self.id = f"{target.__name__}_{id(target)}"
+        self.id = id_
         if predicate:
             self.id += f"::{predicate}"
-            self.validate = lambda e: isinstance(e, target) and predicate(e)
+            self.validate = lambda e: generic_isinstance(e, target) and predicate(e)
         else:
-            self.validate = lambda e: isinstance(e, target)
+            self.validate = lambda e: generic_isinstance(e, target)
         self.event_queue = Queue(queue_size)
         self.subscribers = []
         self.providers = []
         self.auxiliaries = []
         self.target = target
-
-        class _FakeEvent:
-            async def gather(self, context):
-                if supplier:
-                    context.update(supplier(context["$event"]))
-                return context
-
-        self._fake_event_cls = _FakeEvent
+        self.supplier = supplier
 
     def add_subscriber(self, subscriber: Subscriber) -> None:
-        subscriber.external_source = lambda e: self._fake_event_cls()
+        async def _(event):
+            return {
+                "$event": event,
+                **(self.supplier(event) if self.supplier else event if isinstance(event, dict) else {})
+            }
+
+        subscriber.external_gather = _  # type: ignore
         self.subscribers.append(subscriber)
