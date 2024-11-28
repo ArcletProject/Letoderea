@@ -8,6 +8,8 @@ import traceback
 from typing import Literal, Callable, overload, Any
 from collections.abc import Iterable
 
+from tarina import generic_isinstance
+
 from .auxiliary import Interface, Cleanup, Complete, Prepare, OnError, prepare, cleanup, complete, onerror
 from .event import BaseEvent, get_providers
 from .exceptions import (
@@ -20,6 +22,14 @@ from .exceptions import (
 )
 from .subscriber import Subscriber
 from .typing import Contexts, Result
+
+
+def _check_result(event: Any, result: Result):
+    if not hasattr(event, "__result_type__"):
+        return result
+    if generic_isinstance(result.value, event.__result_type__):
+        return result
+    return
 
 
 @overload
@@ -47,9 +57,9 @@ async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent, return_r
             if not return_result:
                 continue
             if isinstance(result, Result):
-                return result
+                return _check_result(event, result)
             if not isinstance(result, BaseException) and result is not None and result is not False:
-                return Result(result)
+                return _check_result(event, Result(result))
 
 
 def exception_handler(e: Exception, target: Subscriber, contexts: Contexts, inner: bool = False):

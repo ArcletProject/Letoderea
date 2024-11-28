@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from uuid import uuid4
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, TypeVar
 from collections.abc import Awaitable, Sequence
@@ -101,7 +102,7 @@ R = TypeVar("R")
 
 @final
 class Subscriber(Generic[R]):
-    name: str
+    id: str
     callable_target: Callable[..., Awaitable[R]]
     priority: int
     auxiliaries: dict[Scope, list[BaseAuxiliary]]
@@ -114,12 +115,11 @@ class Subscriber(Generic[R]):
         callable_target: TTarget[R],
         *,
         priority: int = 16,
-        name: str | None = None,
         auxiliaries: list[BaseAuxiliary] | None = None,
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         dispose: Callable[[Self], None] | None = None,
     ) -> None:
-        self.name = name or callable_target.__name__
+        self.id = str(uuid4())
         self.priority = priority
         self.auxiliaries = {}
         providers = providers or []
@@ -149,13 +149,13 @@ class Subscriber(Generic[R]):
         return await self.callable_target(*args, **kwargs)
 
     def __repr__(self):
-        return f"Subscriber::{self.name}"
+        return f"Subscriber::{self.callable_target.__name__}"
 
     def __eq__(self, other):
         if isinstance(other, Subscriber):
-            return other.name == self.name
+            return other.id == self.id
         elif isinstance(other, str):
-            return other == self.name
+            return other == self.callable_target.__name__
         return False
 
     def dispose(self):

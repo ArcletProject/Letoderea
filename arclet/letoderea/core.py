@@ -13,6 +13,7 @@ from .handler import dispatch
 from .provider import Provider, ProviderFactory
 from .publisher import BackendPublisher, ExternalPublisher, Publisher
 from .subscriber import Subscriber
+from .typing import Result, Resultable
 
 T = TypeVar("T")
 
@@ -55,7 +56,11 @@ class EventSystem:
         target: type[T] | None = None,
         supplier: Callable[[T], Mapping[str, Any]] | None = None,
         predicate: Callable[[T], bool] | None = None,
-    ):
+    ) -> Publisher:
+        if name in self.publishers:
+            return self.publishers[name]
+        elif predicate and (_key := f"{name}::{predicate}") in self.publishers:
+            return self.publishers[_key]
         if not target:
             publisher = BackendPublisher(name, predicate)
         elif issubclass(target, BaseEvent):
@@ -69,19 +74,19 @@ class EventSystem:
         """发布事件"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
-            task = loop.create_task(dispatch(pub.subscribers, event))
+            task = loop.create_task(dispatch(pub.subscribers.values(), event))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(publisher, Publisher):
-            task = loop.create_task(dispatch(publisher.subscribers, event))
+            task = loop.create_task(dispatch(publisher.subscribers.values(), event))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         task = loop.create_task(
             dispatch(
                 chain.from_iterable(
-                    pub.subscribers for pub in self.publishers.values() if pub.validate(event)
+                    pub.subscribers.values() for pub in self.publishers.values() if pub.validate(event)
                 ),
                 event
             )
@@ -90,23 +95,31 @@ class EventSystem:
         task.add_done_callback(self._ref_tasks.discard)
         return task
 
+    @overload
+    def post(self, event: Resultable[T], publisher: str | Publisher | None = None) -> asyncio.Task[Result[T] | None]:
+        ...
+
+    @overload
+    def post(self, event: Any, publisher: str | Publisher | None = None) -> asyncio.Task[Result[Any] | None]:
+        ...
+
     def post(self, event: Any, publisher: str | Publisher | None = None):
         """发布事件并返回第一个响应结果"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
-            task = loop.create_task(dispatch(pub.subscribers, event, return_result=True))
+            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(publisher, Publisher):
-            task = loop.create_task(dispatch(publisher.subscribers, event, return_result=True))
+            task = loop.create_task(dispatch(publisher.subscribers.values(), event, return_result=True))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         task = loop.create_task(
             dispatch(
                 chain.from_iterable(
-                    pub.subscribers for pub in self.publishers.values() if pub.validate(event)
+                    pub.subscribers.values() for pub in self.publishers.values() if pub.validate(event)
                 ),
                 event,
                 return_result=True
@@ -143,9 +156,21 @@ class EventSystem:
     ) -> Callable[[Callable[..., Any]], Subscriber]:
         ...
 
+    @overload
     def on(
         self,
-        events: type | tuple[type, ...],
+        *,
+        priority: int = 16,
+        auxiliaries: list[BaseAuxiliary] | None = None,
+        providers: Sequence[
+            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
+        ] | None = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]:
+        ...
+
+    def on(
+        self,
+        events: type | tuple[type, ...] | None = None,
         func: Callable[..., Any] | None = None,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
@@ -153,9 +178,12 @@ class EventSystem:
             Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
         ] | None = None,
     ):
-        events = events if isinstance(events, tuple) else (events,)
         if not (pub := publisher_ctx.get()):
-            pub = Publisher(f"global::{sorted(events, key=lambda e: id(e))}", *events) if events else self._backend_publisher
+            if not events:
+                pub = self._backend_publisher
+            else:
+                events = events if isinstance(events, tuple) else (events,)
+                pub = Publisher(f"global::{sorted(events, key=lambda e: id(e))}", *events)
         if pub.id in self.publishers:
             pub = self.publishers[pub.id]
         else:

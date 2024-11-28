@@ -18,13 +18,13 @@ pip install arclet-letoderea
 ### 基本使用
 ```python
 import asyncio
-from arclet.letoderea import es, make_even
+from arclet.letoderea import es, make_event
 
 @make_event
 class TestEvent:
     name = "Letoderea"
 
-@es.on(TestEvent)
+@es.on()
 async def test_subscriber(name: str):
     print(name)
 
@@ -71,6 +71,8 @@ class Event:
 @dataclass
 class RandomData:
     seed: int
+    
+    __result_type__ = float
 
 @es.define("rand", RandomData).register()
 def random_subscriber(seed: int):

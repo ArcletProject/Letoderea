@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from asyncio import Queue
 from contextlib import suppress
-from dataclasses import asdict, is_dataclass
+from dataclasses import is_dataclass
 from typing import Any, Callable, TypeVar, ClassVar, overload
 from collections.abc import Sequence, Mapping
 
@@ -14,7 +14,7 @@ from .event import BaseEvent, get_auxiliaries, get_providers
 from .handler import dispatch
 from .provider import Param, Provider, ProviderFactory
 from .subscriber import Subscriber
-from .typing import Contexts, Result
+from .typing import Contexts, Result, Resultable
 
 global_providers: list[Provider] = []
 global_auxiliaries: list[BaseAuxiliary] = []
@@ -47,7 +47,7 @@ global_providers.extend([EventProvider(), ContextProvider()])
 
 class Publisher:
     id: str
-    subscribers: list[Subscriber]
+    subscribers: dict[str, Subscriber]
     providers: list[Provider | ProviderFactory]
     auxiliaries: list[BaseAuxiliary]
 
@@ -60,7 +60,7 @@ class Publisher:
     ):
         self.id = id_
         self.event_queue = Queue(queue_size)
-        self.subscribers = []
+        self.subscribers = {}
         self.providers = []
         self.auxiliaries = []
 
@@ -83,11 +83,19 @@ class Publisher:
 
     async def emit(self, event: Any) -> None:
         """主动向自己的订阅者发布事件"""
-        await dispatch(self.subscribers, event)
+        await dispatch(self.subscribers.values(), event)
+
+    @overload
+    async def bail(self, event: Resultable[T]) -> Result[T] | None:
+        ...
+
+    @overload
+    async def bail(self, event: Any) -> Result[Any] | None:
+        ...
 
     async def bail(self, event: Any) -> Result | None:
         """主动向自己的订阅者发布事件, 并返回结果"""
-        return await dispatch(self.subscribers, event, return_result=True)
+        return await dispatch(self.subscribers.values(), event, return_result=True)
 
     def unsafe_push(self, event: Any) -> None:
         """将事件放入队列，等待被 event system 主动轮询; 该方法可能引发 QueueFull 异常"""
@@ -105,14 +113,13 @@ class Publisher:
         """
         添加订阅者
         """
-        self.subscribers.append(subscriber)
+        self.subscribers[subscriber.id] = subscriber
 
     def remove_subscriber(self, subscriber: Subscriber) -> None:
         """
         移除订阅者
         """
-        with suppress(ValueError):
-            self.subscribers.remove(subscriber)
+        self.subscribers.pop(subscriber.id, None)
 
     def bind(
         self,
@@ -234,7 +241,7 @@ class BackendPublisher(Publisher):
         else:
             self.validate = lambda e: True
         self.event_queue = Queue(queue_size)
-        self.subscribers = []
+        self.subscribers = {}
         self.providers = []
         self.auxiliaries = []
 
@@ -242,8 +249,8 @@ class BackendPublisher(Publisher):
 def _supplier(event: Any) -> dict[str, Any]:
     if isinstance(event, dict):
         return event
-    if is_dataclass(event) and not isinstance(event, type):
-        return asdict(event)
+    if is_dataclass(event):
+        return vars(event)
     return {}
 
 
@@ -265,7 +272,7 @@ class ExternalPublisher(Publisher):
         else:
             self.validate = lambda e: generic_isinstance(e, target)
         self.event_queue = Queue(queue_size)
-        self.subscribers = []
+        self.subscribers = {}
         self.providers = []
         self.auxiliaries = []
         self.target = target
@@ -273,7 +280,9 @@ class ExternalPublisher(Publisher):
 
     def add_subscriber(self, subscriber: Subscriber) -> None:
         async def _(event):
-            return {"$event": event, **(self.supplier(event))}
+            data = {"$event": event, **(self.supplier(event))}
+            data = {k: v for k, v in data.items() if not k.startswith("_")}
+            return data
 
         subscriber.external_gather = _  # type: ignore
-        self.subscribers.append(subscriber)
+        self.subscribers[subscriber.id] = subscriber
