@@ -3,7 +3,7 @@ from __future__ import annotations
 from asyncio import Queue
 from contextlib import suppress
 from dataclasses import is_dataclass
-from typing import Any, Callable, TypeVar, ClassVar, overload
+from typing import Any, Callable, Protocol, TypeVar, ClassVar, overload, runtime_checkable
 from collections.abc import Sequence, Mapping
 
 from tarina import generic_isinstance
@@ -16,7 +16,7 @@ from .provider import Param, Provider, ProviderFactory
 from .subscriber import Subscriber
 from .typing import Contexts, Result, Resultable
 
-global_providers: list[Provider] = []
+global_providers: list[Provider | ProviderFactory | type[Provider] | type[ProviderFactory]] = []
 global_auxiliaries: list[BaseAuxiliary] = []
 
 T = TypeVar("T")
@@ -286,3 +286,8 @@ class ExternalPublisher(Publisher):
 
         subscriber.external_gather = _  # type: ignore
         self.subscribers[subscriber.id] = subscriber
+
+
+@runtime_checkable
+class Publishable(Protocol):
+    __publisher__: str

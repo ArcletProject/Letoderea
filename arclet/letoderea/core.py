@@ -11,7 +11,7 @@ from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import BackendPublisher, ExternalPublisher, Publisher
+from .publisher import BackendPublisher, ExternalPublisher, Publisher, Publishable
 from .subscriber import Subscriber
 from .typing import Result, Resultable
 
@@ -62,6 +62,8 @@ class EventSystem:
         elif predicate and (_key := f"{name}::{predicate}") in self.publishers:
             return self.publishers[_key]
         if not target:
+            if not predicate:
+                raise ValueError("If target is not provided, predicate must be provided")
             publisher = BackendPublisher(name, predicate)
         elif issubclass(target, BaseEvent):
             publisher = Publisher(name, target, predicate=predicate)
@@ -74,6 +76,11 @@ class EventSystem:
         """发布事件"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
+            task = loop.create_task(dispatch(pub.subscribers.values(), event))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        if isinstance(event, Publishable) and (pub := self.publishers.get(event.__publisher__)):
             task = loop.create_task(dispatch(pub.subscribers.values(), event))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
@@ -107,6 +114,11 @@ class EventSystem:
         """发布事件并返回第一个响应结果"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
+            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        if isinstance(event, Publishable) and (pub := self.publishers.get(event.__publisher__)):
             task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
@@ -183,7 +195,10 @@ class EventSystem:
                 pub = self._backend_publisher
             else:
                 events = events if isinstance(events, tuple) else (events,)
-                pub = Publisher(f"global::{sorted(events, key=lambda e: id(e))}", *events)
+                if len(events) == 1 and (hasattr(e := events[0], "__publisher__") and e.__publisher__ in self.publishers):
+                    pub = self.publishers[e.__publisher__]
+                else:
+                    pub = Publisher(f"global::{sorted(events, key=lambda e: id(e))}", *events)
         if pub.id in self.publishers:
             pub = self.publishers[pub.id]
         else:

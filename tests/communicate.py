@@ -14,6 +14,7 @@ class Data:
     query: str
 
     __result_type__ = str
+    __publisher__ = "pluginA"
 
 
 es.define("pluginA", Data)
@@ -41,7 +42,7 @@ async def test2(query: str):
 
 
 async def main():
-    sub1 = es.use("pluginA", test1)
+    sub1 = es.on(Data, test1)
     await es.publish(TestEvent(0))
     await asyncio.sleep(1)
     sub1.dispose()

@@ -33,21 +33,23 @@ def _check_result(event: Any, result: Result):
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent) -> None:
+async def dispatch(subscribers: Iterable[Subscriber], event: Any) -> None:
     ...
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent, return_result: Literal[True]) -> Result | None:
+async def dispatch(subscribers: Iterable[Subscriber], event: Any, return_result: Literal[True]) -> Result | None:
     ...
 
 
-async def dispatch(subscribers: Iterable[Subscriber], event: BaseEvent, return_result: bool = False):
+async def dispatch(subscribers: Iterable[Subscriber], event: Any, return_result: bool = False):
     if not subscribers:
         return
     grouped: dict[int, list[Subscriber]] = {}
     for s in subscribers:
-        grouped.setdefault(s.priority, []).append(s)
+        if (priority := s.priority) not in grouped:
+            grouped[priority] = []
+        grouped[priority].append(s)
     for priority in sorted(grouped.keys()):
         tasks = [depend_handler(subscriber, event) for subscriber in grouped[priority]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
