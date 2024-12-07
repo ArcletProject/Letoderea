@@ -1,36 +1,65 @@
 from __future__ import annotations
 
+import sys
 from uuid import uuid4
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, TypeVar
 from collections.abc import Awaitable, Sequence
+from contextlib import contextmanager, asynccontextmanager, AsyncExitStack
 from typing_extensions import Self, get_args, get_origin
 from typing import Annotated, final
 
 from tarina import Empty, is_async, signatures
 
-from .auxiliary import BaseAuxiliary, Scope
-from .exceptions import UndefinedRequirement
+from . import Interface
+from .auxiliary import BaseAuxiliary, AuxType, Scope, prepare, cleanup, complete, Prepare, Cleanup, Complete
+from .exceptions import UndefinedRequirement, InnerHandlerException, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import Contexts, Force, TTarget, run_sync
+from .typing import Contexts, Force, TTarget, run_sync, run_sync_ctx_manager, is_gen_callable, is_async_gen_callable
+
+
+class _ManageExitStack(BaseAuxiliary):
+    def __init__(self):
+        super().__init__(AuxType.supply, 0)
+
+    @property
+    def scopes(self) -> set[Scope]:
+        return {Scope.cleanup, Scope.prepare}
+
+    @property
+    def id(self) -> str:
+        return "builtin:exit_stack"
+
+    async def __call__(self, scope: Scope, interface: Interface):
+        if scope is Scope.prepare:
+            if "$exit_stack" not in interface.ctx:
+                return interface.update(**{"$exit_stack": AsyncExitStack()})
+            return
+        stack: AsyncExitStack = interface.ctx["$exit_stack"]
+        if error := interface.error:
+            await stack.__aexit__(type(error), error, error.__traceback__)
+        else:
+            await stack.aclose()
 
 
 @dataclass(init=False, eq=True)
 class Depend:
     target: TTarget[Any]
     sub: Subscriber[Any]
+    cache: bool = False
 
-    def __init__(self, callable_func: TTarget[Any]):
+    def __init__(self, callable_func: TTarget[Any], cache: bool = False):
         self.target = callable_func
+        self.cache = cache
 
     def init_subscriber(self, provider: list[Provider | ProviderFactory]):
         self.sub = Subscriber(self.target, providers=provider)
         return self
 
 
-def Depends(target: TTarget[Any]) -> Any:
-    return Depend(target)
+def Depends(target: TTarget[Any], cache: bool = False) -> Any:
+    return Depend(target, cache)
 
 
 @dataclass
@@ -45,8 +74,6 @@ class CompileParam:
     __slots__ = ("name", "annotation", "default", "providers", "depend", "record")
 
     async def solve(self, context: Contexts | dict[str, Any]):
-        if self.depend:
-            return await self.depend.sub.handle(context)  # type: ignore
         if self.name in context:
             return context[self.name]
         if self.record and (res := await self.record(context)):  # type: ignore
@@ -110,6 +137,8 @@ class Subscriber(Generic[R]):
     params: list[CompileParam]
     external_gather: Callable[[Any], Awaitable[Contexts]] | None = None
 
+    _callable_target: Callable[..., Any]
+
     def __init__(
         self,
         callable_target: TTarget[R],
@@ -125,20 +154,37 @@ class Subscriber(Generic[R]):
         providers = providers or []
         self.providers = [p() if isinstance(p, type) else p for p in providers]
         auxiliaries = auxiliaries or []
+
         if hasattr(callable_target, "__auxiliaries__"):
             auxiliaries.extend(getattr(callable_target, "__auxiliaries__", []))
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
+        self.params = _compile(callable_target, self.providers)
+        self.callable_target = callable_target  # type: ignore
+        self.is_cm = False
+        if is_gen_callable(callable_target) or is_async_gen_callable(callable_target):
+            if is_gen_callable(callable_target):
+                self._callable_target = run_sync_ctx_manager(contextmanager(callable_target))
+            else:
+                self._callable_target = asynccontextmanager(callable_target)  # type: ignore
+            self.is_cm = True
+        elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (is_gen_callable(wrapped) or is_async_gen_callable(wrapped)):
+            if is_gen_callable(wrapped):
+                self._callable_target = run_sync_ctx_manager(contextmanager(wrapped))
+            else:
+                self._callable_target = asynccontextmanager(wrapped)  # type: ignore
+            self.is_cm = True
+        elif is_async(callable_target):
+            self._callable_target = callable_target  # type: ignore
+        else:
+            self._callable_target = run_sync(callable_target)  # type: ignore
+        if self.is_cm:
+            auxiliaries.insert(0, _ManageExitStack())
         for aux in auxiliaries:
             for scope in aux.scopes:
                 self.auxiliaries.setdefault(scope, []).append(aux)
         for scope, value in self.auxiliaries.items():
             self.auxiliaries[scope] = sorted(value, key=lambda a: a.priority)  # type: ignore
-        self.params = _compile(callable_target, self.providers)
-        if is_async(callable_target):
-            self.callable_target = callable_target  # type: ignore
-        else:
-            self.callable_target = run_sync(callable_target)  # type: ignore
         self.external_gather = None
         self._dispose = dispose
 
@@ -162,8 +208,48 @@ class Subscriber(Generic[R]):
         if self._dispose:
             self._dispose(self)
 
-    async def handle(self, context: Contexts) -> R:
-        arguments = {}
-        for param in self.params:
-            arguments[param.name] = await param.solve(context)
-        return await self.callable_target(**arguments)
+    async def handle(self, context: Contexts, inner=False) -> R:
+        try:
+            if Prepare in self.auxiliaries:
+                interface = Interface(context, self.providers)
+                await prepare(self.auxiliaries[Prepare], interface)
+            arguments: Contexts = {}  # type: ignore
+            for param in self.params:
+                if param.depend:
+                    if not param.depend.cache:
+                        arguments[param.name] = await param.depend.sub.handle(context.copy(), inner=True)  # type: ignore
+                        continue
+                    if "$depend_cache" not in context:
+                        context["$depend_cache"] = {}
+                    if param.depend.sub.callable_target in context["$depend_cache"]:
+                        arguments[param.name] = context["$depend_cache"][param.depend.sub.callable_target]
+                    else:
+                        dep_res = await param.depend.sub.handle(context.copy(), inner=True)  # type: ignore
+                        arguments[param.name] = dep_res
+                        context["$depend_cache"][param.depend.sub.callable_target] = dep_res
+                else:
+                    arguments[param.name] = await param.solve(context)
+            if Complete in self.auxiliaries:
+                interface = Interface(arguments, self.providers)
+                await complete(self.auxiliaries[Complete], interface)
+            if self.is_cm:
+                stack: AsyncExitStack = context["$exit_stack"]
+                result = await stack.enter_async_context(self._callable_target(**arguments))
+            else:
+                result = await self._callable_target(**arguments)
+            context["$result"] = result
+        except InnerHandlerException as e:
+            if inner:
+                raise
+            raise exception_handler(e.args[0], self.callable_target, context) from e  # type: ignore
+        except Exception as e:
+            raise exception_handler(e, self.callable_target, context, inner) from e  # type: ignore
+        finally:
+            _, exception, tb = sys.exc_info()
+            if exception:
+                context["$error"] = exception
+            if Cleanup in self.auxiliaries:
+                interface = Interface(context, self.providers)
+                await cleanup(self.auxiliaries[Cleanup], interface)
+            context.clear()
+        return result

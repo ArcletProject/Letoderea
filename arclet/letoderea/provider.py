@@ -41,6 +41,7 @@ class Provider(Generic[T], metaclass=ABCMeta):
         return (
             self.origin == param.annotation
             or (isinstance(anno, type) and anno is not bool and generic_issubclass(anno, self.origin))
+            or generic_issubclass(self.origin, param.annotation)
         )
 
     @abstractmethod

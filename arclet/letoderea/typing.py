@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Coroutine
+from contextlib import asynccontextmanager, AbstractContextManager, AbstractAsyncContextManager
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
-from typing import Any, Callable, TypeVar, Generic, Union, Protocol
+from typing import Any, Callable, TypeVar, Generic, Union, Protocol, AsyncGenerator, Generator
 from collections.abc import Awaitable
-from typing_extensions import ParamSpec
+from typing_extensions import ParamSpec, TypeGuard
 
 
 class Contexts(dict[str, Any]):
@@ -54,3 +56,40 @@ def run_sync(call: Callable[P, T]) -> Callable[P, Coroutine[None, None, T]]:
         return result
 
     return _wrapper
+
+
+def run_sync_ctx_manager(
+    call: Callable[P, AbstractContextManager[T]]
+) -> Callable[P, AbstractAsyncContextManager[T]]:
+    """一个用于包装 sync context manager 为 async context manager 的执行函数"""
+
+    @asynccontextmanager
+    @wraps(call)
+    async def _wrapper(*args: P.args, **kwargs: P.kwargs) -> AsyncGenerator[T, None]:
+        cm = call(*args, **kwargs)
+        try:
+            yield await run_sync(cm.__enter__)()
+        except Exception as e:
+            ok = await run_sync(cm.__exit__)(type(e), e, None)
+            if not ok:
+                raise e
+        else:
+            await run_sync(cm.__exit__)(None, None, None)
+
+    return _wrapper
+
+
+def is_gen_callable(call: Callable[..., Any]) -> TypeGuard[Callable[..., Generator]]:
+    """检查 call 是否是一个生成器函数"""
+    if inspect.isgeneratorfunction(call):
+        return True
+    func_ = getattr(call, "__call__", None)
+    return inspect.isgeneratorfunction(func_)
+
+
+def is_async_gen_callable(call: Callable[..., Any]) -> TypeGuard[Callable[..., AsyncGenerator]]:
+    """检查 call 是否是一个异步生成器函数"""
+    if inspect.isasyncgenfunction(call):
+        return True
+    func_ = getattr(call, "__call__", None)
+    return inspect.isasyncgenfunction(func_)

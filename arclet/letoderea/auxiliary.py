@@ -40,8 +40,8 @@ class Interface(Generic[T]):
         return self.ctx["$result"]
 
     @property
-    def error(self) -> Exception:
-        return self.ctx["$error"]
+    def error(self) -> Optional[Exception]:
+        return self.ctx.get("$error")
 
     @overload
     def query(self, typ: type[Q], name: str) -> Q:
@@ -72,13 +72,11 @@ class Interface(Generic[T]):
 class AuxType(str, Enum):
     supply = "supply"
     judge = "judge"
-    depend = "depend"
 
 
 class Scope(str, Enum):
     prepare = "prepare"
     complete = "complete"
-    onerror = "onerror"
     cleanup = "cleanup"
 
 
@@ -142,7 +140,6 @@ def auxilia(
     prepare: Optional[Callable[[Interface], Optional[bool]]] = None,
     complete: Optional[Callable[[Interface], Optional[bool]]] = None,
     cleanup: Optional[Callable[[Interface], Optional[bool]]] = None,
-    onerror: Optional[Callable[[Interface], Optional[bool]]] = None,
 ): ...
 
 
@@ -153,7 +150,6 @@ def auxilia(
     prepare: Optional[Callable[[Interface], Any]] = None,
     complete: Optional[Callable[[Interface], Any]] = None,
     cleanup: Optional[Callable[[Interface], Any]] = None,
-    onerror: Optional[Callable[[Interface], Any]] = None,
 ):
     class _Auxiliary(BaseAuxiliary):
         async def __call__(self, scope: Scope, interface: Interface):
@@ -164,8 +160,6 @@ def auxilia(
                 res = await run_always_await(complete, interface)
             if scope == Scope.cleanup and cleanup is not None:
                 res = await run_always_await(cleanup, interface)
-            if scope == Scope.onerror and onerror is not None:
-                res = await run_always_await(onerror, interface)
             return res
 
         @property
@@ -181,7 +175,6 @@ def auxilia(
 
 Prepare: Final = Scope.prepare
 Complete: Final = Scope.complete
-OnError: Final = Scope.onerror
 Cleanup: Final = Scope.cleanup
 
 
@@ -211,15 +204,6 @@ async def complete(aux: list[BaseAuxiliary], interface: Interface):
                 interface.ctx.update(res)
                 continue
             raise UnexpectedArgument(f"Unexpected argument in {keys - set(res.keys())}")
-
-
-async def onerror(aux: list[BaseAuxiliary], interface: Interface):
-    res = await asyncio.gather(*[_aux(OnError, interface) for _aux in aux], return_exceptions=True)
-    if False in res:
-        raise JudgementError
-    for _res in res:
-        if isinstance(_res, Exception):
-            raise _res
 
 
 async def cleanup(aux: list[BaseAuxiliary], interface: Interface):
