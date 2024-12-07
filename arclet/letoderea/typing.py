@@ -3,16 +3,18 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import Coroutine
-from contextlib import asynccontextmanager, AbstractContextManager, AbstractAsyncContextManager
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
-from typing import Any, Callable, TypeVar, Generic, Union, Protocol, AsyncGenerator, Generator
+from typing import Any, Callable, TypeVar, Generic, Union, Protocol, AsyncGenerator, Generator, TYPE_CHECKING
 from collections.abc import Awaitable
-from typing_extensions import ParamSpec, TypeGuard
+from typing_extensions import ParamSpec, TypeGuard, Self
 
 
 class Contexts(dict[str, Any]):
+    if TYPE_CHECKING:
+        def copy(self) -> Self:
+            ...
     ...
 
 
@@ -58,23 +60,25 @@ def run_sync(call: Callable[P, T]) -> Callable[P, Coroutine[None, None, T]]:
     return _wrapper
 
 
-def run_sync_ctx_manager(
-    call: Callable[P, AbstractContextManager[T]]
-) -> Callable[P, AbstractAsyncContextManager[T]]:
-    """一个用于包装 sync context manager 为 async context manager 的执行函数"""
+def run_sync_generator(
+    call: Callable[P, Generator[T]]
+) -> Callable[P, AsyncGenerator[T]]:
+    """一个用于包装 sync generator function 为 async generator function 的装饰器"""
 
-    @asynccontextmanager
+    def _next(it):
+        try:
+            return next(it)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
     @wraps(call)
     async def _wrapper(*args: P.args, **kwargs: P.kwargs) -> AsyncGenerator[T, None]:
-        cm = call(*args, **kwargs)
+        gen = call(*args, **kwargs)
         try:
-            yield await run_sync(cm.__enter__)()
-        except Exception as e:
-            ok = await run_sync(cm.__exit__)(type(e), e, None)
-            if not ok:
-                raise e
-        else:
-            await run_sync(cm.__exit__)(None, None, None)
+            while True:
+                yield await run_sync(_next)(gen)
+        except StopAsyncIteration:
+            return
 
     return _wrapper
 

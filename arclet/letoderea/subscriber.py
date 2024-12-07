@@ -16,7 +16,7 @@ from .auxiliary import BaseAuxiliary, AuxType, Scope, prepare, cleanup, complete
 from .exceptions import UndefinedRequirement, InnerHandlerException, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import Contexts, Force, TTarget, run_sync, run_sync_ctx_manager, is_gen_callable, is_async_gen_callable
+from .typing import Contexts, Force, TTarget, run_sync, run_sync_generator, is_gen_callable, is_async_gen_callable
 
 
 class _ManageExitStack(BaseAuxiliary):
@@ -135,7 +135,6 @@ class Subscriber(Generic[R]):
     auxiliaries: dict[Scope, list[BaseAuxiliary]]
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
-    external_gather: Callable[[Any], Awaitable[Contexts]] | None = None
 
     _callable_target: Callable[..., Any]
 
@@ -164,13 +163,13 @@ class Subscriber(Generic[R]):
         self.is_cm = False
         if is_gen_callable(callable_target) or is_async_gen_callable(callable_target):
             if is_gen_callable(callable_target):
-                self._callable_target = run_sync_ctx_manager(contextmanager(callable_target))
+                self._callable_target = asynccontextmanager(run_sync_generator(callable_target))
             else:
                 self._callable_target = asynccontextmanager(callable_target)  # type: ignore
             self.is_cm = True
         elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (is_gen_callable(wrapped) or is_async_gen_callable(wrapped)):
             if is_gen_callable(wrapped):
-                self._callable_target = run_sync_ctx_manager(contextmanager(wrapped))
+                self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
             else:
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
             self.is_cm = True
@@ -185,7 +184,6 @@ class Subscriber(Generic[R]):
                 self.auxiliaries.setdefault(scope, []).append(aux)
         for scope, value in self.auxiliaries.items():
             self.auxiliaries[scope] = sorted(value, key=lambda a: a.priority)  # type: ignore
-        self.external_gather = None
         self._dispose = dispose
 
     def _recompile(self):
@@ -209,6 +207,8 @@ class Subscriber(Generic[R]):
             self._dispose(self)
 
     async def handle(self, context: Contexts, inner=False) -> R:
+        if not inner:
+            context["$subscriber"] = self
         try:
             if Prepare in self.auxiliaries:
                 interface = Interface(context, self.providers)

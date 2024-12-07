@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Literal, Callable, overload, Any
+from typing import Literal, Callable, overload, Any, Awaitable
 from collections.abc import Iterable
 
 from tarina import generic_isinstance
@@ -23,25 +23,26 @@ def _check_result(event: Any, result: Result):
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], event: Any) -> None:
+async def dispatch(subscribers: Iterable[Subscriber], event: Any, *, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None) -> None:
     ...
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], event: Any, return_result: Literal[True]) -> Result | None:
+async def dispatch(subscribers: Iterable[Subscriber], event: Any, *, return_result: Literal[True], external_gather: Callable[[Any], Awaitable[Contexts]] | None = None) -> Result | None:
     ...
 
 
-async def dispatch(subscribers: Iterable[Subscriber], event: Any, return_result: bool = False):
+async def dispatch(subscribers: Iterable[Subscriber], event: Any, *, return_result: bool = False, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None):
     if not subscribers:
         return
+    contexts = await generate_contexts(event, external_gather)
     grouped: dict[int, list[Subscriber]] = {}
     for s in subscribers:
         if (priority := s.priority) not in grouped:
             grouped[priority] = []
         grouped[priority].append(s)
     for priority in sorted(grouped.keys()):
-        tasks = [depend_handler(subscriber, event) for subscriber in grouped[priority]]
+        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[priority]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for result in results:
             if result.__class__ is PropagationCancelled:
@@ -54,30 +55,21 @@ async def dispatch(subscribers: Iterable[Subscriber], event: Any, return_result:
                 return _check_result(event, Result(result))
 
 
-async def depend_handler(
-    target: Subscriber | Callable,
-    event: Any | None = None,
-    source: Contexts | None = None,
-    inner: bool = False,
-):
-    if event:
-        if target.__class__ != Subscriber:
-            _target = Subscriber(target, providers=get_providers(event.__class__))  # type: ignore
-        else:
-            _target: Subscriber = target  # type: ignore
-        if _target.external_gather:
-            contexts = await _target.external_gather(event)
-            contexts["$subscriber"] = _target
-        else:
-            contexts: Contexts = {"$event": event, "$subscriber": _target}  # type: ignore
-            await event.gather(contexts)
-    elif source:
-        contexts = source
-        if target.__class__ != Subscriber:
-            _target = Subscriber(target, providers=get_providers(source["$event"].__class__))  # type: ignore
-        else:
-            _target: Subscriber = target  # type: ignore
-        contexts["$subscriber"] = _target
+async def generate_contexts(event: Any, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None) -> Contexts:
+    if external_gather:
+        contexts = await external_gather(event)
     else:
-        raise ValueError("Empty source")
-    return await _target.handle(contexts, inner=inner)
+        contexts: Contexts = {"$event": event}  # type: ignore
+        await event.gather(contexts)
+    return contexts
+
+
+async def run_handler(
+    target: Callable,
+    event: Any,
+    external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+):
+    contexts = await generate_contexts(event, external_gather)
+    _target = Subscriber(target, providers=get_providers(event.__class__))
+    return await _target.handle(contexts)
+

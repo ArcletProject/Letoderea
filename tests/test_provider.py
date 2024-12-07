@@ -5,7 +5,7 @@ import time
 from pprint import pprint
 
 from arclet.letoderea import Contexts, Provider, Publisher
-from arclet.letoderea.handler import depend_handler
+from arclet.letoderea.handler import generate_contexts
 
 
 class IntProvider(Provider[int]):
@@ -78,8 +78,9 @@ pprint(test_subscriber.params)
 async def main():
     ev = TestEvent1()
     s = time.perf_counter_ns()
+    ctx = await generate_contexts(ev)
     for _ in range(20000):
-        await depend_handler(test_subscriber, ev)
+        await test_subscriber.handle(ctx.copy())
     e = time.perf_counter_ns()
     n = e - s
     print(f"used {n/10e8}, {20000*10e8/n}o/s")

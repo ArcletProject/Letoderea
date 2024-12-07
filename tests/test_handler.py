@@ -2,7 +2,7 @@ import asyncio
 import time
 
 from arclet.letoderea import Contexts, Provider
-from arclet.letoderea.handler import depend_handler
+from arclet.letoderea.handler import generate_contexts
 from arclet.letoderea.subscriber import Subscriber
 
 loop = asyncio.new_event_loop()
@@ -25,8 +25,9 @@ sub = Subscriber(test, providers=[ExampleEvent.TestProvider()])
 
 async def main():
     a = ExampleEvent()
+    ctx = await generate_contexts(a)
     for _ in range(50000):
-        await depend_handler(sub, a)
+        await sub.handle(ctx.copy())
 
 
 s = time.perf_counter_ns()

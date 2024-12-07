@@ -156,7 +156,6 @@ asyncio.run(main())
 - `Auxiliary.scopes` 声明了 `Auxiliary` 的作用域:
     - `prepare`: 表示该 `Auxiliary` 会在依赖注入之前执行
     - `complete`: 表示该 `Auxiliary` 会在依赖注入完成后执行
-    - `onerror`: 表示该 `Auxiliary` 会在上述两个作用域中发生异常时执行
     - `cleanup`: 表示该 `Auxiliary` 会在事件处理完成后执行
 - `Auxiliary` 可以设置优先级，值越小优先级越高
 - `Auxiliary` 的 `__call__` 方法多增加了一个 `Interface` 参数，可用于操作 `Contexts` 或 `Provider`, 获取已执行的 `Auxiliary` 等

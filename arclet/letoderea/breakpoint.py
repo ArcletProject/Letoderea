@@ -7,7 +7,7 @@ from .auxiliary import AuxType, BaseAuxiliary, auxilia
 from .core import es
 from .event import BaseEvent, get_auxiliaries, get_providers
 from .exceptions import PropagationCancelled
-from .handler import depend_handler
+from .handler import generate_contexts
 from .provider import Provider
 from .publisher import Publisher, global_providers
 from .subscriber import Subscriber
@@ -38,8 +38,8 @@ def new_target(event_t: type[BaseEvent], condition: "StepOut", fut: Future):
     async def inner(event: event_t):
         if fut.done():
             return False
-
-        result = await depend_handler(sub, event)
+        ctx = await generate_contexts(event)
+        result = await sub.handle(ctx)
         if result is not None and not fut.done():
             fut.set_result(result)
             if condition.block:

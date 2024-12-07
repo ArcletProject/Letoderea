@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, TypeVar, overload
+from typing import Any, Callable, TypeVar, overload, Awaitable
 from collections.abc import Sequence, Mapping
 from weakref import finalize
 from itertools import chain
@@ -13,7 +13,7 @@ from .handler import dispatch
 from .provider import Provider, ProviderFactory
 from .publisher import BackendPublisher, ExternalPublisher, Publisher, Publishable
 from .subscriber import Subscriber
-from .typing import Result, Resultable
+from .typing import Result, Resultable, Contexts
 
 T = TypeVar("T")
 
@@ -22,9 +22,11 @@ class EventSystem:
     _ref_tasks = set()
     _backend_publisher: Publisher = BackendPublisher("__backend__publisher__")
     publishers: dict[str, Publisher]
+    external_gathers: dict[type, Callable[[Any], Awaitable[Contexts]]]
 
     def __init__(self):
         self.publishers = {}
+        self.external_gathers = {}
 
         def _remove(es):
             for task in es._ref_tasks:
@@ -69,6 +71,7 @@ class EventSystem:
             publisher = Publisher(name, target, predicate=predicate)
         else:
             publisher = ExternalPublisher(name, target, supplier, predicate)
+            self.external_gathers[target] = publisher.external_gather
         self.register(publisher)
         return publisher
 
@@ -76,17 +79,17 @@ class EventSystem:
         """发布事件"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event))
-            self._ref_tasks.add(task)
-            task.add_done_callback(self._ref_tasks.discard)
-            return task
-        if isinstance(event, Publishable) and (pub := self.publishers.get(event.__publisher__)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event))
+            task = loop.create_task(dispatch(pub.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(publisher, Publisher):
-            task = loop.create_task(dispatch(publisher.subscribers.values(), event))
+            task = loop.create_task(dispatch(publisher.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        if hasattr(event, "__publisher__") and (pub := self.publishers.get(event.__publisher__)):
+            task = loop.create_task(dispatch(pub.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
@@ -95,7 +98,8 @@ class EventSystem:
                 chain.from_iterable(
                     pub.subscribers.values() for pub in self.publishers.values() if pub.validate(event)
                 ),
-                event
+                event,
+                external_gather=self.external_gathers.get(event.__class__, None),
             )
         )
         self._ref_tasks.add(task)
@@ -114,17 +118,17 @@ class EventSystem:
         """发布事件并返回第一个响应结果"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True))
-            self._ref_tasks.add(task)
-            task.add_done_callback(self._ref_tasks.discard)
-            return task
-        if isinstance(event, Publishable) and (pub := self.publishers.get(event.__publisher__)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True))
+            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None)))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(publisher, Publisher):
-            task = loop.create_task(dispatch(publisher.subscribers.values(), event, return_result=True))
+            task = loop.create_task(dispatch(publisher.subscribers.values(), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None)))
+            self._ref_tasks.add(task)
+            task.add_done_callback(self._ref_tasks.discard)
+            return task
+        if hasattr(event, "__publisher__") and (pub := self.publishers.get(event.__publisher__)):
+            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None)))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
@@ -134,7 +138,8 @@ class EventSystem:
                     pub.subscribers.values() for pub in self.publishers.values() if pub.validate(event)
                 ),
                 event,
-                return_result=True
+                return_result=True,
+                external_gather=self.external_gathers.get(event.__class__, None),
             )
         )
         self._ref_tasks.add(task)
