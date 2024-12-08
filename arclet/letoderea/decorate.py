@@ -1,14 +1,14 @@
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
-from .auxiliary import Interface, AuxType, BaseAuxiliary, Scope, auxilia
+from .auxiliary import AuxType, BaseAuxiliary, Interface, Scope, auxilia
+from .context import publisher_ctx
+from .core import es
 from .event import BaseEvent
 from .exceptions import ParsingStop
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
-from .context import publisher_ctx
 from .typing import Contexts, TTarget
-from .core import es
 
 
 def bind(*args: Union[BaseAuxiliary, Provider, type[Provider]]):

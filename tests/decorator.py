@@ -1,7 +1,7 @@
 import asyncio
 
-from arclet.letoderea import es, bind
-from arclet.letoderea.auxiliary import AuxType, BaseAuxiliary, Scope, Interface
+from arclet.letoderea import bind, es
+from arclet.letoderea.auxiliary import AuxType, BaseAuxiliary, Interface, Scope
 
 
 class TestDecorate(BaseAuxiliary):

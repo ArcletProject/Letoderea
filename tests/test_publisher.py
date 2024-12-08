@@ -22,6 +22,7 @@ with es.define("test", predicate=lambda x: x.name == "hello world") as pub1:
     pub1 += test_subscriber1
 
 with es.define("test", TestEvent, predicate=lambda x: x.name == "world hello"):
+
     @es.use(providers=[test])
     async def test_subscriber2(a: str):
         print(2, a)

@@ -1,22 +1,21 @@
 from __future__ import annotations
 
 import sys
-from uuid import uuid4
-from dataclasses import dataclass
-from typing import Any, Callable, Generic, TypeVar
 from collections.abc import Awaitable, Sequence
-from contextlib import contextmanager, asynccontextmanager, AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
+from dataclasses import dataclass
+from typing import Annotated, Any, Callable, Generic, TypeVar, final
 from typing_extensions import Self, get_args, get_origin
-from typing import Annotated, final
+from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
 from . import Interface
-from .auxiliary import BaseAuxiliary, AuxType, Scope, prepare, cleanup, complete, Prepare, Cleanup, Complete
-from .exceptions import UndefinedRequirement, InnerHandlerException, exception_handler
+from .auxiliary import AuxType, BaseAuxiliary, Cleanup, Complete, Prepare, Scope, cleanup, complete, prepare
+from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import Contexts, Force, TTarget, run_sync, run_sync_generator, is_gen_callable, is_async_gen_callable
+from .typing import Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, run_sync_generator
 
 
 class _ManageExitStack(BaseAuxiliary):
@@ -167,7 +166,9 @@ class Subscriber(Generic[R]):
             else:
                 self._callable_target = asynccontextmanager(callable_target)  # type: ignore
             self.is_cm = True
-        elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (is_gen_callable(wrapped) or is_async_gen_callable(wrapped)):
+        elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (
+            is_gen_callable(wrapped) or is_async_gen_callable(wrapped)
+        ):
             if is_gen_callable(wrapped):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
             else:

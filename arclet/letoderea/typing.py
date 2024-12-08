@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Coroutine
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
-from typing import Any, Callable, TypeVar, Generic, Union, Protocol, AsyncGenerator, Generator, TYPE_CHECKING
-from collections.abc import Awaitable
-from typing_extensions import ParamSpec, TypeGuard, Self
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Generic, Protocol, TypeVar, Union
+from typing_extensions import ParamSpec, Self, TypeGuard
 
 
 class Contexts(dict[str, Any]):
     if TYPE_CHECKING:
-        def copy(self) -> Self:
-            ...
+
+        def copy(self) -> Self: ...
+
     ...
 
 
@@ -60,9 +60,7 @@ def run_sync(call: Callable[P, T]) -> Callable[P, Coroutine[None, None, T]]:
     return _wrapper
 
 
-def run_sync_generator(
-    call: Callable[P, Generator[T]]
-) -> Callable[P, AsyncGenerator[T]]:
+def run_sync_generator(call: Callable[P, Generator[T]]) -> Callable[P, AsyncGenerator[T]]:
     """一个用于包装 sync generator function 为 async generator function 的装饰器"""
 
     def _next(it):

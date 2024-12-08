@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from asyncio import Queue
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import is_dataclass
-from typing import Any, Callable, Protocol, TypeVar, ClassVar, overload, runtime_checkable, cast
-from collections.abc import Sequence, Mapping
+from typing import Any, Callable, ClassVar, Protocol, TypeVar, cast, overload, runtime_checkable
 
 from tarina import generic_isinstance
 
@@ -86,12 +86,10 @@ class Publisher:
         await dispatch(self.subscribers.values(), event)
 
     @overload
-    async def bail(self, event: Resultable[T]) -> Result[T] | None:
-        ...
+    async def bail(self, event: Resultable[T]) -> Result[T] | None: ...
 
     @overload
-    async def bail(self, event: Any) -> Result[Any] | None:
-        ...
+    async def bail(self, event: Any) -> Result[Any] | None: ...
 
     async def bail(self, event: Any) -> Result | None:
         """主动向自己的订阅者发布事件, 并返回结果"""
@@ -160,11 +158,10 @@ class Publisher:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-                Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Subscriber:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Subscriber: ...
 
     @overload
     def register(
@@ -172,11 +169,10 @@ class Publisher:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Callable[[Callable[..., Any]], Subscriber]:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def register(
         self,
@@ -184,9 +180,9 @@ class Publisher:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
     ):
         """注册一个订阅者"""
         auxiliaries = auxiliaries or []
@@ -289,16 +285,16 @@ class ExternalPublisher(Publisher):
         await dispatch(self.subscribers.values(), event, external_gather=self.external_gather)
 
     @overload
-    async def bail(self, event: Resultable[T]) -> Result[T] | None:
-        ...
+    async def bail(self, event: Resultable[T]) -> Result[T] | None: ...
 
     @overload
-    async def bail(self, event: Any) -> Result[Any] | None:
-        ...
+    async def bail(self, event: Any) -> Result[Any] | None: ...
 
     async def bail(self, event: Any) -> Result | None:
         """主动向自己的订阅者发布事件, 并返回结果"""
-        return await dispatch(self.subscribers.values(), event, return_result=True, external_gather=self.external_gather)
+        return await dispatch(
+            self.subscribers.values(), event, return_result=True, external_gather=self.external_gather
+        )
 
 
 @runtime_checkable

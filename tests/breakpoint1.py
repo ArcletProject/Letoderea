@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import AuxType, es, auxilia
+from arclet.letoderea import AuxType, auxilia, es
 from arclet.letoderea.breakpoint import StepOut
 from arclet.letoderea.typing import Contexts
 

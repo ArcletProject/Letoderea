@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Any, Callable, ClassVar, Generic, NamedTuple, TypeVar
-from collections.abc import Awaitable
 
 from tarina import generic_issubclass, run_always_await
 from tarina.generic import get_origin

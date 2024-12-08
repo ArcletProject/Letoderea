@@ -2,12 +2,12 @@ import asyncio
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, ClassVar, Final, Literal, Optional, overload, TypeVar, Generic, Union
+from typing import Any, Callable, ClassVar, Final, Generic, Literal, Optional, TypeVar, Union, overload
 
 from tarina import run_always_await
 
-from .exceptions import UndefinedRequirement, JudgementError, UnexpectedArgument
-from .provider import Provider, ProviderFactory, Param
+from .exceptions import JudgementError, ParsingStop, PropagationCancelled, UndefinedRequirement, UnexpectedArgument
+from .provider import Param, Provider, ProviderFactory
 from .typing import Contexts
 
 T = TypeVar("T")
@@ -20,6 +20,14 @@ class Interface(Generic[T]):
         self.ctx = ctx
         self.providers = providers
         self.executed: set[str] = set()
+
+    @staticmethod
+    def stop():
+        raise ParsingStop
+
+    @staticmethod
+    def block():
+        raise PropagationCancelled
 
     def clear(self):
         self.ctx.clear()
@@ -44,16 +52,13 @@ class Interface(Generic[T]):
         return self.ctx.get("$error")
 
     @overload
-    def query(self, typ: type[Q], name: str) -> Q:
-        ...
+    def query(self, typ: type[Q], name: str) -> Q: ...
 
     @overload
-    def query(self, typ: type[Q], name: str, *, force_return: Literal[True]) -> Optional[Q]:
-        ...
+    def query(self, typ: type[Q], name: str, *, force_return: Literal[True]) -> Optional[Q]: ...
 
     @overload
-    def query(self, typ: type[Q], name: str, default: D) -> Union[Q, D]:
-        ...
+    def query(self, typ: type[Q], name: str, default: D) -> Union[Q, D]: ...
 
     def query(self, typ: type, name: str, default: Any = None, force_return: bool = False):
         if name in self.ctx:

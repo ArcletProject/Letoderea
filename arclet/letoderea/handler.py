@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Literal, Callable, overload, Any, Awaitable
 from collections.abc import Iterable
+from typing import Any, Awaitable, Callable, Literal, overload
 
 from tarina import generic_isinstance
 
 from .event import get_providers
-from .exceptions import (
-    PropagationCancelled,
-)
+from .exceptions import PropagationCancelled
 from .subscriber import Subscriber
 from .typing import Contexts, Result
 
@@ -23,16 +21,31 @@ def _check_result(event: Any, result: Result):
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], event: Any, *, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None) -> None:
-    ...
+async def dispatch(
+    subscribers: Iterable[Subscriber],
+    event: Any,
+    *,
+    external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+) -> None: ...
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], event: Any, *, return_result: Literal[True], external_gather: Callable[[Any], Awaitable[Contexts]] | None = None) -> Result | None:
-    ...
+async def dispatch(
+    subscribers: Iterable[Subscriber],
+    event: Any,
+    *,
+    return_result: Literal[True],
+    external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+) -> Result | None: ...
 
 
-async def dispatch(subscribers: Iterable[Subscriber], event: Any, *, return_result: bool = False, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None):
+async def dispatch(
+    subscribers: Iterable[Subscriber],
+    event: Any,
+    *,
+    return_result: bool = False,
+    external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+):
     if not subscribers:
         return
     contexts = await generate_contexts(event, external_gather)
@@ -55,7 +68,9 @@ async def dispatch(subscribers: Iterable[Subscriber], event: Any, *, return_resu
                 return _check_result(event, Result(result))
 
 
-async def generate_contexts(event: Any, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None) -> Contexts:
+async def generate_contexts(
+    event: Any, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None
+) -> Contexts:
     if external_gather:
         contexts = await external_gather(event)
     else:
@@ -72,4 +87,3 @@ async def run_handler(
     contexts = await generate_contexts(event, external_gather)
     _target = Subscriber(target, providers=get_providers(event.__class__))
     return await _target.handle(contexts)
-

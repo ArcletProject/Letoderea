@@ -1,7 +1,7 @@
 import asyncio
 from asyncio import Future
-from typing import Callable, Generic, Optional, TypeVar, Union, overload
 from collections.abc import Awaitable
+from typing import Callable, Generic, Optional, TypeVar, Union, overload
 
 from .auxiliary import AuxType, BaseAuxiliary, auxilia
 from .core import es
@@ -9,10 +9,9 @@ from .event import BaseEvent, get_auxiliaries, get_providers
 from .exceptions import PropagationCancelled
 from .handler import generate_contexts
 from .provider import Provider
-from .publisher import Publisher, global_providers
+from .publisher import global_auxiliaries, global_providers
 from .subscriber import Subscriber
 from .typing import TCallable, TTarget
-
 
 R = TypeVar("R")
 R1 = TypeVar("R1")
@@ -30,6 +29,7 @@ def new_target(event_t: type[BaseEvent], condition: "StepOut", fut: Future):
         ],
         priority=condition.priority,
         auxiliaries=[
+            *global_auxiliaries,
             *condition.auxiliaries,
             *get_auxiliaries(event_t),
         ],
@@ -124,24 +124,19 @@ class StepOut(Generic[R]):
         default: Union[R, D, None] = None,
     ) -> Union[R, D, None]:
         fut = asyncio.get_running_loop().create_future()
-        publisher = Publisher("__breakpoint__publisher__", *self.target)
+        subscribers = []
 
         for et in self.target:
             callable_target = new_target(et, self, fut)  # type: ignore
-            publisher.register(
-                priority=self.priority,
-                auxiliaries=[
-                    auxilia("step_out", AuxType.judge, prepare=lambda interface: isinstance(interface.event, et))
-                ],
-            )(callable_target)
-
+            aux = auxilia("step_out", AuxType.judge, prepare=lambda interface: isinstance(interface.event, et))
+            subscribers.append(es.on(et, callable_target, priority=self.priority, auxiliaries=[aux]))
         try:
-            es.register(publisher)
             return await asyncio.wait_for(fut, timeout) if timeout else await fut
         except asyncio.TimeoutError:
             return default
         finally:
             if not fut.done():
                 fut.cancel()
-                publisher.subscribers.clear()
-            es.publishers.pop(publisher.id, None)
+            for sub in subscribers:
+                sub.dispose()
+            subscribers.clear()

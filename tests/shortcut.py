@@ -1,7 +1,7 @@
 import asyncio
 from typing_extensions import Annotated
 
-from arclet.letoderea import es, bypass_if, subscribe
+from arclet.letoderea import bypass_if, es, subscribe
 from arclet.letoderea.ref import deref
 
 

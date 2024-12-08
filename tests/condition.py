@@ -3,7 +3,7 @@ import gc
 from datetime import datetime
 from typing import Optional
 
-from arclet.letoderea import es, Interface
+from arclet.letoderea import Interface, es
 from arclet.letoderea.auxiliary import JudgeAuxiliary, Scope
 
 test_stack = [0]

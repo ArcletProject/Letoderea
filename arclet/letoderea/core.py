@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, TypeVar, overload, Awaitable
-from collections.abc import Sequence, Mapping
-from weakref import finalize
+from collections.abc import Mapping, Sequence
 from itertools import chain
+from typing import Any, Awaitable, Callable, TypeVar, overload
+from weakref import finalize
 
-from .event import BaseEvent
 from .auxiliary import BaseAuxiliary
 from .context import publisher_ctx
+from .event import BaseEvent
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import BackendPublisher, ExternalPublisher, Publisher, Publishable
+from .publisher import BackendPublisher, ExternalPublisher, Publishable, Publisher
 from .subscriber import Subscriber
-from .typing import Result, Resultable, Contexts
+from .typing import Contexts, Result, Resultable
 
 T = TypeVar("T")
 
@@ -79,17 +79,31 @@ class EventSystem:
         """发布事件"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)))
+            task = loop.create_task(
+                dispatch(
+                    pub.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(publisher, Publisher):
-            task = loop.create_task(dispatch(publisher.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)))
+            task = loop.create_task(
+                dispatch(
+                    publisher.subscribers.values(),
+                    event,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if hasattr(event, "__publisher__") and (pub := self.publishers.get(event.__publisher__)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)))
+            task = loop.create_task(
+                dispatch(
+                    pub.subscribers.values(), event, external_gather=self.external_gathers.get(event.__class__, None)
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
@@ -107,28 +121,49 @@ class EventSystem:
         return task
 
     @overload
-    def post(self, event: Resultable[T], publisher: str | Publisher | None = None) -> asyncio.Task[Result[T] | None]:
-        ...
+    def post(
+        self, event: Resultable[T], publisher: str | Publisher | None = None
+    ) -> asyncio.Task[Result[T] | None]: ...
 
     @overload
-    def post(self, event: Any, publisher: str | Publisher | None = None) -> asyncio.Task[Result[Any] | None]:
-        ...
+    def post(self, event: Any, publisher: str | Publisher | None = None) -> asyncio.Task[Result[Any] | None]: ...
 
     def post(self, event: Any, publisher: str | Publisher | None = None):
         """发布事件并返回第一个响应结果"""
         loop = asyncio.get_running_loop()
         if isinstance(publisher, str) and (pub := self.publishers.get(publisher)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None)))
+            task = loop.create_task(
+                dispatch(
+                    pub.subscribers.values(),
+                    event,
+                    return_result=True,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(publisher, Publisher):
-            task = loop.create_task(dispatch(publisher.subscribers.values(), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None)))
+            task = loop.create_task(
+                dispatch(
+                    publisher.subscribers.values(),
+                    event,
+                    return_result=True,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if hasattr(event, "__publisher__") and (pub := self.publishers.get(event.__publisher__)):
-            task = loop.create_task(dispatch(pub.subscribers.values(), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None)))
+            task = loop.create_task(
+                dispatch(
+                    pub.subscribers.values(),
+                    event,
+                    return_result=True,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
@@ -154,11 +189,10 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Subscriber:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Subscriber: ...
 
     @overload
     def on(
@@ -167,11 +201,10 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Callable[[Callable[..., Any]], Subscriber]:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     @overload
     def on(
@@ -179,11 +212,10 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Callable[[Callable[..., Any]], Subscriber]:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def on(
         self,
@@ -191,16 +223,18 @@ class EventSystem:
         func: Callable[..., Any] | None = None,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-            Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
     ):
         if not (pub := publisher_ctx.get()):
             if not events:
                 pub = self._backend_publisher
             else:
                 events = events if isinstance(events, tuple) else (events,)
-                if len(events) == 1 and (hasattr(e := events[0], "__publisher__") and e.__publisher__ in self.publishers):
+                if len(events) == 1 and (
+                    hasattr(e := events[0], "__publisher__") and e.__publisher__ in self.publishers
+                ):
                     pub = self.publishers[e.__publisher__]
                 else:
                     pub = Publisher(f"global::{sorted(events, key=lambda e: id(e))}", *events)
@@ -221,11 +255,10 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Subscriber:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Subscriber: ...
 
     @overload
     def use(
@@ -234,11 +267,10 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Callable[[Callable[..., Any]], Subscriber]:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     @overload
     def use(
@@ -246,11 +278,10 @@ class EventSystem:
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
-    ) -> Callable[[Callable[..., Any]], Subscriber]:
-        ...
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
+    ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def use(
         self,
@@ -258,9 +289,9 @@ class EventSystem:
         func: Callable[..., Any] | None = None,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[
-           Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]
-        ] | None = None,
+        providers: (
+            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+        ) = None,
     ):
         if not pub:
             publisher = publisher_ctx.get() or self._backend_publisher

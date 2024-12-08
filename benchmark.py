@@ -6,8 +6,7 @@ import time
 from cProfile import Profile
 from pprint import pprint
 
-from arclet.letoderea import Contexts, es, Param, Provider
-from arclet.letoderea.handler import depend_handler
+from arclet.letoderea import Contexts, Param, Provider, es
 
 loop = asyncio.new_event_loop()
 
@@ -31,12 +30,13 @@ async def test_subscriber(a):
 
 
 a = TestEvent()
+ctx: Contexts = {"$event": a}  # type: ignore
 tasks = []
 pprint(test_subscriber.params)
 count = 20000
 
 
-tasks.extend(loop.create_task(depend_handler(test_subscriber, a)) for _ in range(count))
+tasks.extend(loop.create_task(test_subscriber.handle(ctx.copy())) for _ in range(count))
 
 
 async def main():
@@ -54,7 +54,7 @@ print(f"{n / count} ns per task with {count} tasks gather")
 
 async def main1():
     for _ in range(count):
-        await depend_handler(test_subscriber, a)
+        await test_subscriber.handle(ctx.copy())
 
 
 s = time.perf_counter_ns()
@@ -74,7 +74,7 @@ print(f"{n / count} ns per loop with {count} loops")
 
 async def main2():
     for _ in range(count):
-        await depend_handler(test_subscriber, a)
+        await test_subscriber.handle(ctx.copy())
 
 
 prof = Profile()
