@@ -8,7 +8,7 @@ from tarina import run_always_await
 
 from .exceptions import JudgementError, ParsingStop, PropagationCancelled, UndefinedRequirement, UnexpectedArgument
 from .provider import Param, Provider, ProviderFactory
-from .typing import Contexts
+from .typing import Contexts, Force
 
 T = TypeVar("T")
 Q = TypeVar("Q")
@@ -63,12 +63,20 @@ class Interface(Generic[T]):
     async def query(self, typ: type, name: str, default: Any = None, force_return: bool = False):
         if name in self.ctx:
             return self.ctx[name]
+        providers = []
         for _provider in self.providers:
             if isinstance(_provider, ProviderFactory):
                 if result := _provider.validate(Param(name, typ, default, False)):
-                    return await result(self.ctx)
+                    providers.append(result)
             elif _provider.validate(Param(name, typ, default, False)):
-                return await _provider(self.ctx)
+                providers.append(_provider)
+        for provider in providers:
+            res = await provider(self.ctx)
+            if res is None:
+                continue
+            if res.__class__ is Force:
+                res = res.value
+            return res
         if force_return:
             return default
         raise UndefinedRequirement(name, typ, default, self.providers)
