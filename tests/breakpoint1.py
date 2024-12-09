@@ -24,7 +24,7 @@ class ExampleEvent:
         context["msg"] = self.msg
 
 
-@es.on(ExampleEvent, auxiliaries=[auxilia("hello", AuxType.judge, prepare=lambda x: x.query(str, "msg") == "hello")])
+@es.on(ExampleEvent, auxiliaries=[auxilia("hello", AuxType.judge, prepare=lambda x: x.ctx["msg"] == "hello")])
 async def test():
     if event.is_set():
         print("[subscriber] >>> program already running")

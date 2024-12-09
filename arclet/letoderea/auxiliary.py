@@ -52,23 +52,23 @@ class Interface(Generic[T]):
         return self.ctx.get("$error")
 
     @overload
-    def query(self, typ: type[Q], name: str) -> Q: ...
+    async def query(self, typ: type[Q], name: str) -> Q: ...
 
     @overload
-    def query(self, typ: type[Q], name: str, *, force_return: Literal[True]) -> Optional[Q]: ...
+    async def query(self, typ: type[Q], name: str, *, force_return: Literal[True]) -> Optional[Q]: ...
 
     @overload
-    def query(self, typ: type[Q], name: str, default: D) -> Union[Q, D]: ...
+    async def query(self, typ: type[Q], name: str, default: D) -> Union[Q, D]: ...
 
-    def query(self, typ: type, name: str, default: Any = None, force_return: bool = False):
+    async def query(self, typ: type, name: str, default: Any = None, force_return: bool = False):
         if name in self.ctx:
             return self.ctx[name]
         for _provider in self.providers:
             if isinstance(_provider, ProviderFactory):
                 if result := _provider.validate(Param(name, typ, default, False)):
-                    return result(self.ctx)
+                    return await result(self.ctx)
             elif _provider.validate(Param(name, typ, default, False)):
-                return _provider(self.ctx)
+                return await _provider(self.ctx)
         if force_return:
             return default
         raise UndefinedRequirement(name, typ, default, self.providers)
