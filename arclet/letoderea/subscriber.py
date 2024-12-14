@@ -145,6 +145,7 @@ class Subscriber(Generic[R]):
         auxiliaries: list[BaseAuxiliary] | None = None,
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         dispose: Callable[[Self], None] | None = None,
+        temporary: bool = False,
     ) -> None:
         self.id = str(uuid4())
         self.priority = priority
@@ -186,6 +187,7 @@ class Subscriber(Generic[R]):
         for scope, value in self.auxiliaries.items():
             self.auxiliaries[scope] = sorted(value, key=lambda a: a.priority)  # type: ignore
         self._dispose = dispose
+        self.temporary = temporary
 
     def _recompile(self):
         self.params = _compile(self.callable_target, self.providers)
@@ -253,4 +255,6 @@ class Subscriber(Generic[R]):
                 interface = Interface(context, self.providers)
                 await cleanup(self.auxiliaries[Cleanup], interface)
             context.clear()
+        if self.temporary:
+            self.dispose()
         return result

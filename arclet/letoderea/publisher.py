@@ -161,6 +161,7 @@ class Publisher:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Subscriber: ...
 
     @overload
@@ -172,6 +173,7 @@ class Publisher:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def register(
@@ -183,6 +185,7 @@ class Publisher:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ):
         """注册一个订阅者"""
         auxiliaries = auxiliaries or []
@@ -205,6 +208,7 @@ class Publisher:
                 auxiliaries=_auxiliaries,
                 providers=_providers,
                 dispose=self.remove_subscriber,
+                temporary=temporary,
             )
             self.add_subscriber(res)
             return res

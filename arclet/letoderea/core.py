@@ -11,7 +11,7 @@ from .context import publisher_ctx
 from .event import BaseEvent
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import BackendPublisher, ExternalPublisher, Publishable, Publisher
+from .publisher import BackendPublisher, ExternalPublisher, Publisher
 from .subscriber import Subscriber
 from .typing import Contexts, Result, Resultable
 
@@ -192,6 +192,7 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Subscriber: ...
 
     @overload
@@ -204,6 +205,7 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     @overload
@@ -215,6 +217,7 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def on(
@@ -226,6 +229,7 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ):
         if not (pub := publisher_ctx.get()):
             if not events:
@@ -244,8 +248,8 @@ class EventSystem:
             self.publishers[pub.id] = pub
 
         if not func:
-            return pub.register(priority=priority, auxiliaries=auxiliaries, providers=providers)
-        return pub.register(func, priority=priority, auxiliaries=auxiliaries, providers=providers)
+            return pub.register(priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary)
+        return pub.register(func, priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary)
 
     @overload
     def use(
@@ -258,6 +262,7 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Subscriber: ...
 
     @overload
@@ -270,6 +275,7 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     @overload
@@ -281,6 +287,7 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def use(
@@ -292,14 +299,15 @@ class EventSystem:
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
+        temporary: bool = False,
     ):
         if not pub:
             publisher = publisher_ctx.get() or self._backend_publisher
         else:
             publisher = pub if isinstance(pub, Publisher) else self.publishers[pub]
         if not func:
-            return publisher.register(priority=priority, auxiliaries=auxiliaries, providers=providers)
-        return publisher.register(func, priority=priority, auxiliaries=auxiliaries, providers=providers)
+            return publisher.register(priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary)
+        return publisher.register(func, priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary)
 
 
 es = EventSystem()
