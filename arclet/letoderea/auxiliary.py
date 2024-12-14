@@ -19,6 +19,7 @@ class Interface(Generic[T]):
     def __init__(self, ctx: Contexts, providers: list[Union[Provider, ProviderFactory]]):
         self.ctx = ctx
         self.providers = providers
+        self.cache: dict[tuple, Any] = {}
         self.executed: set[str] = set()
 
     @staticmethod
@@ -64,11 +65,14 @@ class Interface(Generic[T]):
         if name in self.ctx:
             return self.ctx[name]
         providers = []
+        param = Param(name, typ, default, False)
+        if param in self.cache:
+            return self.cache[param]
         for _provider in self.providers:
             if isinstance(_provider, ProviderFactory):
-                if result := _provider.validate(Param(name, typ, default, False)):
+                if result := _provider.validate(param):
                     providers.append(result)
-            elif _provider.validate(Param(name, typ, default, False)):
+            elif _provider.validate(param):
                 providers.append(_provider)
         for provider in providers:
             res = await provider(self.ctx)
@@ -76,8 +80,10 @@ class Interface(Generic[T]):
                 continue
             if res.__class__ is Force:
                 res = res.value
+            self.cache[param] = res
             return res
         if force_return:
+            self.cache[param] = default
             return default
         raise UndefinedRequirement(name, typ, default, self.providers)
 
