@@ -10,8 +10,7 @@ from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from . import Interface
-from .auxiliary import AuxType, BaseAuxiliary, Cleanup, Complete, Prepare, Scope, cleanup, complete, prepare
+from .auxiliary import Interface, BaseAuxiliary, Cleanup, Complete, Prepare, Scope, cleanup, complete, prepare, sort_auxiliaries
 from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -19,9 +18,6 @@ from .typing import Contexts, Force, TTarget, is_async_gen_callable, is_gen_call
 
 
 class _ManageExitStack(BaseAuxiliary):
-    def __init__(self):
-        super().__init__(AuxType.supply, 0)
-
     @property
     def scopes(self) -> set[Scope]:
         return {Scope.cleanup, Scope.prepare}
@@ -143,7 +139,7 @@ class Subscriber(Generic[R]):
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None = None,
         dispose: Callable[[Self], None] | None = None,
         temporary: bool = False,
     ) -> None:
@@ -185,7 +181,7 @@ class Subscriber(Generic[R]):
             for scope in aux.scopes:
                 self.auxiliaries.setdefault(scope, []).append(aux)
         for scope, value in self.auxiliaries.items():
-            self.auxiliaries[scope] = sorted(value, key=lambda a: a.priority)  # type: ignore
+            self.auxiliaries[scope] = sort_auxiliaries(value)
         self._dispose = dispose
         self.temporary = temporary
 

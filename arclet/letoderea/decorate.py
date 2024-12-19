@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
-from .auxiliary import AuxType, BaseAuxiliary, Interface, Scope, auxilia
+from .auxiliary import BaseAuxiliary, Interface, Scope, auxilia
 from .context import publisher_ctx
 from .core import es
 from .event import BaseEvent
@@ -54,11 +54,9 @@ else:
         _predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
 
         def _prepare(interface: Interface) -> Optional[bool]:
-            if _predicate(interface.ctx):
-                raise ParsingStop()
-            return True
+            return not _predicate(interface.ctx)
 
-        inner = auxilia("bypass_if", AuxType.judge, prepare=_prepare)
+        inner = auxilia("bypass_if", _prepare)
 
         def wrapper(target: TTarget) -> TTarget:
             if isinstance(target, Subscriber):

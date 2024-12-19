@@ -4,16 +4,15 @@ from datetime import datetime
 from typing import Optional
 
 from arclet.letoderea import Interface, es
-from arclet.letoderea.auxiliary import JudgeAuxiliary, Scope
+from arclet.letoderea.auxiliary import BaseAuxiliary, Scope
 
 test_stack = [0]
 
 
-class TestTimeLimit(JudgeAuxiliary):
+class TestTimeLimit(BaseAuxiliary):
     def __init__(self, hour, minute):
         self.hour = hour
         self.minute = minute
-        super().__init__(priority=10)
 
     @property
     def id(self):
@@ -28,12 +27,15 @@ class TestTimeLimit(JudgeAuxiliary):
         return now >= datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
 
 
-class Interval(JudgeAuxiliary):
+class Interval(BaseAuxiliary):
     def __init__(self, interval: float):
         self.success = True
         self.last_time = None
         self.interval = interval
-        super().__init__(priority=20)
+
+    @property
+    def before(self) -> set[str]:
+        return {"TestTimeLimit"}
 
     @property
     def id(self):
@@ -62,7 +64,7 @@ class ExampleEvent:
         context["index"] = self.msg
 
 
-@es.on(ExampleEvent, auxiliaries=[TestTimeLimit(0, 0), Interval(0.3)])
+@es.on(ExampleEvent, auxiliaries=[Interval(0.3), TestTimeLimit(0, 0)])
 async def test(
     index: int,
     a: str = "hello",

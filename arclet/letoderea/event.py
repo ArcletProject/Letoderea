@@ -28,7 +28,8 @@ def get_providers(
             lambda x: inspect.isclass(x) and issubclass(x, (Provider, ProviderFactory)),
         )
     )
-    return [p() if isinstance(p, type) else p for p in res]
+    providers = [p() if isinstance(p, type) else p for p in res]
+    return list({p.__class__: p for p in providers}.values())
 
 
 @lru_cache(4096)
@@ -43,7 +44,8 @@ def get_auxiliaries(event: Any) -> list[BaseAuxiliary]:
             lambda x: inspect.isclass(x) and issubclass(x, BaseAuxiliary),
         )
     )
-    return [a() if isinstance(a, type) else a for a in res]
+    auxiliaries: list[BaseAuxiliary] = [a() if isinstance(a, type) else a for a in res]
+    return list({a.id: a for a in auxiliaries}.values())
 
 
 C = TypeVar("C")

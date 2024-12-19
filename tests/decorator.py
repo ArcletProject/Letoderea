@@ -1,13 +1,10 @@
 import asyncio
 
 from arclet.letoderea import bind, es
-from arclet.letoderea.auxiliary import AuxType, BaseAuxiliary, Interface, Scope
+from arclet.letoderea.auxiliary import BaseAuxiliary, Interface, Scope
 
 
 class TestDecorate(BaseAuxiliary):
-
-    def __init__(self):
-        super().__init__(AuxType.supply)
 
     @property
     def id(self) -> str:

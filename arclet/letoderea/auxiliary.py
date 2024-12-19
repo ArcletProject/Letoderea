@@ -1,8 +1,9 @@
 import asyncio
 from abc import ABCMeta, abstractmethod
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, ClassVar, Final, Generic, Literal, Optional, TypeVar, Union, overload
+from typing import Any, Callable, Final, Generic, Literal, Optional, TypeVar, Union, overload
 
 from tarina import run_always_await
 
@@ -88,11 +89,6 @@ class Interface(Generic[T]):
         raise UndefinedRequirement(name, typ, default, self.providers)
 
 
-class AuxType(str, Enum):
-    supply = "supply"
-    judge = "judge"
-
-
 class Scope(str, Enum):
     prepare = "prepare"
     complete = "complete"
@@ -101,8 +97,16 @@ class Scope(str, Enum):
 
 @dataclass(init=False, eq=True, unsafe_hash=True)
 class BaseAuxiliary(metaclass=ABCMeta):
-    type: AuxType
-    priority: ClassVar[int] = 20
+
+    @property
+    def before(self) -> set[str]:
+        """Auxiliaries that should run before to this one"""
+        return set()
+
+    @property
+    def after(self) -> set[str]:
+        """Auxiliaries that should run after to this one"""
+        return set()
 
     @property
     @abstractmethod
@@ -114,61 +118,18 @@ class BaseAuxiliary(metaclass=ABCMeta):
     def id(self) -> str:
         raise NotImplementedError
 
-    def __init__(self, atype: AuxType, priority: int = 20):
-        self.type = atype
-        self.__class__.priority = priority
-
     @abstractmethod
-    async def __call__(self, scope: Scope, interface: Interface):
+    async def __call__(self, scope: Scope, interface: Interface)-> Optional[Union[Interface.Update, bool]]:
         raise NotImplementedError
-
-
-class SupplyAuxiliary(BaseAuxiliary):
-    def __init__(self, priority: int = 20):
-        super().__init__(AuxType.supply, priority)
-
-    @abstractmethod
-    async def __call__(self, scope: Scope, interface: Interface) -> Optional[Interface.Update]:
-        raise NotImplementedError
-
-
-class JudgeAuxiliary(BaseAuxiliary):
-    def __init__(self, priority: int = 20):
-        super().__init__(AuxType.judge, priority)
-
-    @abstractmethod
-    async def __call__(self, scope: Scope, interface: Interface) -> Optional[bool]:
-        raise NotImplementedError
-
-
-@overload
-def auxilia(
-    name: str,
-    atype: Literal[AuxType.supply],
-    priority: int = 20,
-    prepare: Optional[Callable[[Interface], Optional[Interface.Update]]] = None,
-    complete: Optional[Callable[[Interface], Optional[Interface.Update]]] = None,
-): ...
-
-
-@overload
-def auxilia(
-    name: str,
-    atype: Literal[AuxType.judge],
-    priority: int = 20,
-    prepare: Optional[Callable[[Interface], Optional[bool]]] = None,
-    complete: Optional[Callable[[Interface], Optional[bool]]] = None,
-    cleanup: Optional[Callable[[Interface], Optional[bool]]] = None,
-): ...
 
 
 def auxilia(
     name: str,
-    atype: AuxType,
-    priority: int = 20,
-    prepare: Optional[Callable[[Interface], Any]] = None,
-    complete: Optional[Callable[[Interface], Any]] = None,
-    cleanup: Optional[Callable[[Interface], Any]] = None,
+    prepare: Optional[Callable[[Interface], Optional[Union[Interface.Update, bool]]]] = None,
+    complete: Optional[Callable[[Interface], Optional[Interface]]] = None,
+    cleanup: Optional[Callable[[Interface], Optional[Union[Interface.Update, bool]]]] = None,
+    before: Optional[set[str]] = None,
+    after: Optional[set[str]] = None,
 ):
     class _Auxiliary(BaseAuxiliary):
         async def __call__(self, scope: Scope, interface: Interface):
@@ -189,7 +150,15 @@ def auxilia(
         def id(self) -> str:
             return name
 
-    return _Auxiliary(atype, priority)
+        @property
+        def before(self) -> set[str]:
+            return before or set()
+
+        @property
+        def after(self) -> set[str]:
+            return after or set()
+
+    return _Auxiliary()
 
 
 Prepare: Final = Scope.prepare
@@ -232,3 +201,49 @@ async def cleanup(aux: list[BaseAuxiliary], interface: Interface):
     for _res in res:
         if isinstance(_res, Exception):
             raise _res
+
+
+def sort_auxiliaries(auxiliaries: list[BaseAuxiliary]) -> list[BaseAuxiliary]:
+    auxs = {aux.id: aux for aux in auxiliaries}
+    if len(auxs) < 2:
+        return [auxs.popitem()[1]]
+
+    # 构造图和入度表
+    graph = defaultdict(set)  # 邻接表
+    in_degree = defaultdict(int)  # 入度表
+
+    # 初始化所有节点的入度
+    for node in auxs:
+        in_degree[node] = 0  # 初始入度为 0
+
+    # 构造图和更新入度表
+    for aux in auxs.values():
+        current = aux.id
+        # 处理 "before" 依赖
+        for before in aux.before:
+            graph[before].add(current)  # before -> current
+            in_degree[current] += 1  # current 入度 +1
+        # 处理 "after" 依赖
+        for after in aux.after:
+            graph[current].add(after)  # current -> after
+            in_degree[after] += 1  # after 入度 +1
+
+    # 拓扑排序
+    result = []
+    queue = deque([node for node in auxs if in_degree[node] == 0])  # 入度为 0 的节点入队
+
+    while queue:
+        node = queue.popleft()  # 取出队首节点
+        result.append(node)
+
+        # 遍历该节点的邻居
+        for neighbor in graph[node]:
+            in_degree[neighbor] -= 1  # 邻居入度 -1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)  # 邻居入度为 0，加入队列
+
+    # 检查是否有循环依赖
+    if len(result) < len(auxs):
+        raise ValueError("存在循环依赖，无法进行拓扑排序")
+
+    return [auxs[aux_id] for aux_id in result]

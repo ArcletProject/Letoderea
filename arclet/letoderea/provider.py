@@ -81,7 +81,7 @@ def provide(
             return f"Provider::{_id}(origin={origin})"
 
     _Provider.priority = priority
-    return _Provider()
+    return type(_id, (_Provider,), {})()
 
 
 class ProviderFactory(metaclass=ABCMeta):

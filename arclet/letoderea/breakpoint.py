@@ -3,7 +3,7 @@ from asyncio import Future
 from collections.abc import Awaitable
 from typing import Callable, Generic, Optional, TypeVar, Union, overload
 
-from .auxiliary import AuxType, BaseAuxiliary, auxilia
+from .auxiliary import BaseAuxiliary, auxilia
 from .core import es
 from .event import BaseEvent, get_auxiliaries, get_providers
 from .exceptions import PropagationCancelled
@@ -128,7 +128,7 @@ class StepOut(Generic[R]):
 
         for et in self.target:
             callable_target = new_target(et, self, fut)  # type: ignore
-            aux = auxilia("step_out", AuxType.judge, prepare=lambda interface: isinstance(interface.event, et))
+            aux = auxilia("step_out", lambda interface: isinstance(interface.event, et))
             subscribers.append(es.on(et, callable_target, priority=self.priority, auxiliaries=[aux]))
         try:
             return await asyncio.wait_for(fut, timeout) if timeout else await fut
