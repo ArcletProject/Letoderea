@@ -205,45 +205,40 @@ async def cleanup(aux: list[BaseAuxiliary], interface: Interface):
 
 def sort_auxiliaries(auxiliaries: list[BaseAuxiliary]) -> list[BaseAuxiliary]:
     auxs = {aux.id: aux for aux in auxiliaries}
-    if len(auxs) < 2:
-        return [auxs.popitem()[1]]
-
-    # 构造图和入度表
-    graph = defaultdict(set)  # 邻接表
-    in_degree = defaultdict(int)  # 入度表
-
-    # 初始化所有节点的入度
+    # construct graph and in-degree table
+    graph = defaultdict(set)
+    in_degree = defaultdict(int)
     for node in auxs:
-        in_degree[node] = 0  # 初始入度为 0
+        in_degree[node] = 0
 
-    # 构造图和更新入度表
-    for aux in auxs.values():
-        current = aux.id
-        # 处理 "before" 依赖
+    for aux in auxiliaries:
         for before in aux.before:
-            graph[before].add(current)  # before -> current
-            in_degree[current] += 1  # current 入度 +1
-        # 处理 "after" 依赖
+            if before not in auxs:
+                continue
+            graph[before].add(aux.id)
+            in_degree[aux.id] += 1
         for after in aux.after:
-            graph[current].add(after)  # current -> after
-            in_degree[after] += 1  # after 入度 +1
+            if after not in auxs:
+                continue
+            graph[aux.id].add(after)
+            in_degree[after] += 1
 
-    # 拓扑排序
+    for aux in auxiliaries:
+        if aux.id not in graph:
+            in_degree[aux.id] = 0
+
     result = []
-    queue = deque([node for node in auxs if in_degree[node] == 0])  # 入度为 0 的节点入队
+    queue = deque([node for node in in_degree if in_degree[node] == 0])
 
     while queue:
-        node = queue.popleft()  # 取出队首节点
+        node = queue.popleft()
         result.append(node)
-
-        # 遍历该节点的邻居
         for neighbor in graph[node]:
-            in_degree[neighbor] -= 1  # 邻居入度 -1
+            in_degree[neighbor] -= 1
             if in_degree[neighbor] == 0:
-                queue.append(neighbor)  # 邻居入度为 0，加入队列
+                queue.append(neighbor)
 
-    # 检查是否有循环依赖
-    if len(result) < len(auxs):
-        raise ValueError("存在循环依赖，无法进行拓扑排序")
+    if len(result) != len(auxiliaries):
+        raise ValueError("Cycle detected in auxiliaries")
 
-    return [auxs[aux_id] for aux_id in result]
+    return [auxs[aux] for aux in result]

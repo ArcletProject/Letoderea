@@ -177,11 +177,10 @@ class Subscriber(Generic[R]):
             self._callable_target = run_sync(callable_target)  # type: ignore
         if self.is_cm:
             auxiliaries.insert(0, _ManageExitStack())
+        auxiliaries = sort_auxiliaries(auxiliaries)
         for aux in auxiliaries:
             for scope in aux.scopes:
                 self.auxiliaries.setdefault(scope, []).append(aux)
-        for scope, value in self.auxiliaries.items():
-            self.auxiliaries[scope] = sort_auxiliaries(value)
         self._dispose = dispose
         self.temporary = temporary
 
