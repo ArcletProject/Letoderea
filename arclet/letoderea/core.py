@@ -227,7 +227,7 @@ class EventSystem:
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
-            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         temporary: bool = False,
     ):

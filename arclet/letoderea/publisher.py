@@ -48,7 +48,7 @@ global_providers.extend([EventProvider(), ContextProvider()])
 class Publisher:
     id: str
     subscribers: dict[str, Subscriber]
-    providers: list[Provider | ProviderFactory]
+    providers: list[Provider[Any] | ProviderFactory]
     auxiliaries: list[BaseAuxiliary]
 
     def __init__(

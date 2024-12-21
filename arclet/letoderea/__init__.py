@@ -1,9 +1,5 @@
 from .auxiliary import BaseAuxiliary as BaseAuxiliary
-from .auxiliary import Cleanup as Cleanup
-from .auxiliary import Complete as Complete
 from .auxiliary import Interface as Interface
-from .auxiliary import Prepare as Prepare
-from .auxiliary import Scope as Scope
 from .auxiliary import auxilia as auxilia
 from .breakpoint import StepOut as StepOut
 from .core import es as es

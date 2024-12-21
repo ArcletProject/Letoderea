@@ -1,10 +1,9 @@
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
-from .auxiliary import BaseAuxiliary, Interface, Scope, auxilia
+from .auxiliary import BaseAuxiliary, Interface, auxilia
 from .context import publisher_ctx
 from .core import es
 from .event import BaseEvent
-from .exceptions import ParsingStop
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
@@ -60,7 +59,7 @@ else:
 
         def wrapper(target: TTarget) -> TTarget:
             if isinstance(target, Subscriber):
-                target.auxiliaries[Scope.prepare].append(inner)
+                target.auxiliaries["prepare"].append(inner)
             else:
                 if not hasattr(target, "__auxiliaries__"):
                     setattr(target, "__auxiliaries__", [inner])

@@ -2,8 +2,7 @@ import asyncio
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Callable, Final, Generic, Literal, Optional, TypeVar, Union, overload
+from typing import Any, Callable, ClassVar, Generic, Literal, Optional, TypeVar, Union, overload, TYPE_CHECKING
 
 from tarina import run_always_await
 
@@ -89,14 +88,9 @@ class Interface(Generic[T]):
         raise UndefinedRequirement(name, typ, default, self.providers)
 
 
-class Scope(str, Enum):
-    prepare = "prepare"
-    complete = "complete"
-    cleanup = "cleanup"
-
-
 @dataclass(init=False, eq=True, unsafe_hash=True)
 class BaseAuxiliary(metaclass=ABCMeta):
+    _overrides: ClassVar[dict[str, bool]] = {}
 
     @property
     def before(self) -> set[str]:
@@ -110,41 +104,50 @@ class BaseAuxiliary(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def scopes(self) -> set[Scope]:
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
     def id(self) -> str:
         raise NotImplementedError
 
-    @abstractmethod
-    async def __call__(self, scope: Scope, interface: Interface)-> Optional[Union[Interface.Update, bool]]:
-        raise NotImplementedError
+    async def on_prepare(self, interface: Interface) -> Optional[Union[Interface.Update, bool]]:
+        return
+
+    async def on_complete(self, interface: Interface) -> Optional[Union[Interface.Update, bool]]:
+        return
+
+    async def on_cleanup(self, interface: Interface) -> Optional[bool]:
+        return
+
+    def __init_subclass__(cls, **kwargs):
+        cls._overrides = {
+            "prepare": cls.on_prepare != BaseAuxiliary.on_prepare,
+            "complete": cls.on_complete != BaseAuxiliary.on_complete,
+            "cleanup": cls.on_cleanup != BaseAuxiliary.on_cleanup,
+        }
 
 
 def auxilia(
     name: str,
     prepare: Optional[Callable[[Interface], Optional[Union[Interface.Update, bool]]]] = None,
-    complete: Optional[Callable[[Interface], Optional[Interface]]] = None,
-    cleanup: Optional[Callable[[Interface], Optional[Union[Interface.Update, bool]]]] = None,
+    complete: Optional[Callable[[Interface], Optional[Union[Interface.Update, bool]]]] = None,
+    cleanup: Optional[Callable[[Interface], Optional[bool]]] = None,
     before: Optional[set[str]] = None,
     after: Optional[set[str]] = None,
 ):
     class _Auxiliary(BaseAuxiliary):
-        async def __call__(self, scope: Scope, interface: Interface):
-            res = None
-            if scope == Scope.prepare and prepare is not None:
-                res = await run_always_await(prepare, interface)
-            if scope == Scope.complete and complete is not None:
-                res = await run_always_await(complete, interface)
-            if scope == Scope.cleanup and cleanup is not None:
-                res = await run_always_await(cleanup, interface)
-            return res
-
-        @property
-        def scopes(self) -> set[Scope]:
-            return {Prepare, Complete, Cleanup}
+        if prepare is not None:
+            async def on_prepare(self, interface: Interface) -> Optional[Union[Interface.Update, bool]]:
+                if TYPE_CHECKING:
+                    assert prepare
+                return await run_always_await(prepare, interface)
+        if complete is not None:
+            async def on_complete(self, interface: Interface) -> Optional[Interface.Update]:
+                if TYPE_CHECKING:
+                    assert complete
+                return await run_always_await(complete, interface)
+        if cleanup is not None:
+            async def on_cleanup(self, interface: Interface) -> Optional[bool]:
+                if TYPE_CHECKING:
+                    assert cleanup
+                return await run_always_await(cleanup, interface)
 
         @property
         def id(self) -> str:
@@ -161,14 +164,9 @@ def auxilia(
     return _Auxiliary()
 
 
-Prepare: Final = Scope.prepare
-Complete: Final = Scope.complete
-Cleanup: Final = Scope.cleanup
-
-
 async def prepare(aux: list[BaseAuxiliary], interface: Interface):
     for _aux in aux:
-        res = await _aux(Prepare, interface)
+        res = await _aux.on_prepare(interface)
         if res is None:
             continue
         if res is False:
@@ -181,7 +179,7 @@ async def prepare(aux: list[BaseAuxiliary], interface: Interface):
 async def complete(aux: list[BaseAuxiliary], interface: Interface):
     keys = set(interface.ctx.keys())
     for _aux in aux:
-        res = await _aux(Complete, interface)
+        res = await _aux.on_complete(interface)
         if res is None:
             continue
         if res is False:
@@ -195,7 +193,7 @@ async def complete(aux: list[BaseAuxiliary], interface: Interface):
 
 
 async def cleanup(aux: list[BaseAuxiliary], interface: Interface):
-    res = await asyncio.gather(*[_aux(Cleanup, interface) for _aux in aux], return_exceptions=True)
+    res = await asyncio.gather(*[_aux.on_cleanup(interface) for _aux in aux], return_exceptions=True)
     if False in res:
         raise JudgementError
     for _res in res:

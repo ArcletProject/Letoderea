@@ -4,10 +4,20 @@ import asyncio
 import inspect
 from collections.abc import Awaitable, Coroutine
 from contextvars import copy_context
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Generic, Protocol, TypeVar, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Generic, Protocol, TypeVar, Union, overload
 from typing_extensions import ParamSpec, Self, TypeGuard
+
+
+T = TypeVar("T")
+T1 = TypeVar("T1")
+
+
+@dataclass(unsafe_hash=True)
+class CtxItem(Generic[T]):
+    key: str
+    to: type[T] = field(init=False)
 
 
 class Contexts(dict[str, Any]):
@@ -15,10 +25,16 @@ class Contexts(dict[str, Any]):
 
         def copy(self) -> Self: ...
 
+        @overload
+        def __getitem__(self, item: CtxItem[T1]) -> T1: ...
+
+        @overload
+        def __getitem__(self, item: str) -> Any: ...
+
+        def __getitem__(self, item: Union[str, CtxItem[T1]]) -> Any: ...
     ...
 
 
-T = TypeVar("T")
 TTarget = Union[Callable[..., Awaitable[T]], Callable[..., T]]
 TCallable = TypeVar("TCallable", bound=TTarget[Any])
 P = ParamSpec("P")
