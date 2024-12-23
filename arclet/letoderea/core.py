@@ -12,7 +12,7 @@ from .event import BaseEvent
 from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import ExternalPublisher, Publisher, _publishers, _backend_publisher
+from .publisher import ExternalPublisher, Publisher, search_publisher, _publishers, _backend_publisher
 from .subscriber import Subscriber
 from .scope import Scope
 from .typing import Contexts, Result, Resultable
@@ -63,6 +63,12 @@ class EventSystem:
     ) -> Publisher:
         if name and name in _publishers:
             return _publishers[name]
+        if hasattr(target, "__publisher__"):
+            _id = target.__publisher__  # type: ignore
+        else:
+            _id = f"$event:{target.__name__}"
+        if _id in _publishers:
+            return _publishers[_id]
         if issubclass(target, BaseEvent):
             publisher = Publisher(target, name)
         else:
@@ -189,6 +195,9 @@ class EventSystem:
         ) = None,
         temporary: bool = False,
     ):
+        if events:
+            for target in (events if isinstance(events, tuple) else (events,)):
+                self.define(target)
         if not (scope := scope_ctx.get()):
             scope = self._global_scope
         if not func:
@@ -198,7 +207,6 @@ class EventSystem:
         return scope.register(
             func, events=events, priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary
         )
-
 
     @overload
     def use(
@@ -247,5 +255,6 @@ class EventSystem:
         return scope.register(
             func, priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary, publisher=pub
         )
+
 
 es = EventSystem()

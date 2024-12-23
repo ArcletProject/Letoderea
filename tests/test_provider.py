@@ -4,7 +4,7 @@ import asyncio
 import time
 from pprint import pprint
 
-from arclet.letoderea import Contexts, Provider, Publisher
+from arclet.letoderea import Contexts, Provider, Publisher, Scope
 from arclet.letoderea.handler import generate_contexts
 
 
@@ -39,9 +39,8 @@ class TestEvent1(TestEvent):
             return context["is_true"]
 
 
-with Publisher("test", TestEvent1) as pub:
-
-    @pub.register(providers=[IntProvider(), FloatProvider()])
+with Scope("test") as scope:
+    @scope.register(providers=[IntProvider(), FloatProvider()], publisher=Publisher(TestEvent1))
     async def test_subscriber(
         name0: str,
         age0: int,

@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
 from .auxiliary import BaseAuxiliary, Interface, auxilia
-from .context import publisher_ctx
+from .context import scope_ctx
 from .core import es
 from .event import BaseEvent
 from .provider import Provider
@@ -36,8 +36,8 @@ def bind(*args: Union[BaseAuxiliary, Provider, type[Provider]]):
 def subscribe(*event: type[BaseEvent]):
 
     def wrapper(target: TTarget) -> TTarget:
-        if pub := publisher_ctx.get():
-            return pub.register()(target)
+        if scope := scope_ctx.get():
+            return scope.register(events=event)(target)
         return es.on(event)(target)
 
     return wrapper

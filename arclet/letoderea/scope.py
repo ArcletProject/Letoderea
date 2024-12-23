@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Sequence
 from secrets import token_urlsafe
 from typing import Any, Callable, TypeVar, overload
 
-from . import Publisher
 from .auxiliary import BaseAuxiliary, global_auxiliaries
 from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory, global_providers
 from .subscriber import Subscriber
-from .publisher import search_publisher, _backend_publisher, _publishers
+from .publisher import Publisher, search_publisher, _backend_publisher, _publishers
 from .typing import Result, Resultable
 
 
@@ -29,7 +27,7 @@ class Scope:
     ):
         self.id = id_ or token_urlsafe(16)
         self.subscribers = {}
-        self.lookup_map = defaultdict(set)
+        self.lookup_map = {}
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
@@ -144,8 +142,7 @@ class Scope:
                 dispose=self.remove_subscriber,
                 temporary=temporary,
             )
-            for pub in pubs:
-                self.lookup_map[pub.id].add(res.id)
+            self.lookup_map[res.id] = {pub.id for pub in pubs}
             self.add_subscriber(res)
             return res
 
@@ -154,11 +151,9 @@ class Scope:
         return register_wrapper
 
     def get_subscribers(self, publisher_id: str) -> list[Subscriber]:
-        if publisher_id not in self.lookup_map:
-            return []
-        return [self.subscribers[id_] for id_ in self.lookup_map[publisher_id]]
+        return [sub for id_, sub in self.subscribers.items() if publisher_id in self.lookup_map[id_]]
 
     def iter_subscribers(self, publisher_id: str):
-        if publisher_id not in self.lookup_map:
-            return
-        yield from (self.subscribers[id_] for id_ in self.lookup_map[publisher_id])
+        for id_, sub in self.subscribers.items():
+            if publisher_id in self.lookup_map[id_]:
+                yield sub
