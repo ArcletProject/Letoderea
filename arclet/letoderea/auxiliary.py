@@ -1,7 +1,9 @@
 import asyncio
+import inspect
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Callable, ClassVar, Generic, Literal, Optional, TypeVar, Union, overload, TYPE_CHECKING
 
 from tarina import run_always_await
@@ -240,3 +242,22 @@ def sort_auxiliaries(auxiliaries: list[BaseAuxiliary]) -> list[BaseAuxiliary]:
         raise ValueError("Cycle detected in auxiliaries")
 
     return [auxs[aux] for aux in result]
+
+
+@lru_cache(4096)
+def get_auxiliaries(event: Any) -> list[BaseAuxiliary]:
+    res = []
+    for cls in reversed(event.__mro__[:-1]):  # type: ignore
+        res.extend(getattr(cls, "auxiliaries", []))
+    res.extend(
+        p
+        for _, p in inspect.getmembers(
+            event,
+            lambda x: inspect.isclass(x) and issubclass(x, BaseAuxiliary),
+        )
+    )
+    auxiliaries: list[BaseAuxiliary] = [a() if isinstance(a, type) else a for a in res]
+    return list({a.id: a for a in auxiliaries}.values())
+
+
+global_auxiliaries: list[BaseAuxiliary] = []

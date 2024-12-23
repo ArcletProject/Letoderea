@@ -14,7 +14,7 @@ T = TypeVar("T")
 T1 = TypeVar("T1")
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(unsafe_hash=True, frozen=True)
 class CtxItem(Generic[T]):
     key: str
     to: type[T] = field(init=False)

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
 from abc import ABCMeta, abstractmethod
 from collections.abc import Awaitable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Callable, ClassVar, Generic, NamedTuple, TypeVar
 
 from tarina import generic_issubclass, run_always_await
@@ -90,3 +92,49 @@ class ProviderFactory(metaclass=ABCMeta):
         """
         依据参数类型自行分配对应 Provider
         """
+
+
+@lru_cache(4096)
+def get_providers(
+    event: Any,
+) -> list[Provider[Any] | ProviderFactory]:
+    res = []
+    for cls in reversed(event.__mro__[:-1]):  # type: ignore
+        res.extend(getattr(cls, "providers", []))
+    res.extend(
+        p
+        for _, p in inspect.getmembers(
+            event,
+            lambda x: inspect.isclass(x) and issubclass(x, (Provider, ProviderFactory)),
+        )
+    )
+    providers = [p() if isinstance(p, type) else p for p in res]
+    return list({p.__class__: p for p in providers}.values())
+
+
+global_providers: list[Provider | ProviderFactory | type[Provider] | type[ProviderFactory]] = []
+
+
+class EventProvider(Provider[Any]):
+    EVENT_CLASS: ClassVar[type | None] = None
+
+    def validate(self, param: Param):
+        if param.name == "event":
+            return True
+        if self.EVENT_CLASS:
+            return isinstance(param.annotation, type) and issubclass(param.annotation, self.EVENT_CLASS)
+        return False
+
+    async def __call__(self, context: Contexts):
+        return context.get("$event")
+
+
+class ContextProvider(Provider[Contexts]):
+    def validate(self, param: Param):
+        return param.annotation is Contexts
+
+    async def __call__(self, context: Contexts) -> Contexts:
+        return context
+
+
+global_providers.extend([EventProvider(), ContextProvider()])
