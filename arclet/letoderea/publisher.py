@@ -4,7 +4,7 @@ from asyncio import Queue
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import is_dataclass
-from typing import Any, Callable, Protocol, TypeVar, cast, runtime_checkable
+from typing import Any, Callable, Protocol, Final, TypeVar, cast, runtime_checkable
 
 from tarina import generic_issubclass, generic_isinstance
 
@@ -109,7 +109,7 @@ class __BackendPublisher(Publisher):
         return True
 
 
-_backend_publisher = __BackendPublisher()
+_backend_publisher: Final[__BackendPublisher] = __BackendPublisher()
 
 
 class ExternalPublisher(Publisher):

@@ -22,7 +22,7 @@ from arclet.letoderea import es, make_event
 
 @make_event
 class TestEvent:
-    name = "Letoderea"
+    name: str = "Letoderea"
 
 @es.on()
 async def test_subscriber(name: str):
@@ -41,7 +41,7 @@ from arclet.letoderea import es, make_event, Depends
 
 @make_event
 class TestEvent:
-    name = "Letoderea"
+    name: str = "Letoderea"
 
 async def get_msg(event):
     return f"Hello, {event.name}"
@@ -68,13 +68,14 @@ from arclet.letoderea import es, make_event
 class Event:
     name: str
 
+@make_event(name="rand")
 @dataclass
 class RandomData:
     seed: int
     
     __result_type__ = float
 
-@es.define("rand", RandomData).register()
+@es.on(RandomData)
 def random_subscriber(seed: int):
     return random.Random(seed).random()
 
@@ -104,7 +105,7 @@ asyncio.run(main())
 
 ### 订阅
 
-- 通过 `Publisher.register`, `EventSystem.on`, `EventSystem.use` 或 `subscribe` 装饰器可以将一个函数注册为事件的订阅者
+- 通过 `Scope.register`, `EventSystem.on`, `EventSystem.use` 或 `subscribe` 装饰器可以将一个函数注册为事件的订阅者
 - 上述方法会返回 `Subscriber` 类型对象，可以通过其 `.dispose` 方法取消订阅
 - 订阅者的参数可以是任何类型，事件系统会尝试从 `Contexts` 中查找对应的值并注入
 - 默认情况下 `event` 为名字的参数会被注入为事件的实例
@@ -140,25 +141,26 @@ asyncio.run(main())
 
 - 一般情况下通过 `EventSystem.publish` 或 `EventSystem.post` 方法可以发布一个事件让事件系统进行处理
 - `publish` 会处理所有合适的订阅者，而 `post` 会在某一个订阅者返回了有效值后停止处理，并返回该值
-- `Publisher` 类负责管理订阅者与事件的交互
 - `Publisher.validate` 方法用于验证该事件是否为该发布者的订阅者所关注的事件
-- `Publisher.emit` 和 `Publisher.bail` 方法用于将事件直接分发给属于自身的订阅者，`emit` 与 `bail` 的区别类似于 `publish` 与 `post`
 - `Publisher.supply` 方法用于让事件系统主动获取事件并分发给所有订阅者
-- `EventSystem.use`, `EventSystem.publish` 和 `EventSystem.post` 可以指定 `Publisher`
+- `EventSystem.use`, `Scope.register` 可以指定 `Publisher`
 - 通过 `EventSystem.define` 可以便捷的定义发布者，并在 `.use` 等处通过定义的名字引用
+
+### 层次
+
+- `Scope` 类负责管理订阅者与事件的交互
+- 所有的订阅者都会存储在 `Scope` 中
+- `Scope.emit` 和 `Scope.bail` 方法用于将事件直接分发给属于自身的订阅者，`emit` 与 `bail` 的区别类似于 `publish` 与 `post`
+- `EventSystem.publish` 与 `EventSystem.post` 可以指定 `Scope`
 
 ### 辅助
 
 - `Auxiliary` 提供了一系列辅助方法，方便事件的处理
-- `Auxiliary` 分为 `Judge`, `Supply` 两类:
-    - `Judge`: 用于判断此时是否应该处理事件
-    - `Supply`: 用于为 `Contexts` 提供额外的信息
-- `Auxiliary.scopes` 声明了 `Auxiliary` 的作用域:
-    - `prepare`: 表示该 `Auxiliary` 会在依赖注入之前执行
-    - `complete`: 表示该 `Auxiliary` 会在依赖注入完成后执行
-    - `cleanup`: 表示该 `Auxiliary` 会在事件处理完成后执行
-- `Auxiliary` 可以设置优先级，值越小优先级越高
-- `Auxiliary` 的 `__call__` 方法多增加了一个 `Interface` 参数，可用于操作 `Contexts` 或 `Provider`, 获取已执行的 `Auxiliary` 等
+- `Auxiliary` 有三类方法, 每个方法有一个 `Interface` 参数，可用于操作 `Contexts` 或 `Provider`, 获取已执行的 `Auxiliary` 等:
+  - `on_prepare`: 用于在事件处理前执行
+  - `on_complete`: 用于在事件处理后执行
+  - `on_cleanup`: 用于在事件处理完成后执行
+- `Auxiliary` 可以设置 `before` 与 `after`，用于指定其与其他 `Auxiliary` 的执行顺序
 
 ## 开源协议
 本实现以 MIT 为开源协议。

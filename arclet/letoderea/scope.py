@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import contextmanager
 from secrets import token_urlsafe
 from typing import Any, Callable, TypeVar, overload
 
@@ -28,6 +29,7 @@ class Scope:
         self.id = id_ or token_urlsafe(16)
         self.subscribers = {}
         self.lookup_map = {}
+        self.available = True
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
@@ -57,13 +59,15 @@ class Scope:
         移除订阅者
         """
         self.subscribers.pop(subscriber.id, None)
+        self.lookup_map.pop(subscriber.id, None)
 
-    def __enter__(self):
-        self._token = scope_ctx.set(self)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        scope_ctx.reset(self._token)
+    @contextmanager
+    def context(self):
+        token = scope_ctx.set(self)
+        try:
+            yield self
+        finally:
+            scope_ctx.reset(token)
 
     @overload
     def register(
@@ -151,9 +155,9 @@ class Scope:
         return register_wrapper
 
     def get_subscribers(self, publisher_id: str) -> list[Subscriber]:
-        return [sub for id_, sub in self.subscribers.items() if publisher_id in self.lookup_map[id_]]
+        return [sub for id_, sub in self.subscribers.items() if publisher_id in self.lookup_map[id_] or _backend_publisher.id in self.lookup_map[id_]]
 
     def iter_subscribers(self, publisher_id: str):
         for id_, sub in self.subscribers.items():
-            if publisher_id in self.lookup_map[id_]:
+            if publisher_id in self.lookup_map[id_] or _backend_publisher.id in self.lookup_map[id_]:
                 yield sub

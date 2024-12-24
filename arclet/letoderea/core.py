@@ -12,7 +12,7 @@ from .event import BaseEvent
 from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import ExternalPublisher, Publisher, search_publisher, _publishers, _backend_publisher
+from .publisher import ExternalPublisher, Publisher, _publishers, _backend_publisher
 from .subscriber import Subscriber
 from .scope import Scope
 from .typing import Contexts, Result, Resultable
@@ -52,7 +52,7 @@ class EventSystem:
     def scope(self, id_: str | None = None):
         sp = Scope(id_)
         self.scopes[sp.id] = sp
-        with sp:
+        with sp.context():
             yield sp
 
     def define(
@@ -83,12 +83,12 @@ class EventSystem:
             publisher_id = pub.id
         else:
             publisher_id = next((pub.id for pub in _publishers.values() if pub.validate(event)), _backend_publisher.id)
-        if isinstance(scope, str) and (sp := self.scopes.get(scope)):
+        if isinstance(scope, str) and ((sp := self.scopes.get(scope)) and sp.available):
             task = loop.create_task(dispatch(sp.iter_subscribers(publisher_id), event, external_gather=self.external_gathers.get(event.__class__, None),))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
-        if isinstance(scope, Scope):
+        if isinstance(scope, Scope) and scope.available:
             task = loop.create_task(dispatch(scope.iter_subscribers(publisher_id), event, external_gather=self.external_gathers.get(event.__class__, None),))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
@@ -96,7 +96,7 @@ class EventSystem:
         task = loop.create_task(
             dispatch(
                 chain.from_iterable(
-                    sp.iter_subscribers(publisher_id) for sp in self.scopes.values()
+                    sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available
                 ),
                 event,
                 external_gather=self.external_gathers.get(event.__class__, None),
@@ -121,12 +121,12 @@ class EventSystem:
             publisher_id = pub.id
         else:
             publisher_id = next((pub.id for pub in _publishers.values() if pub.validate(event)), _backend_publisher.id)
-        if isinstance(scope, str) and (sp := self.scopes.get(scope)):
+        if isinstance(scope, str) and ((sp := self.scopes.get(scope)) and sp.available):
             task = loop.create_task(dispatch(sp.iter_subscribers(publisher_id), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None),))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
-        if isinstance(scope, Scope):
+        if isinstance(scope, Scope) and scope.available:
             task = loop.create_task(dispatch(scope.iter_subscribers(publisher_id), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None),))
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
@@ -134,7 +134,7 @@ class EventSystem:
         task = loop.create_task(
             dispatch(
                 chain.from_iterable(
-                    sp.iter_subscribers(publisher_id) for sp in self.scopes.values()
+                    sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available
                 ),
                 event,
                 return_result=True,
@@ -258,3 +258,36 @@ class EventSystem:
 
 
 es = EventSystem()
+
+
+C = TypeVar("C")
+
+
+@overload
+def make_event(cls: type[C]) -> type[C]: ...
+
+
+@overload
+def make_event(*, name: str) -> Callable[[type[C]], type[C]]: ...
+
+
+def make_event(cls: type[C] | None = None, *, name: str | None = None):
+
+    def wrapper(_cls: type[C], /):
+
+        if not hasattr(_cls, "__annotations__"):
+            raise ValueError(f"@make_event can only take effect for class with attribute annotations, not {_cls}")
+
+        async def _gather(self, context: Contexts):
+            for key in self.__annotations__:
+                if key in ("providers", "auxiliaries"):
+                    continue
+                context[key] = getattr(self, key, None)
+
+        _cls.gather = _gather  # type: ignore
+        _cls.__publisher__ = es.define(_cls, name).id  # type: ignore
+        return _cls  # type: ignore
+
+    if cls:
+        return wrapper(cls)
+    return wrapper
