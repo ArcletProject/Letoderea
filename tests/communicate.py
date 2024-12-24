@@ -18,7 +18,7 @@ class Data:
     __publisher__ = "pluginA"
 
 
-es.define("pluginA", Data)
+es.define(Data)
 
 
 @es.on(TestEvent)

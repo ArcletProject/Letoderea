@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import Contexts, es, provide
+from arclet.letoderea import Contexts, es, provide, auxilia
 
 
 class TestEvent:
@@ -12,20 +12,13 @@ class TestEvent:
 
 
 test = provide(str, call="name")
+pub = es.define(TestEvent, "test")
+pub.bind(test)
 
-with es.define("test", predicate=lambda x: x.name == "hello world") as pub1:
-    pub1.bind(test)
 
-    async def test_subscriber1(a: str):
-        print(1, a)
-
-    pub1 += test_subscriber1
-
-with es.define("test", TestEvent, predicate=lambda x: x.name == "world hello"):
-
-    @es.use(providers=[test])
-    async def test_subscriber2(a: str):
-        print(2, a)
+@es.use(pub)
+async def test_subscriber1(a: str):
+    print(a)
 
 
 async def main():

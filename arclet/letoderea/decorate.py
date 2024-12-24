@@ -1,10 +1,9 @@
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
-from .auxiliary import BaseAuxiliary, Interface, Scope, auxilia
-from .context import publisher_ctx
+from .auxiliary import BaseAuxiliary, Interface, auxilia
+from .context import scope_ctx
 from .core import es
 from .event import BaseEvent
-from .exceptions import ParsingStop
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
@@ -37,8 +36,8 @@ def bind(*args: Union[BaseAuxiliary, Provider, type[Provider]]):
 def subscribe(*event: type[BaseEvent]):
 
     def wrapper(target: TTarget) -> TTarget:
-        if pub := publisher_ctx.get():
-            return pub.register()(target)
+        if scope := scope_ctx.get():
+            return scope.register(events=event)(target)
         return es.on(event)(target)
 
     return wrapper
@@ -60,7 +59,7 @@ else:
 
         def wrapper(target: TTarget) -> TTarget:
             if isinstance(target, Subscriber):
-                target.auxiliaries[Scope.prepare].append(inner)
+                target.auxiliaries["prepare"].append(inner)
             else:
                 if not hasattr(target, "__auxiliaries__"):
                     setattr(target, "__auxiliaries__", [inner])

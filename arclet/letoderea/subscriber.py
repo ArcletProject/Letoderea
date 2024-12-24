@@ -4,13 +4,13 @@ import sys
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, final
+from typing import Annotated, Any, Callable, Generic, TypeVar, final, Optional, Union
 from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .auxiliary import Interface, BaseAuxiliary, Cleanup, Complete, Prepare, Scope, cleanup, complete, prepare, sort_auxiliaries
+from .auxiliary import Interface, BaseAuxiliary, cleanup, complete, prepare, sort_auxiliaries
 from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -19,23 +19,21 @@ from .typing import Contexts, Force, TTarget, is_async_gen_callable, is_gen_call
 
 class _ManageExitStack(BaseAuxiliary):
     @property
-    def scopes(self) -> set[Scope]:
-        return {Scope.cleanup, Scope.prepare}
-
-    @property
     def id(self) -> str:
         return "builtin:exit_stack"
 
-    async def __call__(self, scope: Scope, interface: Interface):
-        if scope is Scope.prepare:
-            if "$exit_stack" not in interface.ctx:
-                return interface.update(**{"$exit_stack": AsyncExitStack()})
-            return
+    async def on_prepare(self, interface: Interface) -> Optional[Union[Interface.Update, bool]]:
+        if "$exit_stack" not in interface.ctx:
+            return interface.update(**{"$exit_stack": AsyncExitStack()})
+        return
+
+    async def on_cleanup(self, interface: Interface) -> Optional[bool]:
         stack: AsyncExitStack = interface.ctx["$exit_stack"]
         if error := interface.error:
             await stack.__aexit__(type(error), error, error.__traceback__)
         else:
             await stack.aclose()
+        return
 
 
 @dataclass(init=False, eq=True)
@@ -127,7 +125,7 @@ class Subscriber(Generic[R]):
     id: str
     callable_target: Callable[..., Awaitable[R]]
     priority: int
-    auxiliaries: dict[Scope, list[BaseAuxiliary]]
+    auxiliaries: dict[str, list[BaseAuxiliary]]
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
 
@@ -139,7 +137,7 @@ class Subscriber(Generic[R]):
         *,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None = None,
+        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         dispose: Callable[[Self], None] | None = None,
         temporary: bool = False,
     ) -> None:
@@ -179,8 +177,9 @@ class Subscriber(Generic[R]):
             auxiliaries.insert(0, _ManageExitStack())
         auxiliaries = sort_auxiliaries(auxiliaries)
         for aux in auxiliaries:
-            for scope in aux.scopes:
-                self.auxiliaries.setdefault(scope, []).append(aux)
+            for scope, v in aux._overrides.items():
+                if v:
+                    self.auxiliaries.setdefault(scope, []).insert(0, aux)
         self._dispose = dispose
         self.temporary = temporary
 
@@ -208,9 +207,9 @@ class Subscriber(Generic[R]):
         if not inner:
             context["$subscriber"] = self
         try:
-            if Prepare in self.auxiliaries:
+            if "prepare" in self.auxiliaries:
                 interface = Interface(context, self.providers)
-                await prepare(self.auxiliaries[Prepare], interface)
+                await prepare(self.auxiliaries["prepare"], interface)
                 interface.cache.clear()
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
@@ -228,9 +227,9 @@ class Subscriber(Generic[R]):
                         context["$depend_cache"][param.depend.sub.callable_target] = dep_res
                 else:
                     arguments[param.name] = await param.solve(context)
-            if Complete in self.auxiliaries:
+            if "complete" in self.auxiliaries:
                 interface = Interface(arguments, self.providers)
-                await complete(self.auxiliaries[Complete], interface)
+                await complete(self.auxiliaries["complete"], interface)
                 interface.cache.clear()
             if self.is_cm:
                 stack: AsyncExitStack = context["$exit_stack"]
@@ -248,9 +247,9 @@ class Subscriber(Generic[R]):
             _, exception, tb = sys.exc_info()
             if exception:
                 context["$error"] = exception
-            if Cleanup in self.auxiliaries:
+            if "cleanup" in self.auxiliaries:
                 interface = Interface(context, self.providers)
-                await cleanup(self.auxiliaries[Cleanup], interface)
+                await cleanup(self.auxiliaries["cleanup"], interface)
                 interface.cache.clear()
             context.clear()
         if self.temporary:

@@ -3,6 +3,6 @@ from typing import TYPE_CHECKING
 from tarina import ContextModel
 
 if TYPE_CHECKING:
-    from .publisher import Publisher
+    from .scope import Scope
 
-publisher_ctx: ContextModel["Publisher"] = ContextModel("publisher_ctx")
+scope_ctx: ContextModel["Scope"] = ContextModel("scope_ctx")

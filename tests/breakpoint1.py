@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import AuxType, auxilia, es
+from arclet.letoderea import auxilia, es
 from arclet.letoderea.breakpoint import StepOut
 from arclet.letoderea.typing import Contexts
 
@@ -24,7 +24,7 @@ class ExampleEvent:
         context["msg"] = self.msg
 
 
-@es.on(ExampleEvent, auxiliaries=[auxilia("hello", AuxType.judge, prepare=lambda x: x.ctx["msg"] == "hello")])
+@es.on(ExampleEvent, auxiliaries=[auxilia("hello", lambda x: x.ctx["msg"] == "hello")])
 async def test():
     if event.is_set():
         print("[subscriber] >>> program already running")

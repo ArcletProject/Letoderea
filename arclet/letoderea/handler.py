@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable, Literal, overload
 
 from tarina import generic_isinstance
 
-from .event import get_providers
+from .provider import get_providers
 from .exceptions import PropagationCancelled
 from .subscriber import Subscriber
 from .typing import Contexts, Result
@@ -36,7 +36,7 @@ async def dispatch(
     *,
     return_result: Literal[True],
     external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
-) -> Result | None: ...
+) -> Result[Any] | None: ...
 
 
 async def dispatch(
