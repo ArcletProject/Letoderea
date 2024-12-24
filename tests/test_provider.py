@@ -40,6 +40,7 @@ class TestEvent1(TestEvent):
 
 
 with Scope("test") as scope:
+
     @scope.register(providers=[IntProvider(), FloatProvider()], publisher=Publisher(TestEvent1))
     async def test_subscriber(
         name0: str,

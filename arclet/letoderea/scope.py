@@ -9,10 +9,9 @@ from .auxiliary import BaseAuxiliary, global_auxiliaries
 from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory, global_providers
+from .publisher import Publisher, _backend_publisher, _publishers, search_publisher
 from .subscriber import Subscriber
-from .publisher import Publisher, search_publisher, _backend_publisher, _publishers
 from .typing import Result, Resultable
-
 
 T = TypeVar("T")
 
@@ -121,7 +120,11 @@ class Scope:
         elif not events:
             pubs = [_backend_publisher]
         else:
-            pubs = [*filter(None, (search_publisher(target) for target in (events if isinstance(events, tuple) else (events,))))]
+            pubs = [
+                *filter(
+                    None, (search_publisher(target) for target in (events if isinstance(events, tuple) else (events,)))
+                )
+            ]
         if not pubs:
             raise ValueError(f"No publisher found for events: {events}")
         pub_providers = [p for pub in pubs for p in pub.providers]
@@ -155,7 +158,11 @@ class Scope:
         return register_wrapper
 
     def get_subscribers(self, publisher_id: str) -> list[Subscriber]:
-        return [sub for id_, sub in self.subscribers.items() if publisher_id in self.lookup_map[id_] or _backend_publisher.id in self.lookup_map[id_]]
+        return [
+            sub
+            for id_, sub in self.subscribers.items()
+            if publisher_id in self.lookup_map[id_] or _backend_publisher.id in self.lookup_map[id_]
+        ]
 
     def iter_subscribers(self, publisher_id: str):
         for id_, sub in self.subscribers.items():

@@ -2,7 +2,6 @@ import asyncio
 
 from arclet.letoderea import es
 
-
 es.define(int, supplier=lambda x: {"name": str(x)})
 
 

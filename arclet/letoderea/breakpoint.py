@@ -23,7 +23,7 @@ def new_target(event_t: type[BaseEvent], condition: "StepOut", fut: Future):
         condition.handler,
         providers=[
             *global_providers,
-            *get_providers(event_t),
+            *get_providers(event_t),  # type: ignore
             *condition.providers,
         ],
         priority=condition.priority,

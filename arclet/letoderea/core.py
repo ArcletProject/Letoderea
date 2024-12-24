@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from itertools import chain
 from contextlib import contextmanager
+from itertools import chain
 from typing import Any, Awaitable, Callable, TypeVar, overload
 from weakref import finalize
 
 from .auxiliary import BaseAuxiliary
-from .event import BaseEvent
 from .context import scope_ctx
+from .event import BaseEvent
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import ExternalPublisher, Publisher, _publishers, _backend_publisher
-from .subscriber import Subscriber
+from .publisher import ExternalPublisher, Publisher, _backend_publisher, _publishers
 from .scope import Scope
+from .subscriber import Subscriber
 from .typing import Contexts, Result, Resultable
 
 T = TypeVar("T")
@@ -84,20 +84,30 @@ class EventSystem:
         else:
             publisher_id = next((pub.id for pub in _publishers.values() if pub.validate(event)), _backend_publisher.id)
         if isinstance(scope, str) and ((sp := self.scopes.get(scope)) and sp.available):
-            task = loop.create_task(dispatch(sp.iter_subscribers(publisher_id), event, external_gather=self.external_gathers.get(event.__class__, None),))
+            task = loop.create_task(
+                dispatch(
+                    sp.iter_subscribers(publisher_id),
+                    event,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(scope, Scope) and scope.available:
-            task = loop.create_task(dispatch(scope.iter_subscribers(publisher_id), event, external_gather=self.external_gathers.get(event.__class__, None),))
+            task = loop.create_task(
+                dispatch(
+                    scope.iter_subscribers(publisher_id),
+                    event,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         task = loop.create_task(
             dispatch(
-                chain.from_iterable(
-                    sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available
-                ),
+                chain.from_iterable(sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available),
                 event,
                 external_gather=self.external_gathers.get(event.__class__, None),
             )
@@ -107,9 +117,7 @@ class EventSystem:
         return task
 
     @overload
-    def post(
-        self, event: Resultable[T], scope: str | Scope | None = None
-    ) -> asyncio.Task[Result[T] | None]: ...
+    def post(self, event: Resultable[T], scope: str | Scope | None = None) -> asyncio.Task[Result[T] | None]: ...
 
     @overload
     def post(self, event: Any, scope: str | Scope | None = None) -> asyncio.Task[Result[Any] | None]: ...
@@ -122,20 +130,32 @@ class EventSystem:
         else:
             publisher_id = next((pub.id for pub in _publishers.values() if pub.validate(event)), _backend_publisher.id)
         if isinstance(scope, str) and ((sp := self.scopes.get(scope)) and sp.available):
-            task = loop.create_task(dispatch(sp.iter_subscribers(publisher_id), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None),))
+            task = loop.create_task(
+                dispatch(
+                    sp.iter_subscribers(publisher_id),
+                    event,
+                    return_result=True,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         if isinstance(scope, Scope) and scope.available:
-            task = loop.create_task(dispatch(scope.iter_subscribers(publisher_id), event, return_result=True, external_gather=self.external_gathers.get(event.__class__, None),))
+            task = loop.create_task(
+                dispatch(
+                    scope.iter_subscribers(publisher_id),
+                    event,
+                    return_result=True,
+                    external_gather=self.external_gathers.get(event.__class__, None),
+                )
+            )
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
         task = loop.create_task(
             dispatch(
-                chain.from_iterable(
-                    sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available
-                ),
+                chain.from_iterable(sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available),
                 event,
                 return_result=True,
                 external_gather=self.external_gathers.get(event.__class__, None),
@@ -190,13 +210,11 @@ class EventSystem:
         func: Callable[..., Any] | None = None,
         priority: int = 16,
         auxiliaries: list[BaseAuxiliary] | None = None,
-        providers: (
-            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
-        ) = None,
+        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         temporary: bool = False,
     ):
         if events:
-            for target in (events if isinstance(events, tuple) else (events,)):
+            for target in events if isinstance(events, tuple) else (events,):
                 self.define(target)
         if not (scope := scope_ctx.get()):
             scope = self._global_scope

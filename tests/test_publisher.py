@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import Contexts, es, provide, auxilia
+from arclet.letoderea import Contexts, auxilia, es, provide
 
 
 class TestEvent:

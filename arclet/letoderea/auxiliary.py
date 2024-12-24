@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Callable, ClassVar, Generic, Literal, Optional, TypeVar, Union, overload, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Literal, Optional, TypeVar, Union, overload
 
 from tarina import run_always_await
 
@@ -136,16 +136,21 @@ def auxilia(
 ):
     class _Auxiliary(BaseAuxiliary):
         if prepare is not None:
+
             async def on_prepare(self, interface: Interface) -> Optional[Union[Interface.Update, bool]]:
                 if TYPE_CHECKING:
                     assert prepare
                 return await run_always_await(prepare, interface)
+
         if complete is not None:
+
             async def on_complete(self, interface: Interface) -> Optional[Interface.Update]:
                 if TYPE_CHECKING:
                     assert complete
                 return await run_always_await(complete, interface)
+
         if cleanup is not None:
+
             async def on_cleanup(self, interface: Interface) -> Optional[bool]:
                 if TYPE_CHECKING:
                     assert cleanup

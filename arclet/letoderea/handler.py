@@ -6,8 +6,8 @@ from typing import Any, Awaitable, Callable, Literal, overload
 
 from tarina import generic_isinstance
 
-from .provider import get_providers
 from .exceptions import PropagationCancelled
+from .provider import get_providers
 from .subscriber import Subscriber
 from .typing import Contexts, Result
 

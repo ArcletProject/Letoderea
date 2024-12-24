@@ -4,13 +4,13 @@ import sys
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, final, Optional, Union
+from typing import Annotated, Any, Callable, Generic, Optional, TypeVar, Union, final
 from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .auxiliary import Interface, BaseAuxiliary, cleanup, complete, prepare, sort_auxiliaries
+from .auxiliary import BaseAuxiliary, Interface, cleanup, complete, prepare, sort_auxiliaries
 from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, Final, runtime_checkable
+from typing import Any, Final, Protocol, runtime_checkable
 
 from .typing import Contexts, CtxItem
 

@@ -16,8 +16,8 @@ from .exceptions import ParsingStop as ParsingStop
 from .exceptions import PropagationCancelled as PropagationCancelled
 from .provider import Param as Param
 from .provider import Provider as Provider
-from .provider import provide as provide
 from .provider import global_providers as global_providers
+from .provider import provide as provide
 from .publisher import ExternalPublisher as ExternalPublisher
 from .publisher import ProviderFactory as ProviderFactory
 from .publisher import Publisher as Publisher

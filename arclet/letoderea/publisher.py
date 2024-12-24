@@ -4,14 +4,13 @@ from asyncio import Queue
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import is_dataclass
-from typing import Any, Callable, Protocol, Final, TypeVar, cast, runtime_checkable
+from typing import Any, Callable, Final, Protocol, TypeVar, cast, runtime_checkable
 
-from tarina import generic_issubclass, generic_isinstance
+from tarina import generic_isinstance, generic_issubclass
 
 from .auxiliary import BaseAuxiliary, get_auxiliaries
 from .provider import Provider, ProviderFactory, get_providers
 from .typing import Contexts
-
 
 T = TypeVar("T")
 
