@@ -15,6 +15,8 @@ from .typing import Result, Resultable
 
 T = TypeVar("T")
 
+_scopes: dict[str, Scope] = {}
+
 
 class Scope:
     id: str
@@ -190,3 +192,8 @@ class Scope:
         for slot in self.subscribers.values():
             if publisher_id in slot[1] or _backend_publisher.id in slot[1]:
                 yield slot[0]
+
+    def dispose(self):
+        self.available = False
+        self.subscribers.clear()
+        _scopes.pop(self.id, None)

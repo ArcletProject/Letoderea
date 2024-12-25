@@ -179,7 +179,7 @@ class Subscriber(Generic[R]):
         for aux in auxiliaries:
             for scope, v in aux._overrides.items():
                 if v:
-                    self.auxiliaries.setdefault(scope, []).insert(0, aux)
+                    self.auxiliaries.setdefault(scope, []).append(aux)
         self._dispose = dispose
         self.temporary = temporary
 
