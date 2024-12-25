@@ -9,7 +9,7 @@ from .auxiliary import BaseAuxiliary, global_auxiliaries
 from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory, global_providers
-from .publisher import Publisher, _backend_publisher, _publishers, search_publisher
+from .publisher import Publisher, _backend_publisher, _publishers, filter_publisher, search_publisher
 from .subscriber import Subscriber
 from .typing import Result, Resultable
 
@@ -18,8 +18,7 @@ T = TypeVar("T")
 
 class Scope:
     id: str
-    subscribers: dict[str, Subscriber]
-    lookup_map: dict[str, set[str]]
+    subscribers: dict[str, tuple[Subscriber, set[str]]]
     providers: list[Provider[Any] | ProviderFactory]
     auxiliaries: list[BaseAuxiliary]
 
@@ -29,7 +28,6 @@ class Scope:
     ):
         self.id = id_ or token_urlsafe(16)
         self.subscribers = {}
-        self.lookup_map = {}
         self.available = True
         self.providers = []
         self.auxiliaries = []
@@ -39,7 +37,10 @@ class Scope:
 
     async def emit(self, event: Any) -> None:
         """主动向自己的订阅者发布事件"""
-        await dispatch(self.subscribers.values(), event)
+        await dispatch(
+            self.iter_subscribers(search_publisher(event).id),
+            event,
+        )
 
     @overload
     async def bail(self, event: Resultable[T]) -> Result[T] | None: ...
@@ -49,7 +50,7 @@ class Scope:
 
     async def bail(self, event: Any) -> Result | None:
         """主动向自己的订阅者发布事件, 并返回结果"""
-        return await dispatch(self.subscribers.values(), event, return_result=True)
+        return await dispatch(self.iter_subscribers(search_publisher(event).id), event, return_result=True)
 
     def bind(
         self,
@@ -76,19 +77,6 @@ class Scope:
                 if isinstance(p, arg):
                     self.providers.remove(p)
 
-    def add_subscriber(self, subscriber: Subscriber) -> None:
-        """
-        添加订阅者
-        """
-        self.subscribers[subscriber.id] = subscriber
-
-    def remove_subscriber(self, subscriber: Subscriber) -> None:
-        """
-        移除订阅者
-        """
-        self.subscribers.pop(subscriber.id, None)
-        self.lookup_map.pop(subscriber.id, None)
-
     @contextmanager
     def context(self):
         token = scope_ctx.set(self)
@@ -96,6 +84,12 @@ class Scope:
             yield self
         finally:
             scope_ctx.reset(token)
+
+    def remove_subscriber(self, subscriber: Subscriber) -> None:
+        """
+        移除订阅者
+        """
+        self.subscribers.pop(subscriber.id, None)
 
     @overload
     def register(
@@ -151,7 +145,7 @@ class Scope:
         else:
             pubs = [
                 *filter(
-                    None, (search_publisher(target) for target in (events if isinstance(events, tuple) else (events,)))
+                    None, (filter_publisher(target) for target in (events if isinstance(events, tuple) else (events,)))
                 )
             ]
         if not pubs:
@@ -180,8 +174,7 @@ class Scope:
                 dispose=self.remove_subscriber,
                 temporary=temporary,
             )
-            self.lookup_map[res.id] = {pub.id for pub in pubs}
-            self.add_subscriber(res)
+            self.subscribers[res.id] = (res, {pub.id for pub in pubs})
             return res
 
         if func:
@@ -190,12 +183,10 @@ class Scope:
 
     def get_subscribers(self, publisher_id: str) -> list[Subscriber]:
         return [
-            sub
-            for id_, sub in self.subscribers.items()
-            if publisher_id in self.lookup_map[id_] or _backend_publisher.id in self.lookup_map[id_]
+            slot[0] for slot in self.subscribers.values() if publisher_id in slot[1] or _backend_publisher.id in slot[1]
         ]
 
     def iter_subscribers(self, publisher_id: str):
-        for id_, sub in self.subscribers.items():
-            if publisher_id in self.lookup_map[id_] or _backend_publisher.id in self.lookup_map[id_]:
-                yield sub
+        for slot in self.subscribers.values():
+            if publisher_id in slot[1] or _backend_publisher.id in slot[1]:
+                yield slot[0]

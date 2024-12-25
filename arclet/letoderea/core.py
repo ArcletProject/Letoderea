@@ -12,7 +12,7 @@ from .context import scope_ctx
 from .event import BaseEvent
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import ExternalPublisher, Publisher, _backend_publisher, _publishers
+from .publisher import ExternalPublisher, Publisher, _publishers, search_publisher
 from .scope import Scope
 from .subscriber import Subscriber
 from .typing import Contexts, Result, Resultable
@@ -79,14 +79,11 @@ class EventSystem:
     def publish(self, event: Any, scope: str | Scope | None = None):
         """发布事件"""
         loop = asyncio.get_running_loop()
-        if hasattr(event, "__publisher__") and (pub := _publishers.get(event.__publisher__)):
-            publisher_id = pub.id
-        else:
-            publisher_id = next((pub.id for pub in _publishers.values() if pub.validate(event)), _backend_publisher.id)
+        pub_id = search_publisher(event).id
         if isinstance(scope, str) and ((sp := self.scopes.get(scope)) and sp.available):
             task = loop.create_task(
                 dispatch(
-                    sp.iter_subscribers(publisher_id),
+                    sp.iter_subscribers(pub_id),
                     event,
                     external_gather=self.external_gathers.get(event.__class__, None),
                 )
@@ -97,7 +94,7 @@ class EventSystem:
         if isinstance(scope, Scope) and scope.available:
             task = loop.create_task(
                 dispatch(
-                    scope.iter_subscribers(publisher_id),
+                    scope.iter_subscribers(pub_id),
                     event,
                     external_gather=self.external_gathers.get(event.__class__, None),
                 )
@@ -107,7 +104,7 @@ class EventSystem:
             return task
         task = loop.create_task(
             dispatch(
-                chain.from_iterable(sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available),
+                chain.from_iterable(sp.iter_subscribers(pub_id) for sp in self.scopes.values() if sp.available),
                 event,
                 external_gather=self.external_gathers.get(event.__class__, None),
             )
@@ -125,14 +122,11 @@ class EventSystem:
     def post(self, event: Any, scope: str | Scope | None = None):
         """发布事件并返回第一个响应结果"""
         loop = asyncio.get_running_loop()
-        if hasattr(event, "__publisher__") and (pub := _publishers.get(event.__publisher__)):
-            publisher_id = pub.id
-        else:
-            publisher_id = next((pub.id for pub in _publishers.values() if pub.validate(event)), _backend_publisher.id)
+        pub_id = search_publisher(event).id
         if isinstance(scope, str) and ((sp := self.scopes.get(scope)) and sp.available):
             task = loop.create_task(
                 dispatch(
-                    sp.iter_subscribers(publisher_id),
+                    sp.iter_subscribers(pub_id),
                     event,
                     return_result=True,
                     external_gather=self.external_gathers.get(event.__class__, None),
@@ -144,7 +138,7 @@ class EventSystem:
         if isinstance(scope, Scope) and scope.available:
             task = loop.create_task(
                 dispatch(
-                    scope.iter_subscribers(publisher_id),
+                    scope.iter_subscribers(pub_id),
                     event,
                     return_result=True,
                     external_gather=self.external_gathers.get(event.__class__, None),
@@ -155,7 +149,7 @@ class EventSystem:
             return task
         task = loop.create_task(
             dispatch(
-                chain.from_iterable(sp.iter_subscribers(publisher_id) for sp in self.scopes.values() if sp.available),
+                chain.from_iterable(sp.iter_subscribers(pub_id) for sp in self.scopes.values() if sp.available),
                 event,
                 return_result=True,
                 external_gather=self.external_gathers.get(event.__class__, None),

@@ -39,7 +39,7 @@ class TestEvent1(TestEvent):
             return context["is_true"]
 
 
-with Scope("test") as scope:
+with Scope("test").context() as scope:
 
     @scope.register(providers=[IntProvider(), FloatProvider()], publisher=Publisher(TestEvent1))
     async def test_subscriber(

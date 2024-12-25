@@ -6,7 +6,7 @@ from contextlib import suppress
 from dataclasses import is_dataclass
 from typing import Any, Callable, Final, Protocol, TypeVar, cast, runtime_checkable
 
-from tarina import generic_isinstance, generic_issubclass
+from tarina import generic_isinstance
 
 from .auxiliary import BaseAuxiliary, get_auxiliaries
 from .provider import Provider, ProviderFactory, get_providers
@@ -89,6 +89,9 @@ class Publisher:
     def validate(self, event):
         return isinstance(event, self.target)
 
+    def dispose(self):
+        _publishers.pop(self.id, None)
+
 
 def _supplier(event: Any) -> dict[str, Any]:
     if isinstance(event, dict):
@@ -134,7 +137,7 @@ class ExternalPublisher(Publisher):
         return generic_isinstance(event, self.target)
 
 
-def search_publisher(target: type[Any]):
+def filter_publisher(target: type[Any]):
     if hasattr(target, "__publisher__"):
         label = target.__publisher__
     else:
@@ -142,5 +145,13 @@ def search_publisher(target: type[Any]):
     if label in _publishers:
         return _publishers[label]
     for pub in _publishers.values():
-        if generic_issubclass(target, pub.target):
+        if pub.target is target:
             return pub
+
+
+def search_publisher(event: Any) -> Publisher:
+    if hasattr(event, "__publisher__") and (pub := _publishers.get(event.__publisher__)):
+        return pub
+    if pub := _publishers.get(f"$event:{type(event).__name__}"):
+        return pub
+    return next((pub for pub in _publishers.values() if pub.validate(event)), _backend_publisher)
