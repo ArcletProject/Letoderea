@@ -228,10 +228,6 @@ def sort_auxiliaries(auxiliaries: list[BaseAuxiliary]) -> list[BaseAuxiliary]:
             graph[aux.id].add(after)
             in_degree[after] += 1
 
-    for aux in auxiliaries:
-        if aux.id not in graph:
-            in_degree[aux.id] = 0
-
     result = []
     queue = deque([node for node in in_degree if in_degree[node] == 0])
 
