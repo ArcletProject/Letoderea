@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from secrets import token_urlsafe
 from typing import Any, Callable, TypeVar, overload
 
@@ -20,6 +20,8 @@ class Scope:
     id: str
     subscribers: dict[str, Subscriber]
     lookup_map: dict[str, set[str]]
+    providers: list[Provider[Any] | ProviderFactory]
+    auxiliaries: list[BaseAuxiliary]
 
     def __init__(
         self,
@@ -29,6 +31,8 @@ class Scope:
         self.subscribers = {}
         self.lookup_map = {}
         self.available = True
+        self.providers = []
+        self.auxiliaries = []
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
@@ -46,6 +50,31 @@ class Scope:
     async def bail(self, event: Any) -> Result | None:
         """主动向自己的订阅者发布事件, 并返回结果"""
         return await dispatch(self.subscribers.values(), event, return_result=True)
+
+    def bind(
+        self,
+        *args: BaseAuxiliary | Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
+    ) -> None:
+        """为发布器增加间接 Provider 或 Auxiliaries"""
+        self.auxiliaries.extend(a for a in args if isinstance(a, BaseAuxiliary))
+        providers = [p for p in args if not isinstance(p, BaseAuxiliary)]
+        self.providers.extend(p() if isinstance(p, type) else p for p in providers)
+
+    def unbind(
+        self,
+        arg: Provider | BaseAuxiliary | type[Provider] | ProviderFactory | type[ProviderFactory],
+    ) -> None:
+        """移除发布器的间接 Provider 或 Auxiliaries"""
+        if isinstance(arg, BaseAuxiliary):
+            with suppress(ValueError):
+                self.auxiliaries.remove(arg)
+        elif isinstance(arg, (ProviderFactory, Provider)):
+            with suppress(ValueError):
+                self.providers.remove(arg)
+        else:
+            for p in self.providers.copy():
+                if isinstance(p, arg):
+                    self.providers.remove(p)
 
     def add_subscriber(self, subscriber: Subscriber) -> None:
         """
@@ -134,11 +163,13 @@ class Scope:
             _providers = [
                 *global_providers,
                 *pub_providers,
+                *self.providers,
                 *providers,
             ]
             _auxiliaries = [
                 *global_auxiliaries,
                 *pub_auxiliaries,
+                *self.auxiliaries,
                 *auxiliaries,
             ]
             res = Subscriber(
