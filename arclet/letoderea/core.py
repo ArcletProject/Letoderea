@@ -287,16 +287,18 @@ def make_event(cls: type[C] | None = None, *, name: str | None = None):
 
     def wrapper(_cls: type[C], /):
 
-        if not hasattr(_cls, "__annotations__"):
-            raise ValueError(f"@make_event can only take effect for class with attribute annotations, not {_cls}")
+        if not hasattr(_cls, "gather"):
+            if not hasattr(_cls, "__annotations__"):
+                raise ValueError(f"@make_event can only take effect for class with attribute annotations, not {_cls}")
 
-        async def _gather(self, context: Contexts):
-            for key in self.__annotations__:
-                if key in ("providers", "auxiliaries"):
-                    continue
-                context[key] = getattr(self, key, None)
+            async def _gather(self, context: Contexts):
+                for key in self.__annotations__:
+                    if key in ("providers", "auxiliaries"):
+                        continue
+                    context[key] = getattr(self, key, None)
 
-        _cls.gather = _gather  # type: ignore
+            _cls.gather = _gather  # type: ignore
+
         _cls.__publisher__ = es.define(_cls, name).id  # type: ignore
         return _cls  # type: ignore
 

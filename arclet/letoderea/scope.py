@@ -148,8 +148,8 @@ class Scope:
                     None, (filter_publisher(target) for target in (events if isinstance(events, tuple) else (events,)))
                 )
             ]
-        if not pubs:
-            raise ValueError(f"No publisher found for events: {events}")
+            if not pubs:
+                pubs = [Publisher(target) for target in (events if isinstance(events, tuple) else (events,))]
         pub_providers = [p for pub in pubs for p in pub.providers]
         pub_auxiliaries = [a for pub in pubs for a in pub.auxiliaries]
 
