@@ -210,7 +210,7 @@ class Subscriber(Generic[R]):
             if "prepare" in self.auxiliaries:
                 interface = Interface(context, self.providers)
                 await prepare(self.auxiliaries["prepare"], interface)
-                interface.cache.clear()
+                interface.clear()
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
@@ -230,7 +230,7 @@ class Subscriber(Generic[R]):
             if "complete" in self.auxiliaries:
                 interface = Interface(arguments, self.providers)
                 await complete(self.auxiliaries["complete"], interface)
-                interface.cache.clear()
+                interface.clear()
             if self.is_cm:
                 stack: AsyncExitStack = context["$exit_stack"]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
@@ -250,7 +250,7 @@ class Subscriber(Generic[R]):
             if "cleanup" in self.auxiliaries:
                 interface = Interface(context, self.providers)
                 await cleanup(self.auxiliaries["cleanup"], interface)
-                interface.cache.clear()
+                interface.clear()
             context.clear()
         if self.temporary:
             self.dispose()

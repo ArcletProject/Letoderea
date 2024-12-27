@@ -1,4 +1,3 @@
-import asyncio
 import inspect
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, deque
@@ -22,7 +21,7 @@ class Interface(Generic[T]):
         self.ctx = ctx
         self.providers = providers
         self.cache: dict[tuple, Any] = {}
-        self.executed: set[str] = set()
+        self.executed: dict[str, "BaseAuxiliary"] = {}
 
     @staticmethod
     def stop():
@@ -33,7 +32,9 @@ class Interface(Generic[T]):
         raise PropagationCancelled
 
     def clear(self):
-        self.ctx.clear()
+        self.ctx = {}
+        self.cache.clear()
+        self.executed.clear()
 
     class Update(dict):
         pass
@@ -178,7 +179,7 @@ async def prepare(aux: list[BaseAuxiliary], interface: Interface):
             continue
         if res is False:
             raise JudgementError
-        interface.executed.add(_aux.id)
+        interface.executed[_aux.id] = _aux
         if isinstance(res, interface.Update):
             interface.ctx.update(res)
 
@@ -191,7 +192,7 @@ async def complete(aux: list[BaseAuxiliary], interface: Interface):
             continue
         if res is False:
             raise JudgementError
-        interface.executed.add(_aux.id)
+        interface.executed[_aux.id] = _aux
         if isinstance(res, interface.Update):
             if keys.issuperset(res.keys()):
                 interface.ctx.update(res)
@@ -200,12 +201,11 @@ async def complete(aux: list[BaseAuxiliary], interface: Interface):
 
 
 async def cleanup(aux: list[BaseAuxiliary], interface: Interface):
-    res = await asyncio.gather(*[_aux.on_cleanup(interface) for _aux in aux], return_exceptions=True)
-    if False in res:
-        raise JudgementError
-    for _res in res:
-        if isinstance(_res, Exception):
-            raise _res
+    for _aux in aux:
+        res = await _aux.on_cleanup(interface)
+        if res is False:
+            raise JudgementError
+        interface.executed[_aux.id] = _aux
 
 
 def sort_auxiliaries(auxiliaries: list[BaseAuxiliary]) -> list[BaseAuxiliary]:
