@@ -10,6 +10,7 @@ from tarina import run_always_await
 from .exceptions import JudgementError, ParsingStop, PropagationCancelled, UndefinedRequirement, UnexpectedArgument
 from .provider import Param, Provider, ProviderFactory
 from .typing import Contexts, Force
+from .event import EVENT
 
 T = TypeVar("T")
 Q = TypeVar("Q")
@@ -18,7 +19,7 @@ D = TypeVar("D")
 
 class Interface(Generic[T]):
     def __init__(self, ctx: Contexts, providers: list[Union[Provider, ProviderFactory]]):
-        self.ctx = ctx
+        self.ctx: Contexts = ctx
         self.providers = providers
         self.cache: dict[tuple, Any] = {}
         self.executed: dict[str, "BaseAuxiliary"] = {}
@@ -32,7 +33,7 @@ class Interface(Generic[T]):
         raise PropagationCancelled
 
     def clear(self):
-        self.ctx = {}
+        self.ctx = {}  # type: ignore
         self.cache.clear()
         self.executed.clear()
 
@@ -45,7 +46,7 @@ class Interface(Generic[T]):
 
     @property
     def event(self) -> T:
-        return self.ctx["$event"]
+        return self.ctx[EVENT]  # type: ignore
 
     @property
     def result(self) -> T:

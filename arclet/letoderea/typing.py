@@ -13,10 +13,8 @@ T = TypeVar("T")
 T1 = TypeVar("T1")
 
 
-@dataclass(unsafe_hash=True, frozen=True)
 class CtxItem(Generic[T]):
-    key: str
-    to: type[T] = field(init=False)
+    ...
 
 
 class Contexts(dict[str, Any]):
@@ -32,6 +30,22 @@ class Contexts(dict[str, Any]):
 
         def __getitem__(self, item: Union[str, CtxItem[T1]]) -> Any: ...
 
+        @overload
+        def get(self, __key: CtxItem[T1]) -> T1 | None: ...
+
+        @overload
+        def get(self, __key: str) -> Any | None: ...
+
+        @overload
+        def get(self, __key: CtxItem[T1], __default: T1) -> T1: ...
+
+        @overload
+        def get(self, __key: str, __default: Any) -> Any: ...
+
+        @overload
+        def get(self, __key: CtxItem[T1], __default: T) -> T1 | T: ...
+
+        def get(self, __key: Union[str, CtxItem[T1]], __default: Any = ...) -> Any: ...  # type: ignore
     ...
 
 

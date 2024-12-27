@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast
 
+from .event import EVENT
 from .typing import Contexts
 
 T = TypeVar("T")
@@ -82,10 +83,10 @@ else:
 
     def generate(ref: Deref) -> Callable[[Contexts], Any]:
         if len(ref) == 0:
-            return lambda x: x["$event"]
+            return lambda x: x[EVENT]
 
         def _get(ctx: Contexts):
-            item = ctx["$event"]
+            item = ctx[EVENT]
             for key, value in ref:
                 if key and (item := getattr(item, key, ctx.get(key, None))) is None:
                     return item

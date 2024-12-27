@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Callable, Optional, Union
 from .auxiliary import BaseAuxiliary, Interface, auxilia
 from .context import scope_ctx
 from .core import es
-from .event import BaseEvent
+from .event import BaseEvent, EVENT
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
@@ -71,8 +71,8 @@ else:
 
 
 def allow_event(*events: type[BaseEvent]):
-    return bypass_if(lambda ctx: not isinstance(ctx["$event"], events))
+    return bypass_if(lambda ctx: not isinstance(ctx[EVENT], events))
 
 
 def refuse_event(*events: type[BaseEvent]):
-    return bypass_if(lambda ctx: isinstance(ctx["$event"], events))
+    return bypass_if(lambda ctx: isinstance(ctx[EVENT], events))

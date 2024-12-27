@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, Literal, overload
 
 from tarina import generic_isinstance
 
+from .event import EVENT
 from .exceptions import PropagationCancelled
 from .provider import get_providers
 from .subscriber import Subscriber
@@ -74,7 +75,7 @@ async def generate_contexts(
     if external_gather:
         contexts = await external_gather(event)
     else:
-        contexts: Contexts = {"$event": event}  # type: ignore
+        contexts: Contexts = {EVENT: event}  # type: ignore
         await event.gather(contexts)
     return contexts
 

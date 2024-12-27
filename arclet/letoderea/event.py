@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from .typing import Contexts, CtxItem
 
@@ -10,4 +10,4 @@ class BaseEvent(Protocol):
     async def gather(self, context: Contexts) -> Any: ...
 
 
-EVENT: Final[CtxItem[BaseEvent]] = CtxItem("event")
+EVENT: CtxItem[BaseEvent] = cast(CtxItem, "$event")

@@ -10,6 +10,7 @@ from typing import Any, Callable, ClassVar, Generic, NamedTuple, TypeVar
 from tarina import generic_issubclass, run_always_await
 from tarina.generic import get_origin
 
+from .event import EVENT
 from .typing import Contexts
 
 T = TypeVar("T")
@@ -126,7 +127,7 @@ class EventProvider(Provider[Any]):
         return False
 
     async def __call__(self, context: Contexts):
-        return context.get("$event")
+        return context.get(EVENT)
 
 
 class ContextProvider(Provider[Contexts]):
