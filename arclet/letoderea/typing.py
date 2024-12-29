@@ -4,7 +4,7 @@ import asyncio
 import inspect
 from collections.abc import Awaitable, Coroutine
 from contextvars import copy_context
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Generic, Protocol, TypeVar, Union, overload
 from typing_extensions import ParamSpec, Self, TypeGuard

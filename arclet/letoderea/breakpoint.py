@@ -5,7 +5,6 @@ from typing import Callable, Generic, Optional, TypeVar, Union, overload
 
 from .auxiliary import BaseAuxiliary, auxilia, get_auxiliaries, global_auxiliaries
 from .core import es
-from .event import BaseEvent
 from .exceptions import PropagationCancelled
 from .handler import generate_contexts
 from .provider import Provider, get_providers, global_providers
@@ -18,7 +17,7 @@ D = TypeVar("D")
 D1 = TypeVar("D1")
 
 
-def new_target(event_t: type[BaseEvent], condition: "StepOut", fut: Future):
+def new_target(event_t: type, condition: "StepOut", fut: Future):
     sub = Subscriber(
         condition.handler,
         providers=[

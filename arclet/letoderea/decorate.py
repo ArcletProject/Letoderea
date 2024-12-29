@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Callable, Optional, Union
 from .auxiliary import BaseAuxiliary, Interface, auxilia
 from .context import scope_ctx
 from .core import es
-from .event import BaseEvent, EVENT
+from .event import EVENT
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import Subscriber, _compile
@@ -33,7 +33,7 @@ def bind(*args: Union[BaseAuxiliary, Provider, type[Provider]]):
     return wrapper
 
 
-def subscribe(*event: type[BaseEvent]):
+def subscribe(*event: type):
 
     def wrapper(target: TTarget) -> TTarget:
         if scope := scope_ctx.get():
@@ -70,9 +70,9 @@ else:
         return wrapper
 
 
-def allow_event(*events: type[BaseEvent]):
+def allow_event(*events: type):
     return bypass_if(lambda ctx: not isinstance(ctx[EVENT], events))
 
 
-def refuse_event(*events: type[BaseEvent]):
+def refuse_event(*events: type):
     return bypass_if(lambda ctx: isinstance(ctx[EVENT], events))

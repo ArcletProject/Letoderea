@@ -49,7 +49,7 @@ class Interface(Generic[T]):
         return self.ctx[EVENT]  # type: ignore
 
     @property
-    def result(self) -> T:
+    def result(self) -> Any:
         return self.ctx["$result"]
 
     @property

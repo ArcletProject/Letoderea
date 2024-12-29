@@ -4,7 +4,7 @@ import sys
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, Optional, TypeVar, Union, final
+from typing import Annotated, Any, Callable, Generic, Optional, TypeVar, Union, cast, final
 from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
@@ -14,7 +14,7 @@ from .auxiliary import BaseAuxiliary, Interface, cleanup, complete, prepare, sor
 from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, run_sync_generator
+from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, run_sync_generator
 
 
 class _ManageExitStack(BaseAuxiliary):
@@ -118,6 +118,7 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
 
 
 R = TypeVar("R")
+SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 
 @final

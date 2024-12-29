@@ -1,9 +1,9 @@
 import asyncio
 
-from arclet.letoderea import BaseEvent, Contexts, bind, es, provide, subscribe
+from arclet.letoderea import Contexts, bind, es, provide, subscribe
 
 
-class TestEvent(BaseEvent):
+class TestEvent:
     async def gather(self, context: Contexts):
         context["name"] = "Letoderea"
 

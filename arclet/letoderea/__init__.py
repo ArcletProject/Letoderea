@@ -11,6 +11,7 @@ from .decorate import bypass_if as bypass_if
 from .decorate import refuse_event as refuse_event
 from .decorate import subscribe as subscribe
 from .event import BaseEvent as BaseEvent
+from .event import EVENT as EVENT
 from .exceptions import JudgementError as JudgementError
 from .exceptions import ParsingStop as ParsingStop
 from .exceptions import PropagationCancelled as PropagationCancelled
@@ -26,5 +27,6 @@ from .scope import Scope as Scope
 from .subscriber import Depend as Depend
 from .subscriber import Depends as Depends
 from .subscriber import Subscriber as Subscriber
+from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .typing import Contexts as Contexts
 from .typing import Force as Force
