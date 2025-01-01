@@ -25,6 +25,7 @@ class EventSystem:
     external_gathers: dict[type, Callable[[Any], Awaitable[Contexts]]]
 
     def __init__(self):
+        self.loop: asyncio.AbstractEventLoop | None = None
         _scopes["$global"] = self._global_scope
         self.external_gathers = {}
 
@@ -75,7 +76,7 @@ class EventSystem:
 
     def publish(self, event: Any, scope: str | Scope | None = None):
         """发布事件"""
-        loop = asyncio.get_running_loop()
+        loop = self.loop or asyncio.get_running_loop()
         pub_id = search_publisher(event).id
         if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
             task = loop.create_task(
@@ -118,7 +119,7 @@ class EventSystem:
 
     def post(self, event: Any, scope: str | Scope | None = None):
         """发布事件并返回第一个响应结果"""
-        loop = asyncio.get_running_loop()
+        loop = self.loop or asyncio.get_running_loop()
         pub_id = search_publisher(event).id
         if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
             task = loop.create_task(
