@@ -100,9 +100,10 @@ class EventSystem:
             self._ref_tasks.add(task)
             task.add_done_callback(self._ref_tasks.discard)
             return task
+        scopes = [sp for sp in _scopes.values() if sp.available]
         task = loop.create_task(
             dispatch(
-                chain.from_iterable(sp.iter_subscribers(pub_id) for sp in _scopes.values() if sp.available),
+                chain.from_iterable(sp.iter_subscribers(pub_id) for sp in scopes),
                 event,
                 external_gather=self.external_gathers.get(event.__class__, None),
             )

@@ -1,6 +1,6 @@
 [project]
 name = "arclet-letoderea"
-version = "0.14.8"
+version = "0.14.9"
 description = "A high-performance, simple-structured event system, relies on asyncio"
 authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
