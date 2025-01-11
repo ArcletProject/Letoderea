@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Literal, Optional, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Literal, NamedTuple, Optional, TypeVar, Union, overload
 
 from tarina import run_always_await
 
@@ -218,15 +218,27 @@ async def cleanup(aux: list[BaseAuxiliary], interface: Interface):
         interface.executed[_aux.id] = _aux
 
 
+class _Auxiliary(NamedTuple):
+    id: str
+    before: set[str]
+    after: set[str]
+    group: list[BaseAuxiliary]
+
+
 def sort_auxiliaries(auxiliaries: list[BaseAuxiliary]) -> list[BaseAuxiliary]:
-    auxs = {aux.id: aux for aux in auxiliaries}
+    auxs: dict[str, _Auxiliary] = {}
+    for aux in auxiliaries:
+        if aux.id not in auxs:
+            auxs[aux.id] = _Auxiliary(aux.id, aux.before, aux.after, [aux])
+        else:
+            auxs[aux.id].group.append(aux)
     # construct graph and in-degree table
     graph = defaultdict(set)
     in_degree = defaultdict(int)
     for node in auxs:
         in_degree[node] = 0
 
-    for aux in auxiliaries:
+    for aux in auxs.values():
         for before in aux.before:
             if before not in auxs:
                 continue
@@ -249,10 +261,10 @@ def sort_auxiliaries(auxiliaries: list[BaseAuxiliary]) -> list[BaseAuxiliary]:
             if in_degree[neighbor] == 0:
                 queue.append(neighbor)
 
-    if len(result) != len(auxiliaries):
+    if len(result) != len(auxs):
         raise ValueError("Cycle detected in auxiliaries")
 
-    return [auxs[aux] for aux in result]
+    return [aux for node in result for aux in auxs[node].group]
 
 
 @lru_cache(4096)
