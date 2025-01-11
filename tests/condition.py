@@ -57,7 +57,9 @@ class ExampleEvent:
         context["index"] = self.msg
 
 
-@es.on(ExampleEvent, auxiliaries=[Interval(0.3), TestTimeLimit(0, 0)])
+@es.on(ExampleEvent)
+@Interval(0.3)
+@TestTimeLimit(0, 0)
 async def test(
     index: int,
     a: str = "hello",

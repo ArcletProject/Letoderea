@@ -9,7 +9,7 @@ from tarina import run_always_await
 
 from .exceptions import JudgementError, ParsingStop, PropagationCancelled, UndefinedRequirement, UnexpectedArgument
 from .provider import Param, Provider, ProviderFactory
-from .typing import Contexts, Force
+from .typing import Contexts, Force, TTarget
 from .event import EVENT
 
 T = TypeVar("T")
@@ -126,6 +126,15 @@ class BaseAuxiliary(metaclass=ABCMeta):
             "complete": cls.on_complete != BaseAuxiliary.on_complete,
             "cleanup": cls.on_cleanup != BaseAuxiliary.on_cleanup,
         }
+
+    def __call__(self, target: TTarget) -> TTarget:
+        if not hasattr(target, "__auxiliaries__"):
+            setattr(target, "__auxiliaries__", [self])
+        else:
+            getattr(target, "__auxiliaries__").append(self)
+        return target
+
+    bind = __call__
 
 
 def auxilia(
