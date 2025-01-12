@@ -8,7 +8,6 @@ from typing import Any, Callable, Final, Protocol, TypeVar, cast, runtime_checka
 
 from tarina import generic_isinstance
 
-from .auxiliary import BaseAuxiliary, get_auxiliaries
 from .provider import Provider, ProviderFactory, get_providers
 from .typing import Contexts
 
@@ -26,7 +25,6 @@ _publishers: dict[str, "Publisher"] = {}
 class Publisher:
     id: str
     providers: list[Provider[Any] | ProviderFactory]
-    auxiliaries: list[BaseAuxiliary]
 
     def __init__(
         self,
@@ -43,7 +41,6 @@ class Publisher:
         self.target = target
         self.event_queue = Queue(queue_size)
         self.providers = [*get_providers(target)]
-        self.auxiliaries = [*get_auxiliaries(target)]
         _publishers[self.id] = self
 
     def __repr__(self):
@@ -63,22 +60,17 @@ class Publisher:
 
     def bind(
         self,
-        *args: BaseAuxiliary | Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
+        *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
         """为发布器增加间接 Provider 或 Auxiliaries"""
-        self.auxiliaries.extend(a for a in args if isinstance(a, BaseAuxiliary))
-        providers = [p for p in args if not isinstance(p, BaseAuxiliary)]
-        self.providers.extend(p() if isinstance(p, type) else p for p in providers)
+        self.providers.extend(p() if isinstance(p, type) else p for p in args)
 
     def unbind(
         self,
-        arg: Provider | BaseAuxiliary | type[Provider] | ProviderFactory | type[ProviderFactory],
+        arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
         """移除发布器的间接 Provider 或 Auxiliaries"""
-        if isinstance(arg, BaseAuxiliary):
-            with suppress(ValueError):
-                self.auxiliaries.remove(arg)
-        elif isinstance(arg, (ProviderFactory, Provider)):
+        if isinstance(arg, (ProviderFactory, Provider)):
             with suppress(ValueError):
                 self.providers.remove(arg)
         else:

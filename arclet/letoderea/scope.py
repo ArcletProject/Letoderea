@@ -5,7 +5,6 @@ from contextlib import contextmanager, suppress
 from secrets import token_urlsafe
 from typing import Any, Callable, TypeVar, overload
 
-from .auxiliary import BaseAuxiliary, global_auxiliaries
 from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory, global_providers
@@ -22,7 +21,6 @@ class Scope:
     id: str
     subscribers: dict[str, tuple[Subscriber, set[str]]]
     providers: list[Provider[Any] | ProviderFactory]
-    auxiliaries: list[BaseAuxiliary]
 
     def __init__(
         self,
@@ -32,7 +30,6 @@ class Scope:
         self.subscribers = {}
         self.available = True
         self.providers = []
-        self.auxiliaries = []
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
@@ -56,22 +53,17 @@ class Scope:
 
     def bind(
         self,
-        *args: BaseAuxiliary | Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
+        *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
         """为发布器增加间接 Provider 或 Auxiliaries"""
-        self.auxiliaries.extend(a for a in args if isinstance(a, BaseAuxiliary))
-        providers = [p for p in args if not isinstance(p, BaseAuxiliary)]
-        self.providers.extend(p() if isinstance(p, type) else p for p in providers)
+        self.providers.extend(p() if isinstance(p, type) else p for p in args)
 
     def unbind(
         self,
-        arg: Provider | BaseAuxiliary | type[Provider] | ProviderFactory | type[ProviderFactory],
+        arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
         """移除发布器的间接 Provider 或 Auxiliaries"""
-        if isinstance(arg, BaseAuxiliary):
-            with suppress(ValueError):
-                self.auxiliaries.remove(arg)
-        elif isinstance(arg, (ProviderFactory, Provider)):
+        if isinstance(arg, (ProviderFactory, Provider)):
             with suppress(ValueError):
                 self.providers.remove(arg)
         else:
@@ -100,7 +92,6 @@ class Scope:
         events: type | tuple[type, ...] | None = None,
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -114,7 +105,6 @@ class Scope:
         *,
         events: type | tuple[type, ...] | None = None,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -128,7 +118,6 @@ class Scope:
         events: type | tuple[type, ...] | None = None,
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -136,7 +125,6 @@ class Scope:
         temporary: bool = False,
     ):
         """注册一个订阅者"""
-        auxiliaries = auxiliaries or []
         providers = providers or []
         if isinstance(publisher, Publisher):
             pubs = [publisher]
@@ -153,7 +141,6 @@ class Scope:
             if not pubs:
                 pubs = [Publisher(target) for target in (events if isinstance(events, tuple) else (events,))]
         pub_providers = [p for pub in pubs for p in pub.providers]
-        pub_auxiliaries = [a for pub in pubs for a in pub.auxiliaries]
 
         def register_wrapper(exec_target: Callable, /) -> Subscriber:
             _providers = [
@@ -162,16 +149,9 @@ class Scope:
                 *self.providers,
                 *providers,
             ]
-            _auxiliaries = [
-                *global_auxiliaries,
-                *pub_auxiliaries,
-                *self.auxiliaries,
-                *auxiliaries,
-            ]
             res = Subscriber(
                 exec_target,
                 priority=priority,
-                auxiliaries=_auxiliaries,
                 providers=_providers,
                 dispose=self.remove_subscriber,
                 temporary=temporary,

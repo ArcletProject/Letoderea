@@ -6,7 +6,6 @@ from itertools import chain
 from typing import Any, Awaitable, Callable, TypeVar, overload
 from weakref import finalize
 
-from .auxiliary import BaseAuxiliary
 from .context import scope_ctx
 from .event import BaseEvent
 from .handler import dispatch
@@ -165,7 +164,6 @@ class EventSystem:
         func: Callable[..., Any],
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -178,7 +176,6 @@ class EventSystem:
         events: type | tuple[type, ...],
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -190,7 +187,6 @@ class EventSystem:
         self,
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -202,7 +198,6 @@ class EventSystem:
         events: type | tuple[type, ...] | None = None,
         func: Callable[..., Any] | None = None,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         temporary: bool = False,
     ):
@@ -213,10 +208,10 @@ class EventSystem:
             scope = self._global_scope
         if not func:
             return scope.register(
-                events=events, priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary
+                events=events, priority=priority, providers=providers, temporary=temporary
             )
         return scope.register(
-            func, events=events, priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary
+            func, events=events, priority=priority, providers=providers, temporary=temporary
         )
 
     @overload
@@ -226,7 +221,6 @@ class EventSystem:
         func: Callable[..., Any],
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -239,7 +233,6 @@ class EventSystem:
         pub: str | Publisher,
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -251,7 +244,6 @@ class EventSystem:
         pub: str | Publisher,
         func: Callable[..., Any] | None = None,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: (
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
@@ -261,10 +253,10 @@ class EventSystem:
             scope = self._global_scope
         if not func:
             return scope.register(
-                priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary, publisher=pub
+                priority=priority, providers=providers, temporary=temporary, publisher=pub
             )
         return scope.register(
-            func, priority=priority, auxiliaries=auxiliaries, providers=providers, temporary=temporary, publisher=pub
+            func, priority=priority, providers=providers, temporary=temporary, publisher=pub
         )
 
 
