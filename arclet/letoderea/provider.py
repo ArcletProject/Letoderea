@@ -138,4 +138,12 @@ class ContextProvider(Provider[Contexts]):
         return context
 
 
-global_providers.extend([EventProvider(), ContextProvider()])
+class ResultProvider(Provider[Any]):
+    def validate(self, param: Param):
+        return param.name == "result"
+
+    async def __call__(self, context: Contexts):
+        return context.get("$result")
+
+
+global_providers.extend([EventProvider(), ContextProvider(), ResultProvider()])

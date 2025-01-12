@@ -7,6 +7,8 @@ from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Generic, Protocol, TypeVar, Union, overload
+
+from tarina import generic_isinstance
 from typing_extensions import ParamSpec, Self, TypeGuard
 
 T = TypeVar("T")
@@ -66,6 +68,14 @@ class Result(Generic[T]):
     """用于标记一个事件响应器的处理结果，通常应用在某个事件响应器的处理结果需要被事件发布者使用的情况"""
 
     value: T
+
+    @staticmethod
+    def check_result(event: Any, result: Result):
+        if not hasattr(event, "__result_type__"):
+            return result
+        if generic_isinstance(result.value, event.__result_type__):
+            return result
+        return
 
 
 class Resultable(Protocol[T]):

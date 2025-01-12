@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import asyncio
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
@@ -10,10 +11,11 @@ from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
+from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler, PropagationCancelled
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, run_sync_generator
+from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, \
+    run_sync_generator, Result
 
 
 @dataclass(init=False, eq=True)
@@ -110,6 +112,7 @@ class Subscriber(Generic[R]):
     params: list[CompileParam]
 
     _callable_target: Callable[..., Any]
+    _diffusions: list[Subscriber]
 
     def __init__(
         self,
@@ -151,6 +154,7 @@ class Subscriber(Generic[R]):
             self._callable_target = run_sync(callable_target)  # type: ignore
 
         self._dispose = dispose
+        self._diffusions = []
         self.temporary = temporary
 
     def _recompile(self):
@@ -214,7 +218,32 @@ class Subscriber(Generic[R]):
             _, exception, tb = sys.exc_info()
             if exception:
                 context["$error"] = exception
-            context.clear()
         if self.temporary:
             self.dispose()
-        return result
+        if not self._diffusions:
+            context.clear()
+            return result
+        return await self._run_diffuse(context)
+        # return result
+
+    async def _run_diffuse(self, context: Contexts) -> R:
+        results = await asyncio.gather(*(sub.handle(context.copy()) for sub in self._diffusions), return_exceptions=True)
+        _result = context.pop("$result")
+        context.clear()
+        for result in results:
+            if result.__class__ is PropagationCancelled:
+                return _result
+            if isinstance(result, Result):
+                return result.value
+            if not isinstance(result, BaseException) and result is not None and result is not False:
+                return result
+        return _result
+
+    def diffuse(self, *, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None):
+        def wrapper(callable_target: TTarget[Any]):
+            _providers = providers or []
+            _providers.extend(self.providers)
+            sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._diffusions.remove(x))
+            self._diffusions.append(sub)
+            return sub
+        return wrapper

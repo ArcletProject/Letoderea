@@ -4,21 +4,11 @@ import asyncio
 from collections.abc import Iterable
 from typing import Any, Awaitable, Callable, Literal, overload
 
-from tarina import generic_isinstance
-
 from .event import EVENT
 from .exceptions import PropagationCancelled
 from .provider import get_providers
 from .subscriber import Subscriber
 from .typing import Contexts, Result
-
-
-def _check_result(event: Any, result: Result):
-    if not hasattr(event, "__result_type__"):
-        return result
-    if generic_isinstance(result.value, event.__result_type__):
-        return result
-    return
 
 
 @overload
@@ -64,9 +54,9 @@ async def dispatch(
             if not return_result:
                 continue
             if isinstance(result, Result):
-                return _check_result(event, result)
+                return Result.check_result(event, result)
             if not isinstance(result, BaseException) and result is not None and result is not False:
-                return _check_result(event, Result(result))
+                return Result.check_result(event, Result(result))
 
 
 async def generate_contexts(
