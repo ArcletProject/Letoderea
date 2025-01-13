@@ -6,16 +6,35 @@ from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final
-from typing_extensions import Self, get_args, get_origin
+from typing_extensions import Self, get_args, get_origin, TypeAlias
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler, PropagationCancelled
+from .exceptions import InnerHandlerException, ParsingStop, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
 from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, \
     run_sync_generator, Result
+
+
+TState: TypeAlias = dict[str, Any]
+
+
+class ResultProvider(Provider[Any]):
+    def validate(self, param: Param):
+        return param.name == "result"
+
+    async def __call__(self, context: Contexts):
+        return context.get("$result")
+
+
+class StateProvider(Provider[Any]):
+    def validate(self, param: Param):
+        return param.name == "state" and param.annotation == TState
+
+    async def __call__(self, context: Contexts):
+        return context[SUBSCRIBER]._state
 
 
 @dataclass(init=False, eq=True)
@@ -128,6 +147,8 @@ class Subscriber(Generic[R]):
         self.auxiliaries = {}
         providers = providers or []
         self.providers = [p() if isinstance(p, type) else p for p in providers]
+        self.providers.append(StateProvider())
+        self._state = {}
 
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
@@ -176,6 +197,8 @@ class Subscriber(Generic[R]):
     def dispose(self):
         if self._dispose:
             self._dispose(self)
+        while self._diffusions:
+            self._diffusions[0].dispose()
 
     async def handle(self, context: Contexts, inner=False) -> R:
         if not inner:
@@ -204,7 +227,9 @@ class Subscriber(Generic[R]):
                 result = await stack.enter_async_context(self._callable_target(**arguments))
             else:
                 result = await self._callable_target(**arguments)
-            context["$result"] = result
+            if self._diffusions:
+                context["$result"] = result
+                result = await self._run_diffuse(context)
         except InnerHandlerException as e:
             if inner:
                 raise
@@ -220,28 +245,26 @@ class Subscriber(Generic[R]):
                 context["$error"] = exception
         if self.temporary:
             self.dispose()
-        if not self._diffusions:
-            context.clear()
-            return result
-        return await self._run_diffuse(context)
-        # return result
+        return result
 
     async def _run_diffuse(self, context: Contexts) -> R:
-        results = await asyncio.gather(*(sub.handle(context.copy()) for sub in self._diffusions), return_exceptions=True)
-        _result = context.pop("$result")
-        context.clear()
+        if len(self._diffusions) == 1:
+            results = [await self._diffusions[0].handle(context.copy())]
+        else:
+            results = await asyncio.gather(*(sub.handle(context.copy()) for sub in self._diffusions), return_exceptions=True)
         for result in results:
-            if result.__class__ is PropagationCancelled:
-                return _result
+            if isinstance(result, BaseException):
+                raise result
             if isinstance(result, Result):
                 return result.value
-            if not isinstance(result, BaseException) and result is not None and result is not False:
+            if result is not None and result is not False:
                 return result
-        return _result
+        return context["$result"]
 
     def diffuse(self, *, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None):
         def wrapper(callable_target: TTarget[Any]):
             _providers = providers or []
+            _providers.append(ResultProvider())
             _providers.extend(self.providers)
             sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._diffusions.remove(x))
             self._diffusions.append(sub)
