@@ -5,19 +5,19 @@ import asyncio
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final
+from typing import Annotated, Any, Callable, Generic, TypeVar, TypedDict, Protocol, cast, final, overload, runtime_checkable
 from typing_extensions import Self, get_args, get_origin, TypeAlias
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .exceptions import InnerHandlerException, ParsingStop, UndefinedRequirement, exception_handler
+from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, \
-    run_sync_generator, Result
+from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, run_sync_generator, Result
 
 
+RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
 TState: TypeAlias = dict[str, Any]
 
 
@@ -26,7 +26,7 @@ class ResultProvider(Provider[Any]):
         return param.name == "result"
 
     async def __call__(self, context: Contexts):
-        return context.get("$result")
+        return context.get(RESULT)
 
 
 class StateProvider(Provider[Any]):
@@ -122,6 +122,17 @@ R = TypeVar("R")
 SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 
+class PropagatePair(TypedDict):
+    forward: TTarget[Any]
+    backward: TTarget[Any]
+
+
+@runtime_checkable
+class Propagator(Protocol):
+    def export(self) -> PropagatePair:
+        ...
+
+
 @final
 class Subscriber(Generic[R]):
     id: str
@@ -131,7 +142,6 @@ class Subscriber(Generic[R]):
     params: list[CompileParam]
 
     _callable_target: Callable[..., Any]
-    _diffusions: list[Subscriber]
 
     def __init__(
         self,
@@ -175,7 +185,8 @@ class Subscriber(Generic[R]):
             self._callable_target = run_sync(callable_target)  # type: ignore
 
         self._dispose = dispose
-        self._diffusions = []
+        self._forward_propagates: list[Subscriber] = []
+        self._backward_propagates: list[Subscriber] = []
         self.temporary = temporary
 
     def _recompile(self):
@@ -197,8 +208,10 @@ class Subscriber(Generic[R]):
     def dispose(self):
         if self._dispose:
             self._dispose(self)
-        while self._diffusions:
-            self._diffusions[0].dispose()
+        while self._forward_propagates:
+            self._forward_propagates[0].dispose()
+        while self._backward_propagates:
+            self._backward_propagates[0].dispose()
 
     async def handle(self, context: Contexts, inner=False) -> R:
         if not inner:
@@ -206,6 +219,8 @@ class Subscriber(Generic[R]):
         if self.is_cm and "$exit_stack" not in context:
             context["$exit_stack"] = AsyncExitStack()
         try:
+            if self._backward_propagates:
+                await self._run_backward(context)
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
@@ -227,9 +242,9 @@ class Subscriber(Generic[R]):
                 result = await stack.enter_async_context(self._callable_target(**arguments))
             else:
                 result = await self._callable_target(**arguments)
-            if self._diffusions:
+            if self._forward_propagates:
                 context["$result"] = result
-                result = await self._run_diffuse(context)
+                result = await self._run_forward(context)
         except InnerHandlerException as e:
             if inner:
                 raise
@@ -240,18 +255,19 @@ class Subscriber(Generic[R]):
             if self.is_cm and "$exit_stack" in context:
                 await context["$exit_stack"].aclose()
                 context.pop("$exit_stack")
+            context.clear()
             _, exception, tb = sys.exc_info()
-            if exception:
-                context["$error"] = exception
+            # if exception:
+            #     context["$error"] = exception
         if self.temporary:
             self.dispose()
         return result
 
-    async def _run_diffuse(self, context: Contexts) -> R:
-        if len(self._diffusions) == 1:
-            results = [await self._diffusions[0].handle(context.copy())]
+    async def _run_forward(self, context: Contexts) -> R:
+        if len(self._forward_propagates) == 1:
+            results = [await self._forward_propagates[0].handle(context.copy(), inner=True)]
         else:
-            results = await asyncio.gather(*(sub.handle(context.copy()) for sub in self._diffusions), return_exceptions=True)
+            results = await asyncio.gather(*(sub.handle(context.copy(), inner=True) for sub in self._forward_propagates), return_exceptions=True)
         for result in results:
             if isinstance(result, BaseException):
                 raise result
@@ -261,12 +277,65 @@ class Subscriber(Generic[R]):
                 return result
         return context["$result"]
 
-    def diffuse(self, *, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None):
-        def wrapper(callable_target: TTarget[Any]):
-            _providers = providers or []
+    async def _run_backward(self, context: Contexts):
+        if len(self._backward_propagates) == 1:
+            results = [await self._backward_propagates[0].handle(context.copy(), inner=True)]
+        else:
+            results = await asyncio.gather(*(sub.handle(context.copy(), inner=True) for sub in self._backward_propagates), return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+            if isinstance(result, dict):
+                context.update(result)
+
+    @overload
+    def propagate(self, func: TTarget[Any], *, back: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None) -> Subscriber[Any]:
+        ...
+
+    @overload
+    def propagate(self, func: PropagatePair | Propagator, *, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None) -> tuple[Subscriber[Any], Subscriber[Any]]:
+        ...
+
+    @overload
+    def propagate(self, *, back: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None) -> Callable[[TTarget[Any]], Subscriber[Any]]:
+        ...
+
+    def propagate(self, func: TTarget[Any] | PropagatePair | Propagator | None = None, *, back: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None):
+        _providers = providers or []
+        _providers.extend(self.providers)
+
+        if isinstance(func, (Propagator, dict)):
+            pair = func.export() if isinstance(func, Propagator) else func
+            sub1 = Subscriber(pair["forward"], priority=priority, providers=_providers.copy(), dispose=lambda x: self._forward_propagates.remove(x))
             _providers.append(ResultProvider())
-            _providers.extend(self.providers)
-            sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._diffusions.remove(x))
-            self._diffusions.append(sub)
+            sub2 = Subscriber(pair["backward"], priority=priority, providers=_providers.copy(), dispose=lambda x: self._backward_propagates.remove(x))
+            self._forward_propagates.append(sub1)
+            self._backward_propagates.append(sub2)
+            return sub1, sub2
+
+        def wrapper(callable_target: TTarget[Any], /):
+            if back:
+                sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._backward_propagates.remove(x))
+                self._backward_propagates.append(sub)
+            else:
+                _providers.append(ResultProvider())
+                sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._forward_propagates.remove(x))
+                self._forward_propagates.append(sub)
             return sub
+        if func:
+            return wrapper(func)
         return wrapper
+
+    @overload
+    def propagates(self, *funcs: TTarget[Any], back: bool = False):
+        ...
+
+    @overload
+    def propagates(self, *funcs: PropagatePair | Propagator):
+        ...
+
+    def propagates(self, *funcs: TTarget[Any] | PropagatePair | Propagator, back: bool = False):
+        for func in funcs:
+            self.propagate(func, back=back)  # type: ignore
+
+        return self
