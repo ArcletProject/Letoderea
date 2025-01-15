@@ -1,11 +1,11 @@
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union, Any, overload
 
 from .context import scope_ctx
 from .core import es
 from .event import EVENT
 from .provider import Provider
 from .ref import Deref, generate
-from .subscriber import Subscriber, _compile
+from .subscriber import Subscriber, _compile, Propagator
 from .typing import Contexts, TTarget
 
 
@@ -35,6 +35,29 @@ def subscribe(*event: type):
 
     return wrapper
 
+
+@overload
+def propagate(*funcs: TTarget[Any], prepend: bool = False):
+    ...
+
+
+@overload
+def propagate(*funcs: Propagator):
+    ...
+
+
+def propagate(*funcs: Union[TTarget[Any], Propagator], prepend: bool = False):
+    def wrapper(target: TTarget) -> TTarget:
+        if isinstance(target, Subscriber):
+            target.propagates(*funcs, back)  # type: ignore
+        else:
+            if not hasattr(target, "__propagates__"):
+                setattr(target, "__propagates__", [(funcs, prepend)])
+            else:
+                getattr(target, "__propagates__").append((funcs, prepend))
+        return target
+
+    return wrapper
 
 # if TYPE_CHECKING:
 #
