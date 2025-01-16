@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping, Sequence
 from itertools import chain
-from typing import Any, Awaitable, Callable, TypeVar, overload
+from typing import Any, Callable, TypeVar, overload
+from collections.abc import Awaitable
 from weakref import finalize
 
 from .context import scope_ctx

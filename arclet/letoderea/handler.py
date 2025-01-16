@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterable
-from typing import Any, Awaitable, Callable, Literal, overload
+from typing import Any, Callable, Literal, overload
+from collections.abc import Awaitable
 
 from .event import EVENT
 from .exceptions import PropagationCancelled

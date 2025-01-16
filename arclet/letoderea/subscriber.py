@@ -5,8 +5,9 @@ import sys
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, Generator, cast, final, overload
-from typing_extensions import Self, get_args, get_origin, TypeAlias
+from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload
+from collections.abc import Generator
+from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
@@ -14,11 +15,21 @@ from tarina import Empty, is_async, signatures
 from .exceptions import ParsingStop, InnerHandlerException, UndefinedRequirement, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, run_sync_generator, Result
+from .typing import (
+    CtxItem,
+    Contexts,
+    Force,
+    Result,
+    TState,
+    TTarget,
+    is_async_gen_callable,
+    is_gen_callable,
+    run_sync,
+    run_sync_generator
+)
 
 
 RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
-TState: TypeAlias = dict[str, Any]
 
 
 class ResultProvider(Provider[Any]):

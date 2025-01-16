@@ -1,10 +1,11 @@
-from typing import TYPE_CHECKING, Callable, Optional, Union, Any, overload
+from typing import TYPE_CHECKING, Callable, Union, Any, overload
 
 from .context import scope_ctx
 from .core import es
 from .event import EVENT
 from .provider import Provider
 from .ref import Deref, generate
+from .exceptions import ParsingStop
 from .subscriber import Subscriber, _compile, Propagator
 from .typing import Contexts, TTarget
 
@@ -37,19 +38,19 @@ def subscribe(*event: type):
 
 
 @overload
-def propagate(*funcs: TTarget[Any], prepend: bool = False):
+def propagate(*funcs: TTarget[Any], prepend: bool = False) -> Callable[[TTarget], TTarget]:
     ...
 
 
 @overload
-def propagate(*funcs: Propagator):
+def propagate(*funcs: Propagator) -> Callable[[TTarget], TTarget]:
     ...
 
 
 def propagate(*funcs: Union[TTarget[Any], Propagator], prepend: bool = False):
-    def wrapper(target: TTarget) -> TTarget:
+    def wrapper(target: TTarget, /) -> TTarget:
         if isinstance(target, Subscriber):
-            target.propagates(*funcs, back)  # type: ignore
+            target.propagates(*funcs, prepend=prepend)  # type: ignore
         else:
             if not hasattr(target, "__propagates__"):
                 setattr(target, "__propagates__", [(funcs, prepend)])
@@ -59,36 +60,26 @@ def propagate(*funcs: Union[TTarget[Any], Propagator], prepend: bool = False):
 
     return wrapper
 
-# if TYPE_CHECKING:
-#
-#     def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]: ...
-#
-# else:
-#
-#     def bypass_if(predicate: Union[Callable[[Contexts], bool], Deref]):
-#         _predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
-#
-#         def _prepare(interface: Interface) -> Optional[bool]:
-#             return not _predicate(interface.ctx)
-#
-#         inner = auxilia("bypass_if", _prepare)
-#
-#         def wrapper(target: TTarget) -> TTarget:
-#             if isinstance(target, Subscriber):
-#                 target.auxiliaries["prepare"].append(inner)
-#             else:
-#                 if not hasattr(target, "__auxiliaries__"):
-#                     setattr(target, "__auxiliaries__", [inner])
-#                 else:
-#                     getattr(target, "__auxiliaries__").append(inner)
-#             return target
-#
-#         return wrapper
-#
-#
-# def allow_event(*events: type):
-#     return bypass_if(lambda ctx: not isinstance(ctx[EVENT], events))
-#
-#
-# def refuse_event(*events: type):
-#     return bypass_if(lambda ctx: isinstance(ctx[EVENT], events))
+
+if TYPE_CHECKING:
+
+    def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]: ...
+
+else:
+
+    def bypass_if(predicate: Union[Callable[[Contexts], bool], Deref]):
+        _predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
+
+        def _check(ctx: Contexts):
+            if _predicate(ctx) is False:
+                raise ParsingStop
+
+        return propagate(_check, prepend=True)
+
+
+def allow_event(*events: type):
+    return bypass_if(lambda ctx: not isinstance(ctx[EVENT], events))
+
+
+def refuse_event(*events: type):
+    return bypass_if(lambda ctx: isinstance(ctx[EVENT], events))

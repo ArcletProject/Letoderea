@@ -6,10 +6,11 @@ from collections.abc import Awaitable, Coroutine
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Generic, Protocol, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, Union, overload
+from collections.abc import AsyncGenerator, Generator
 
 from tarina import generic_isinstance
-from typing_extensions import ParamSpec, Self, TypeGuard
+from typing_extensions import ParamSpec, Self, TypeGuard, TypeAlias
 
 T = TypeVar("T")
 T1 = TypeVar("T1")
@@ -30,7 +31,7 @@ class Contexts(dict[str, Any]):
         @overload
         def __getitem__(self, item: str) -> Any: ...
 
-        def __getitem__(self, item: Union[str, CtxItem[T1]]) -> Any: ...
+        def __getitem__(self, item: str | CtxItem[T1]) -> Any: ...
 
         @overload
         def get(self, __key: CtxItem[T1]) -> T1 | None: ...
@@ -47,10 +48,11 @@ class Contexts(dict[str, Any]):
         @overload
         def get(self, __key: CtxItem[T1], __default: T) -> T1 | T: ...
 
-        def get(self, __key: Union[str, CtxItem[T1]], __default: Any = ...) -> Any: ...  # type: ignore
+        def get(self, __key: str | CtxItem[T1], __default: Any = ...) -> Any: ...  # type: ignore
     ...
 
 
+TState: TypeAlias = dict[str, Any]
 TTarget = Union[Callable[..., Awaitable[T]], Callable[..., T]]
 TCallable = TypeVar("TCallable", bound=TTarget[Any])
 P = ParamSpec("P")
