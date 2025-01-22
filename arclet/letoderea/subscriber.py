@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import sys
+from collections import defaultdict
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
@@ -20,7 +21,6 @@ from .typing import (
     Contexts,
     Force,
     Result,
-    TState,
     TTarget,
     is_async_gen_callable,
     is_gen_callable,
@@ -38,14 +38,6 @@ class ResultProvider(Provider[Any]):
 
     async def __call__(self, context: Contexts):
         return context.get(RESULT)
-
-
-class StateProvider(Provider[Any]):
-    def validate(self, param: Param):
-        return param.name == "state" and param.annotation == TState
-
-    async def __call__(self, context: Contexts):
-        return context[SUBSCRIBER]._state
 
 
 @dataclass(init=False, eq=True)
@@ -135,7 +127,7 @@ SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 class Propagator(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def compose(self) -> Generator[TTarget | tuple[TTarget, bool], None, None]:
+    def compose(self) -> Generator[TTarget | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]:
         ...
 
     def __iter__(self):
@@ -168,8 +160,6 @@ class Subscriber(Generic[R]):
         self.auxiliaries = {}
         providers = providers or []
         self.providers = [p() if isinstance(p, type) else p for p in providers]
-        self.providers.append(StateProvider())
-        self._state = {}
         self._propagates: list[Subscriber] = []
         self._cursor = 0
 
@@ -180,13 +170,13 @@ class Subscriber(Generic[R]):
                 self.propagates(*slot[0], prepend=slot[1])
         self.params = _compile(callable_target, self.providers)
         self.callable_target = callable_target  # type: ignore
-        self.is_cm = False
+        self.has_cm = False
         if is_gen_callable(callable_target) or is_async_gen_callable(callable_target):
             if is_gen_callable(callable_target):
                 self._callable_target = asynccontextmanager(run_sync_generator(callable_target))
             else:
                 self._callable_target = asynccontextmanager(callable_target)  # type: ignore
-            self.is_cm = True
+            self.has_cm = True
         elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (
             is_gen_callable(wrapped) or is_async_gen_callable(wrapped)
         ):
@@ -194,7 +184,7 @@ class Subscriber(Generic[R]):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
             else:
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
-            self.is_cm = True
+            self.has_cm = True
         elif is_async(callable_target):
             self._callable_target = callable_target  # type: ignore
         else:
@@ -228,8 +218,8 @@ class Subscriber(Generic[R]):
     async def handle(self, context: Contexts, inner=False) -> R:
         if not inner:
             context["$subscriber"] = self
-        if self.is_cm and "$exit_stack" not in context:
-            context["$exit_stack"] = AsyncExitStack()
+            if self.has_cm and "$exit_stack" not in context:
+                context["$exit_stack"] = AsyncExitStack()
         try:
             if self._cursor:
                 await self._run_propagate(context, self._propagates[:self._cursor])
@@ -249,7 +239,7 @@ class Subscriber(Generic[R]):
                         context["$depend_cache"][param.depend.sub.callable_target] = dep_res
                 else:
                     arguments[param.name] = await param.solve(context)
-            if self.is_cm:
+            if self.has_cm:
                 stack: AsyncExitStack = context["$exit_stack"]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
             else:
@@ -266,10 +256,11 @@ class Subscriber(Generic[R]):
                 raise exception_handler(ParsingStop(), self.callable_target, context, inner) from None
             raise exception_handler(e, self.callable_target, context, inner) from e  # type: ignore
         finally:
-            if self.is_cm and "$exit_stack" in context:
-                await context["$exit_stack"].aclose()
-                context.pop("$exit_stack")
-            context.clear()
+            if not inner:
+                if self.has_cm and "$exit_stack" in context:
+                    await context["$exit_stack"].aclose()
+                    context.pop("$exit_stack")
+                context.clear()
             _, exception, tb = sys.exc_info()
             # if exception:
             #     context["$error"] = exception
@@ -278,15 +269,41 @@ class Subscriber(Generic[R]):
         return result
 
     async def _run_propagate(self, context: Contexts, propagates: list[Subscriber]):
-        for sub in sorted(propagates, key=lambda x: x.priority):
-            result = await sub.handle(context.copy(), inner=True)
-            if isinstance(result, dict):
-                context.update(result)
-                continue
-            if isinstance(result, Result):
-                return result.value
-            if result is not None and result is not False:
-                return result
+        queue = sorted(propagates, key=lambda x: x.priority).copy()
+        pending: defaultdict[str, list[Subscriber]] = defaultdict(list)
+        while queue:
+            sub = queue.pop(0)
+            try:
+                if pending:
+                    keys = list(pending.keys())
+                    for key in keys:
+                        if key not in context:
+                            continue
+                        await self._run_propagate(context, pending.pop(key))
+                result = await sub.handle(context, inner=True)
+            except InnerHandlerException as e:
+                exc = e.args[0]
+                if isinstance(exc, UndefinedRequirement):
+                    pending[exc.__origin_args__[0]].append(sub)
+                else:
+                    raise
+            else:
+                if isinstance(result, dict):
+                    context.update(result)
+                    continue
+                if isinstance(result, Result):
+                    return result.value
+                if result is not None and result is not False:
+                    return result
+        if pending:
+            key, (sub, *_) = pending.popitem()
+            param = next((p for p in sub.params if p.name == key))
+            raise exception_handler(
+                UndefinedRequirement(param.name, param.annotation, param.default, param.providers),
+                sub.callable_target,
+                context,
+                inner=True,
+            )
         return context.get(RESULT)
 
     @overload
@@ -294,7 +311,7 @@ class Subscriber(Generic[R]):
         ...
 
     @overload
-    def propagate(self, func: Propagator, *, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None) -> Self:
+    def propagate(self, func: Propagator, *, providers: list[Provider | ProviderFactory] | None = None) -> Self:
         ...
 
     @overload
@@ -308,9 +325,9 @@ class Subscriber(Generic[R]):
         if isinstance(func, Propagator):
             for slot in func.compose():
                 if isinstance(slot, tuple):
-                    self.propagate(slot[0], prepend=slot[1], priority=priority)
+                    self.propagate(slot[0], prepend=slot[1], priority=slot[2] if len(slot) == 3 else 16)
                 else:
-                    self.propagate(slot, priority=priority)
+                    self.propagate(slot, priority=16)
             return self
 
         def wrapper(callable_target: TTarget[Any], /):
@@ -318,10 +335,14 @@ class Subscriber(Generic[R]):
                 sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._propagates.remove(x))
                 self._propagates.insert(0, sub)
                 self._cursor += 1
+                if sub.has_cm:
+                    self.has_cm = True
             else:
                 _providers.append(ResultProvider())
                 sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._propagates.remove(x))
                 self._propagates.append(sub)
+                if sub.has_cm:
+                    self.has_cm = True
             return self
         if func:
             return wrapper(func)
@@ -332,7 +353,7 @@ class Subscriber(Generic[R]):
         ...
 
     @overload
-    def propagates(self, *funcs:  Propagator):
+    def propagates(self, *funcs: TTarget[Any] | Propagator):
         ...
 
     def propagates(self, *funcs: TTarget[Any] | Propagator, prepend: bool = False):

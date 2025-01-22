@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, Uni
 from collections.abc import AsyncGenerator, Generator
 
 from tarina import generic_isinstance
-from typing_extensions import ParamSpec, Self, TypeGuard, TypeAlias
+from typing_extensions import ParamSpec, Self, TypeGuard
 
 T = TypeVar("T")
 T1 = TypeVar("T1")
@@ -52,7 +52,6 @@ class Contexts(dict[str, Any]):
     ...
 
 
-TState: TypeAlias = dict[str, Any]
 TTarget = Union[Callable[..., Awaitable[T]], Callable[..., T]]
 TCallable = TypeVar("TCallable", bound=TTarget[Any])
 P = ParamSpec("P")

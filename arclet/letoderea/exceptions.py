@@ -2,7 +2,7 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Callable
+from typing import Any, Callable
 
 from .typing import Contexts
 
@@ -12,7 +12,7 @@ class UnexpectedArgument(Exception):
 
 
 class UndefinedRequirement(Exception):
-    pass
+    __origin_args__: tuple[str, Any, Any, list[Any]]
 
 
 class JudgementError(Exception):
@@ -57,6 +57,7 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
             f"\n{pprint.pformat(contexts)}",
             _args,
         )
+        exc.__origin_args__ = e.args
         exc.__traceback__ = e.__traceback__
         if inner:
             return InnerHandlerException(exc)
