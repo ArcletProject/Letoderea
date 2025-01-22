@@ -64,14 +64,15 @@ def propagate(*funcs: Union[TTarget[Any], Propagator], prepend: bool = False):
 if TYPE_CHECKING:
 
     def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]: ...
-
+    def enter_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]: ...
 else:
-    class _BypassIf(Propagator):
-        def __init__(self, predicate: Union[Callable[[Contexts], bool], Deref]):
+    class _Check(Propagator):
+        def __init__(self, predicate: Union[Callable[[Contexts], bool], Deref], result: bool):
             self.predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
+            self.result = result
 
         def check(self, ctx: Contexts):
-            if self.predicate(ctx):
+            if self.predicate(ctx) is not self.result:
                 raise ParsingStop
 
         def compose(self):
@@ -79,7 +80,10 @@ else:
 
 
     def bypass_if(predicate: Union[Callable[[Contexts], bool], Deref]):
-        return propagate(_BypassIf(predicate))
+        return propagate(_Check(predicate, False))
+
+    def enter_if(predicate: Union[Callable[[Contexts], bool], Deref]):
+        return propagate(_Check(predicate, True))
 
 
 def allow_event(*events: type):

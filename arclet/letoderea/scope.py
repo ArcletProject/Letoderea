@@ -93,7 +93,7 @@ class Scope:
         *,
         priority: int = 16,
         providers: (
-            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
@@ -106,7 +106,7 @@ class Scope:
         events: type | tuple[type, ...] | None = None,
         priority: int = 16,
         providers: (
-            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
@@ -119,7 +119,7 @@ class Scope:
         *,
         priority: int = 16,
         providers: (
-            Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,

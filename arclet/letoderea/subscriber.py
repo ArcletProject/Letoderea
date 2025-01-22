@@ -222,7 +222,7 @@ class Subscriber(Generic[R]):
                 context["$exit_stack"] = AsyncExitStack()
         try:
             if self._cursor:
-                await self._run_propagate(context, self._propagates[:self._cursor])
+                await self._run_propagate(context, self._propagates[:self._cursor], is_prepend=True)
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
@@ -268,7 +268,7 @@ class Subscriber(Generic[R]):
             self.dispose()
         return result
 
-    async def _run_propagate(self, context: Contexts, propagates: list[Subscriber]):
+    async def _run_propagate(self, context: Contexts, propagates: list[Subscriber], is_prepend=False):
         queue = sorted(propagates, key=lambda x: x.priority).copy()
         pending: defaultdict[str, list[Subscriber]] = defaultdict(list)
         while queue:
@@ -291,6 +291,8 @@ class Subscriber(Generic[R]):
                 if isinstance(result, dict):
                     context.update(result)
                     continue
+                if result is False and is_prepend:
+                    raise exception_handler(ParsingStop(), sub.callable_target, context, inner=True)
                 if isinstance(result, Result):
                     return result.value
                 if result is not None and result is not False:

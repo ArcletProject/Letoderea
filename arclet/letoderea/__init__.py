@@ -4,6 +4,7 @@ from .core import make_event as make_event
 from .decorate import allow_event as allow_event
 from .decorate import bind as bind
 from .decorate import bypass_if as bypass_if
+from .decorate import enter_if as enter_if
 from .decorate import refuse_event as refuse_event
 from .decorate import propagate as propagate
 from .decorate import subscribe as subscribe
@@ -28,4 +29,3 @@ from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .subscriber import Propagator as Propagator
 from .typing import Contexts as Contexts
 from .typing import Force as Force
-from .typing import TState as TState
