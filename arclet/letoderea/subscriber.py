@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import abc
-import sys
 from collections import defaultdict
 from collections.abc import Awaitable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload
+from typing import Annotated, Any, Callable, Generic, TypeVar, Final, cast, final, overload
 from collections.abc import Generator
 from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .exceptions import ParsingStop, InnerHandlerException, UndefinedRequirement, exception_handler
+from .exceptions import HandlerStop, InnerHandlerException, UnresolvedRequirement, ProviderUnsatisfied, exception_handler
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
 from .typing import (
@@ -29,6 +28,7 @@ from .typing import (
 )
 
 
+STOP: Final = object()
 RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
 
 
@@ -59,6 +59,12 @@ def Depends(target: TTarget[Any], cache: bool = False) -> Any:
     return Depend(target, cache)
 
 
+def depends(cache: bool = False) -> Callable[[TTarget[Any]], Any]:
+    def wrapper(target: TTarget[Any]) -> Any:
+        return Depend(target, cache)
+    return wrapper
+
+
 @dataclass
 class CompileParam:
     name: str
@@ -87,7 +93,7 @@ class CompileParam:
             return res
         if self.default is not Empty:
             return self.default
-        raise UndefinedRequirement(self.name, self.annotation, self.default, self.providers)
+        raise UnresolvedRequirement(self.name, self.annotation, self.default, self.providers)
 
 
 def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> list[CompileParam]:
@@ -171,12 +177,14 @@ class Subscriber(Generic[R]):
         self.params = _compile(callable_target, self.providers)
         self.callable_target = callable_target  # type: ignore
         self.has_cm = False
+        self.is_cm = False
         if is_gen_callable(callable_target) or is_async_gen_callable(callable_target):
             if is_gen_callable(callable_target):
                 self._callable_target = asynccontextmanager(run_sync_generator(callable_target))
             else:
                 self._callable_target = asynccontextmanager(callable_target)  # type: ignore
             self.has_cm = True
+            self.is_cm = True
         elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (
             is_gen_callable(wrapped) or is_async_gen_callable(wrapped)
         ):
@@ -185,6 +193,7 @@ class Subscriber(Generic[R]):
             else:
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
             self.has_cm = True
+            self.is_cm = True
         elif is_async(callable_target):
             self._callable_target = callable_target  # type: ignore
         else:
@@ -222,7 +231,7 @@ class Subscriber(Generic[R]):
                 context["$exit_stack"] = AsyncExitStack()
         try:
             if self._cursor:
-                await self._run_propagate(context, self._propagates[:self._cursor], is_prepend=True)
+                await self._run_propagate(context, self._propagates[:self._cursor])
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
@@ -239,7 +248,7 @@ class Subscriber(Generic[R]):
                         context["$depend_cache"][param.depend.sub.callable_target] = dep_res
                 else:
                     arguments[param.name] = await param.solve(context)
-            if self.has_cm:
+            if self.is_cm:
                 stack: AsyncExitStack = context["$exit_stack"]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
             else:
@@ -252,8 +261,8 @@ class Subscriber(Generic[R]):
                 raise
             raise exception_handler(e.args[0], self.callable_target, context) from e  # type: ignore
         except Exception as e:
-            if isinstance(e, UndefinedRequirement) and self.skip_req_missing:
-                raise exception_handler(ParsingStop(), self.callable_target, context, inner) from None
+            if isinstance(e, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
+                raise exception_handler(HandlerStop(), self.callable_target, context, inner) from None
             raise exception_handler(e, self.callable_target, context, inner) from e  # type: ignore
         finally:
             if not inner:
@@ -261,14 +270,14 @@ class Subscriber(Generic[R]):
                     await context["$exit_stack"].aclose()
                     context.pop("$exit_stack")
                 context.clear()
-            _, exception, tb = sys.exc_info()
+            # _, exception, tb = sys.exc_info()
             # if exception:
             #     context["$error"] = exception
         if self.temporary:
             self.dispose()
         return result
 
-    async def _run_propagate(self, context: Contexts, propagates: list[Subscriber], is_prepend=False):
+    async def _run_propagate(self, context: Contexts, propagates: list[Subscriber]):
         queue = sorted(propagates, key=lambda x: x.priority).copy()
         pending: defaultdict[str, list[Subscriber]] = defaultdict(list)
         while queue:
@@ -283,16 +292,18 @@ class Subscriber(Generic[R]):
                 result = await sub.handle(context, inner=True)
             except InnerHandlerException as e:
                 exc = e.args[0]
-                if isinstance(exc, UndefinedRequirement):
+                if isinstance(exc, UnresolvedRequirement):
                     pending[exc.__origin_args__[0]].append(sub)
+                elif isinstance(exc, ProviderUnsatisfied):
+                    pending[exc.source_key].append(sub)
                 else:
                     raise
             else:
                 if isinstance(result, dict):
                     context.update(result)
                     continue
-                if result is False and is_prepend:
-                    raise exception_handler(ParsingStop(), sub.callable_target, context, inner=True)
+                if result is STOP:
+                    raise exception_handler(HandlerStop(), sub.callable_target, context, inner=True)
                 if isinstance(result, Result):
                     return result.value
                 if result is not None and result is not False:
@@ -301,7 +312,7 @@ class Subscriber(Generic[R]):
             key, (sub, *_) = pending.popitem()
             param = next((p for p in sub.params if p.name == key))
             raise exception_handler(
-                UndefinedRequirement(param.name, param.annotation, param.default, param.providers),
+                UnresolvedRequirement(param.name, param.annotation, param.default, param.providers),
                 sub.callable_target,
                 context,
                 inner=True,
@@ -321,9 +332,6 @@ class Subscriber(Generic[R]):
         ...
 
     def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None):
-        _providers = providers or []
-        _providers.extend(self.providers)
-
         if isinstance(func, Propagator):
             for slot in func.compose():
                 if isinstance(slot, tuple):
@@ -333,15 +341,34 @@ class Subscriber(Generic[R]):
             return self
 
         def wrapper(callable_target: TTarget[Any], /):
+            _providers = providers or []
+            _providers.extend(self.providers)
             if prepend:
-                sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._propagates.remove(x))
+
+                def _dispose(x: Subscriber):
+                    self._propagates.remove(x)
+                    self._cursor -= 1
+
+                if isinstance(callable_target, Subscriber):
+                    sub = callable_target
+                    origin_dispose = sub._dispose
+                    sub._dispose = lambda x: (origin_dispose(x), _dispose(x))  # type: ignore
+                else:
+                    sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=_dispose)
                 self._propagates.insert(0, sub)
                 self._cursor += 1
                 if sub.has_cm:
                     self.has_cm = True
             else:
-                _providers.append(ResultProvider())
-                sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._propagates.remove(x))
+                if isinstance(callable_target, Subscriber):
+                    sub = callable_target
+                    sub.providers.append(ResultProvider())
+                    sub._recompile()
+                    origin_dispose = sub._dispose
+                    sub._dispose = lambda x: (origin_dispose(x), self._propagates.remove(x))  # type: ignore
+                else:
+                    _providers.append(ResultProvider())
+                    sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._propagates.remove(x))
                 self._propagates.append(sub)
                 if sub.has_cm:
                     self.has_cm = True

@@ -18,18 +18,18 @@ pip install arclet-letoderea
 ### 基本使用
 ```python
 import asyncio
-from arclet.letoderea import es, make_event
+import arclet.letoderea as le
 
-@make_event
+@le.make_event
 class TestEvent:
     name: str = "Letoderea"
 
-@es.on()
+@le.on()
 async def test_subscriber(name: str):
     print(name)
 
 async def main():
-    await es.publish(TestEvent())
+    await le.publish(TestEvent())
 
 asyncio.run(main())
 ```
@@ -37,22 +37,23 @@ asyncio.run(main())
 ### 依赖注入
 ```python
 import asyncio
-from arclet.letoderea import es, make_event, Depends
+import arclet.letoderea as le
 
-@make_event
+@le.make_event
 class TestEvent:
     name: str = "Letoderea"
 
+@le.depends()
 async def get_msg(event):
     return f"Hello, {event.name}"
-    
-@es.on(TestEvent)
-async def test_subscriber(msg: str = Depends(get_msg)):
+
+@le.on(TestEvent)
+async def test_subscriber(msg: str = get_msg):
     print(msg)
-    
+
 async def main():
-    await es.publish(TestEvent())
-     
+    await le.publish(TestEvent())
+
 asyncio.run(main())
 ```
 
@@ -61,33 +62,33 @@ asyncio.run(main())
 import asyncio
 import random
 from dataclasses import dataclass
-from arclet.letoderea import es, make_event
+import arclet.letoderea as le
 
-@make_event
+@le.make_event
 @dataclass
 class Event:
     name: str
 
-@make_event(name="rand")
+@le.make_event(name="rand")
 @dataclass
 class RandomData:
     seed: int
     
     __result_type__ = float
 
-@es.on(RandomData)
+@le.on(RandomData)
 def random_subscriber(seed: int):
     return random.Random(seed).random()
 
-@es.on(Event)
+@le.on(Event)
 async def event_subscriber(event: Event):
     print(f"Event: {event.name}")
-    result = await es.post(RandomData(42))
+    result = await le.post(RandomData(42))
     if result:
         print(f"Random: {result.value}")
 
 async def main():
-    await es.publish(Event("Letoderea"))
+    await le.publish(Event("Letoderea"))
     
 asyncio.run(main())
 ```

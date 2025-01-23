@@ -1,12 +1,9 @@
 from typing import TYPE_CHECKING, Callable, Union, Any, overload
 
-from .context import scope_ctx
-from .core import es
 from .event import EVENT
 from .provider import Provider
 from .ref import Deref, generate
-from .exceptions import ParsingStop
-from .subscriber import Subscriber, _compile, Propagator
+from .subscriber import Subscriber, STOP, _compile, Propagator
 from .typing import Contexts, TTarget
 
 
@@ -23,16 +20,6 @@ def bind(*args: Union[Provider, type[Provider]]):
             else:
                 getattr(target, "__providers__").extend(providers)
         return target
-
-    return wrapper
-
-
-def subscribe(*event: type):
-
-    def wrapper(target: TTarget) -> TTarget:
-        if scope := scope_ctx.get():
-            return scope.register(events=event)(target)
-        return es.on(event)(target)
 
     return wrapper
 
@@ -73,7 +60,7 @@ else:
 
         def check(self, ctx: Contexts):
             if self.predicate(ctx) is not self.result:
-                raise ParsingStop
+                return STOP
 
         def compose(self):
             yield self.check, True, 0

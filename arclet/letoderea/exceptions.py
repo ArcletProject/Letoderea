@@ -7,24 +7,21 @@ from typing import Any, Callable
 from .typing import Contexts
 
 
-class UnexpectedArgument(Exception):
-    pass
-
-
-class UndefinedRequirement(Exception):
+class UnresolvedRequirement(Exception):
     __origin_args__: tuple[str, Any, Any, list[Any]]
-
-
-class JudgementError(Exception):
-    pass
 
 
 class PropagationCancelled(Exception):
     pass
 
 
-class ParsingStop(Exception):
+class HandlerStop(Exception):
     pass
+
+
+class ProviderUnsatisfied(Exception):
+    def __init__(self, source_key: str):
+        self.source_key = source_key
 
 
 class InnerHandlerException(Exception):
@@ -32,14 +29,14 @@ class InnerHandlerException(Exception):
 
 
 def exception_handler(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):
-    if isinstance(e, UndefinedRequirement) and not isinstance(e, SyntaxError):
+    if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
         name, *_, pds = e.args
         param = inspect.signature(callable_target).parameters[name]
         code = callable_target.__code__  # type: ignore
         etype: type[Exception] = type(  # type: ignore
             "UndefinedRequirement",
             (
-                UndefinedRequirement,
+                UnresolvedRequirement,
                 SyntaxError,
             ),
             {},
@@ -70,11 +67,10 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
     if isinstance(
         e,
         (
-            ParsingStop,
+            HandlerStop,
             PropagationCancelled,
-            JudgementError,
-            UnexpectedArgument,
             InnerHandlerException,
+            ProviderUnsatisfied,
         ),
     ):
         return InnerHandlerException(e) if inner else e

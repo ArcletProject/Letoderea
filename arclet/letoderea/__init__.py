@@ -7,11 +7,9 @@ from .decorate import bypass_if as bypass_if
 from .decorate import enter_if as enter_if
 from .decorate import refuse_event as refuse_event
 from .decorate import propagate as propagate
-from .decorate import subscribe as subscribe
 from .event import BaseEvent as BaseEvent
 from .event import EVENT as EVENT
-from .exceptions import JudgementError as JudgementError
-from .exceptions import ParsingStop as ParsingStop
+from .exceptions import HandlerStop as HandlerStop
 from .exceptions import PropagationCancelled as PropagationCancelled
 from .provider import Param as Param
 from .provider import Provider as Provider
@@ -23,9 +21,16 @@ from .publisher import Publisher as Publisher
 from .ref import deref as deref
 from .scope import Scope as Scope
 from .subscriber import Depend as Depend
+from .subscriber import STOP as STOP
 from .subscriber import Depends as Depends
+from .subscriber import depends as depends
 from .subscriber import Subscriber as Subscriber
 from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .subscriber import Propagator as Propagator
 from .typing import Contexts as Contexts
 from .typing import Force as Force
+
+publish = es.publish
+post = es.post
+on = es.on
+use = es.use

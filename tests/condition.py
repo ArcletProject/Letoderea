@@ -2,7 +2,7 @@ import asyncio
 import gc
 from datetime import datetime
 
-from arclet.letoderea import Contexts, Propagator, es, propagate
+from arclet.letoderea import Contexts, Propagator, es, propagate, STOP
 
 test_stack = [0]
 
@@ -17,7 +17,7 @@ class TestTimeLimit(Propagator):
         r = now >= datetime(year=now.year, month=now.month, day=now.day, hour=self.hour, minute=self.minute)
         ctx["_time_limit"] = r
         if r is False:
-            return r
+            return STOP
 
     def compose(self):
         yield self.check, True
@@ -33,7 +33,8 @@ class Interval(Propagator):
         if not self.last_time:
             return
         self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
-        return self.success
+        if not self.success:
+            return STOP
 
     def after(self):
         if self.success:
