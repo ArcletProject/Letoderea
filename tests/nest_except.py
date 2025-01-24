@@ -1,6 +1,7 @@
 import asyncio
 
 from arclet.letoderea import Contexts, Depends, Provider, es
+from arclet.letoderea.event import ExceptionEvent
 from arclet.letoderea.provider import Param
 
 
@@ -17,8 +18,8 @@ class ExampleEvent:
             return context.get("a")
 
 
-async def wrapper(a: str):  # sourcery skip: raise-specific-error
-    return int(a)
+async def wrapper(data: str):  # sourcery skip: raise-specific-error
+    return int(data)
 
 
 async def wrapper1(a: int = Depends(wrapper)):  # sourcery skip: raise-specific-error
@@ -28,6 +29,10 @@ async def wrapper1(a: int = Depends(wrapper)):  # sourcery skip: raise-specific-
 async def handler(a: int = Depends(wrapper1)):
     print(a)
 
+
+@es.on(ExceptionEvent)
+async def exception_handler(exception: Exception):
+    print(repr(exception))
 
 es.on(ExampleEvent, handler)
 

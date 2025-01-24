@@ -270,9 +270,6 @@ class Subscriber(Generic[R]):
                     await context["$exit_stack"].aclose()
                     context.pop("$exit_stack")
                 context.clear()
-            # _, exception, tb = sys.exc_info()
-            # if exception:
-            #     context["$error"] = exception
         if self.temporary:
             self.dispose()
         return result
