@@ -34,7 +34,7 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
         param = inspect.signature(callable_target).parameters[name]
         code = callable_target.__code__  # type: ignore
         etype: type[Exception] = type(  # type: ignore
-            "UndefinedRequirement",
+            "UnresolvedRequirement",
             (
                 UnresolvedRequirement,
                 SyntaxError,

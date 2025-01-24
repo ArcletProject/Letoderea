@@ -283,12 +283,6 @@ class Subscriber(Generic[R]):
         while queue:
             sub = queue.pop(0)
             try:
-                if pending:
-                    keys = list(pending.keys())
-                    for key in keys:
-                        if key not in context:
-                            continue
-                        await self._run_propagate(context, pending.pop(key))
                 result = await sub.handle(context, inner=True)
             except InnerHandlerException as e:
                 exc = e.args[0]
@@ -299,15 +293,19 @@ class Subscriber(Generic[R]):
                 else:
                     raise
             else:
-                if isinstance(result, dict):
-                    context.update(result)
-                    continue
                 if result is STOP:
                     raise exception_handler(HandlerStop(), sub.callable_target, context, inner=True)
-                if isinstance(result, Result):
-                    return result.value
-                if result is not None and result is not False:
-                    return result
+                if isinstance(result, dict):
+                    context.update(result)
+                elif isinstance(result, Result):
+                    context["$result"] = result.value
+                elif result is not None and result is not False:
+                    context["$result"] = result
+                if pending:
+                    for key in list(pending.keys()):
+                        if key not in context:
+                            continue
+                        await self._run_propagate(context, pending.pop(key))
         if pending:
             key, (sub, *_) = pending.popitem()
             param = next((p for p in sub.params if p.name == key))
@@ -355,7 +353,7 @@ class Subscriber(Generic[R]):
                     sub._dispose = lambda x: (origin_dispose(x), _dispose(x))  # type: ignore
                 else:
                     sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=_dispose)
-                self._propagates.insert(0, sub)
+                self._propagates.insert(self._cursor, sub)
                 self._cursor += 1
                 if sub.has_cm:
                     self.has_cm = True
