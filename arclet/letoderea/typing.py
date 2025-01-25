@@ -2,22 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Awaitable, Coroutine
+from collections.abc import AsyncGenerator, Awaitable, Coroutine, Generator
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, Union, overload
-from collections.abc import AsyncGenerator, Generator
+from typing_extensions import ParamSpec, Self, TypeGuard
 
 from tarina import generic_isinstance
-from typing_extensions import ParamSpec, Self, TypeGuard
 
 T = TypeVar("T")
 T1 = TypeVar("T1")
 
 
-class CtxItem(Generic[T]):
-    ...
+class CtxItem(Generic[T]): ...
 
 
 class Contexts(dict[str, Any]):
@@ -49,6 +47,7 @@ class Contexts(dict[str, Any]):
         def get(self, __key: CtxItem[T1], __default: T) -> T1 | T: ...
 
         def get(self, __key: str | CtxItem[T1], __default: Any = ...) -> Any: ...  # type: ignore
+
     ...
 
 

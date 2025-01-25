@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
-from collections.abc import Iterable
 from itertools import chain
 from typing import Any, Callable, Literal, overload
-from collections.abc import Awaitable
 
 from .event import EVENT
-from .exceptions import PropagationCancelled, HandlerStop
+from .exceptions import HandlerStop, PropagationCancelled
 from .provider import get_providers, provide
 from .publisher import search_publisher
 from .subscriber import Subscriber
-from .typing import Contexts, Result, Force
+from .typing import Contexts, Force, Result
 
 
 @dataclass(frozen=True)

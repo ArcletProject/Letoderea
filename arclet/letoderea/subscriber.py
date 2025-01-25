@@ -2,31 +2,35 @@ from __future__ import annotations
 
 import abc
 from collections import defaultdict
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Generator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, Final, cast, final, overload
-from collections.abc import Generator
+from typing import Annotated, Any, Callable, Final, Generic, TypeVar, cast, final, overload
 from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .exceptions import HandlerStop, InnerHandlerException, UnresolvedRequirement, ProviderUnsatisfied, exception_handler
+from .exceptions import (
+    HandlerStop,
+    InnerHandlerException,
+    ProviderUnsatisfied,
+    UnresolvedRequirement,
+    exception_handler,
+)
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
 from .typing import (
-    CtxItem,
     Contexts,
+    CtxItem,
     Force,
     Result,
     TTarget,
     is_async_gen_callable,
     is_gen_callable,
     run_sync,
-    run_sync_generator
+    run_sync_generator,
 )
-
 
 STOP: Final = object()
 RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
@@ -62,6 +66,7 @@ def Depends(target: TTarget[Any], cache: bool = False) -> Any:
 def depends(cache: bool = False) -> Callable[[TTarget[Any]], Any]:
     def wrapper(target: TTarget[Any]) -> Any:
         return Depend(target, cache)
+
     return wrapper
 
 
@@ -133,8 +138,7 @@ SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 class Propagator(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def compose(self) -> Generator[TTarget | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]:
-        ...
+    def compose(self) -> Generator[TTarget | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]: ...
 
     def __iter__(self):
         return self.compose()
@@ -232,7 +236,7 @@ class Subscriber(Generic[R]):
                 context["$exit_stack"] = AsyncExitStack()
         try:
             if self._cursor:
-                await self._run_propagate(context, self._propagates[:self._cursor])
+                await self._run_propagate(context, self._propagates[: self._cursor])
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
@@ -256,7 +260,7 @@ class Subscriber(Generic[R]):
                 result = await self._callable_target(**arguments)
             if self._propagates:
                 context["$result"] = result
-                result = (await self._run_propagate(context, self._propagates[self._cursor:])) or result
+                result = (await self._run_propagate(context, self._propagates[self._cursor :])) or result
         except InnerHandlerException as e:
             if inner:
                 raise
@@ -306,7 +310,7 @@ class Subscriber(Generic[R]):
                         await self._run_propagate(context, pending.pop(key))
         if pending:
             key, (sub, *_) = pending.popitem()
-            param = next((p for p in sub.params if p.name == key))
+            param = next(p for p in sub.params if p.name == key)
             raise exception_handler(
                 UnresolvedRequirement(param.name, param.annotation, param.default, param.providers),
                 sub.callable_target,
@@ -316,18 +320,31 @@ class Subscriber(Generic[R]):
         return context.get(RESULT)
 
     @overload
-    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None) -> Self:
-        ...
+    def propagate(
+        self,
+        func: TTarget[Any],
+        *,
+        prepend: bool = False,
+        priority: int = 16,
+        providers: list[Provider | ProviderFactory] | None = None,
+    ) -> Self: ...
 
     @overload
-    def propagate(self, func: Propagator, *, providers: list[Provider | ProviderFactory] | None = None) -> Self:
-        ...
+    def propagate(self, func: Propagator, *, providers: list[Provider | ProviderFactory] | None = None) -> Self: ...
 
     @overload
-    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None) -> Callable[[TTarget[Any]], Self]:
-        ...
+    def propagate(
+        self, *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None
+    ) -> Callable[[TTarget[Any]], Self]: ...
 
-    def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None):
+    def propagate(
+        self,
+        func: TTarget[Any] | Propagator | None = None,
+        *,
+        prepend: bool = False,
+        priority: int = 16,
+        providers: list[Provider | ProviderFactory] | None = None,
+    ):
         if isinstance(func, Propagator):
             for slot in func.compose():
                 if isinstance(slot, tuple):
@@ -362,22 +379,26 @@ class Subscriber(Generic[R]):
                     sub._dispose = lambda x: (origin_dispose(x), self._propagates.remove(x))  # type: ignore
                 else:
                     _providers.append(ResultProvider())
-                    sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._propagates.remove(x))
+                    sub = Subscriber(
+                        callable_target,
+                        priority=priority,
+                        providers=_providers,
+                        dispose=lambda x: self._propagates.remove(x),
+                    )
                 self._propagates.append(sub)
             if sub.has_cm:
                 self.has_cm = True
             return self
+
         if func:
             return wrapper(func)
         return wrapper
 
     @overload
-    def propagates(self, *funcs: TTarget[Any], prepend: bool = False):
-        ...
+    def propagates(self, *funcs: TTarget[Any], prepend: bool = False): ...
 
     @overload
-    def propagates(self, *funcs: TTarget[Any] | Propagator):
-        ...
+    def propagates(self, *funcs: TTarget[Any] | Propagator): ...
 
     def propagates(self, *funcs: TTarget[Any] | Propagator, prepend: bool = False):
         for func in funcs:

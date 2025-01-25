@@ -34,6 +34,7 @@ async def handler(a: int = Depends(wrapper1)):
 async def exception_handler(event: ExceptionEvent):
     print(repr(event))
 
+
 es.on(ExampleEvent, handler)
 
 

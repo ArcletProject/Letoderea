@@ -5,10 +5,10 @@ from .decorate import allow_event as allow_event
 from .decorate import bind as bind
 from .decorate import bypass_if as bypass_if
 from .decorate import enter_if as enter_if
-from .decorate import refuse_event as refuse_event
 from .decorate import propagate as propagate
-from .event import BaseEvent as BaseEvent
+from .decorate import refuse_event as refuse_event
 from .event import EVENT as EVENT
+from .event import BaseEvent as BaseEvent
 from .exceptions import HandlerStop as HandlerStop
 from .exceptions import PropagationCancelled as PropagationCancelled
 from .handler import ExceptionEvent as ExceptionEvent
@@ -22,12 +22,12 @@ from .publisher import Publisher as Publisher
 from .ref import deref as deref
 from .scope import Scope as Scope
 from .subscriber import STOP as STOP
+from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .subscriber import Depend as Depend
 from .subscriber import Depends as Depends
-from .subscriber import depends as depends
-from .subscriber import Subscriber as Subscriber
-from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .subscriber import Propagator as Propagator
+from .subscriber import Subscriber as Subscriber
+from .subscriber import depends as depends
 from .typing import Contexts as Contexts
 from .typing import Force as Force
 

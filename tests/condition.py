@@ -2,7 +2,7 @@ import asyncio
 import gc
 from datetime import datetime
 
-from arclet.letoderea import Contexts, Propagator, es, propagate, STOP
+from arclet.letoderea import STOP, Contexts, Propagator, es, propagate
 
 test_stack = [0]
 

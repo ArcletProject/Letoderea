@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Mapping, Sequence
 from itertools import chain
 from typing import Any, Callable, TypeVar, overload
-from collections.abc import Awaitable
 from weakref import finalize
 
 from .context import scope_ctx
@@ -208,12 +207,8 @@ class EventSystem:
         if not (scope := scope_ctx.get()):
             scope = self._global_scope
         if not func:
-            return scope.register(
-                events=events, priority=priority, providers=providers, temporary=temporary
-            )
-        return scope.register(
-            func, events=events, priority=priority, providers=providers, temporary=temporary
-        )
+            return scope.register(events=events, priority=priority, providers=providers, temporary=temporary)
+        return scope.register(func, events=events, priority=priority, providers=providers, temporary=temporary)
 
     @overload
     def use(
@@ -253,12 +248,8 @@ class EventSystem:
         if not (scope := scope_ctx.get()):
             scope = self._global_scope
         if not func:
-            return scope.register(
-                priority=priority, providers=providers, temporary=temporary, publisher=pub
-            )
-        return scope.register(
-            func, priority=priority, providers=providers, temporary=temporary, publisher=pub
-        )
+            return scope.register(priority=priority, providers=providers, temporary=temporary, publisher=pub)
+        return scope.register(func, priority=priority, providers=providers, temporary=temporary, publisher=pub)
 
 
 es = EventSystem()

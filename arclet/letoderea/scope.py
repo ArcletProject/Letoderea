@@ -9,8 +9,8 @@ from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory, global_providers
 from .publisher import Publisher, _backend_publisher, _publishers, filter_publisher, search_publisher
-from .subscriber import Subscriber, Propagator
-from .typing import Result, Resultable, TTarget
+from .subscriber import Propagator, Subscriber
+from .typing import Result, Resultable
 
 T = TypeVar("T")
 
@@ -64,7 +64,7 @@ class Scope:
         self,
         arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
-        """移除间接 Provider """
+        """移除间接 Provider"""
         if isinstance(arg, (ProviderFactory, Provider)):
             with suppress(ValueError):
                 self.providers.remove(arg)
@@ -94,9 +94,7 @@ class Scope:
         events: type | tuple[type, ...] | None = None,
         *,
         priority: int = 16,
-        providers: (
-            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
-        ) = None,
+        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
     ) -> Subscriber: ...
@@ -107,9 +105,7 @@ class Scope:
         *,
         events: type | tuple[type, ...] | None = None,
         priority: int = 16,
-        providers: (
-            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
-        ) = None,
+        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
@@ -120,9 +116,7 @@ class Scope:
         events: type | tuple[type, ...] | None = None,
         *,
         priority: int = 16,
-        providers: (
-            Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None
-        ) = None,
+        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
     ):
