@@ -1,24 +1,43 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
-from typing import Any, Awaitable, Callable, Literal, overload
-
-from tarina import generic_isinstance
+from collections.abc import Awaitable, Iterable
+from dataclasses import dataclass
+from itertools import chain
+from typing import Any, Callable, Literal, overload
 
 from .event import EVENT
-from .exceptions import PropagationCancelled
-from .provider import get_providers
+from .exceptions import HandlerStop, PropagationCancelled
+from .provider import get_providers, provide
+from .publisher import search_publisher
 from .subscriber import Subscriber
-from .typing import Contexts, Result
+from .typing import Contexts, Force, Result
 
 
-def _check_result(event: Any, result: Result):
-    if not hasattr(event, "__result_type__"):
-        return result
-    if generic_isinstance(result.value, event.__result_type__):
-        return result
-    return
+@dataclass(frozen=True)
+class ExceptionEvent:
+    origin: Any
+    subscriber: Subscriber
+    exception: BaseException
+
+    async def gather(self, context: Contexts):
+        context["exception"] = self.exception
+        context["origin"] = self.origin
+        context["subscriber"] = self.subscriber
+
+    __publisher__ = "internal/exception"
+    providers = [provide(Exception, "exception", validate=lambda p: issubclass(p.annotation, BaseException))]
+
+
+async def publish_exc_event(event: ExceptionEvent):
+    from .scope import _scopes
+
+    pub_id = search_publisher(event).id
+    scopes = [sp for sp in _scopes.values() if sp.available]
+    await dispatch(
+        chain.from_iterable(sp.iter_subscribers(pub_id) for sp in scopes),
+        event,
+    )
 
 
 @overload
@@ -37,7 +56,7 @@ async def dispatch(
     *,
     return_result: Literal[True],
     external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
-) -> Result[Any] | None: ...
+) -> Result | None: ...
 
 
 async def dispatch(
@@ -58,15 +77,23 @@ async def dispatch(
     for priority in sorted(grouped.keys()):
         tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[priority]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        for result in results:
+        for _i, result in enumerate(results):
+            if result is None:
+                continue
             if result.__class__ is PropagationCancelled:
                 return
+            if isinstance(result, Exception):
+                if not isinstance(result, HandlerStop):
+                    await publish_exc_event(ExceptionEvent(event, grouped[priority][_i], result))
+                continue
             if not return_result:
                 continue
+            if result.__class__ is Force:
+                return result.value  # type: ignore
             if isinstance(result, Result):
-                return _check_result(event, result)
-            if not isinstance(result, BaseException) and result is not None and result is not False:
-                return _check_result(event, Result(result))
+                return Result.check_result(event, result)
+            if result is not False:
+                return Result.check_result(event, Result(result))
 
 
 async def generate_contexts(

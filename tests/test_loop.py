@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import make_event, es
+from arclet.letoderea import es, make_event
 
 
 @make_event
@@ -23,5 +23,6 @@ es.publish(TestEvent("world hello"))
 
 async def main():
     await asyncio.sleep(1)
+
 
 es.loop.run_until_complete(main())

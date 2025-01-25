@@ -34,6 +34,11 @@ distribution = true
 [tool.pdm.build]
 includes = ["arclet"]
 
+[tool.pdm.dev-dependencies]
+dev = [
+    "isort>=5.13.2",
+    "black>=24.10.0",
+]
 [tool.black]
 line-length = 120
 target-version = ["py39", "py310", "py311", "py312"]

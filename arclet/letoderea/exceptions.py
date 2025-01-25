@@ -2,29 +2,26 @@ import inspect
 import pprint
 import sys
 import traceback
-from typing import Callable
+from typing import Any, Callable
 
 from .typing import Contexts
 
 
-class UnexpectedArgument(Exception):
-    pass
-
-
-class UndefinedRequirement(Exception):
-    pass
-
-
-class JudgementError(Exception):
-    pass
+class UnresolvedRequirement(Exception):
+    __origin_args__: tuple[str, Any, Any, list[Any]]
 
 
 class PropagationCancelled(Exception):
     pass
 
 
-class ParsingStop(Exception):
+class HandlerStop(Exception):
     pass
+
+
+class ProviderUnsatisfied(Exception):
+    def __init__(self, source_key: str):
+        self.source_key = source_key
 
 
 class InnerHandlerException(Exception):
@@ -32,14 +29,14 @@ class InnerHandlerException(Exception):
 
 
 def exception_handler(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):
-    if isinstance(e, UndefinedRequirement) and not isinstance(e, SyntaxError):
+    if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
         name, *_, pds = e.args
         param = inspect.signature(callable_target).parameters[name]
         code = callable_target.__code__  # type: ignore
         etype: type[Exception] = type(  # type: ignore
-            "UndefinedRequirement",
+            "UnresolvedRequirement",
             (
-                UndefinedRequirement,
+                UnresolvedRequirement,
                 SyntaxError,
             ),
             {},
@@ -57,6 +54,7 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
             f"\n{pprint.pformat(contexts)}",
             _args,
         )
+        exc.__origin_args__ = e.args
         exc.__traceback__ = e.__traceback__
         if inner:
             return InnerHandlerException(exc)
@@ -69,11 +67,10 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
     if isinstance(
         e,
         (
-            ParsingStop,
+            HandlerStop,
             PropagationCancelled,
-            JudgementError,
-            UnexpectedArgument,
             InnerHandlerException,
+            ProviderUnsatisfied,
         ),
     ):
         return InnerHandlerException(e) if inner else e

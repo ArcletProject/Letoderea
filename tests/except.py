@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import Contexts, bind, es, provide, subscribe
+from arclet.letoderea import Contexts, bind, es, on, provide
 
 
 class TestEvent:
@@ -8,7 +8,7 @@ class TestEvent:
         context["name"] = "Letoderea"
 
 
-@subscribe(TestEvent)
+@on(TestEvent)
 @bind(provide(int, "age", "a", _id="foo"))
 @bind(provide(int, "age", "b", _id="bar"))
 @bind(provide(int, "age", "c", _id="baz"))

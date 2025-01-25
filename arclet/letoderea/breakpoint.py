@@ -3,7 +3,6 @@ from asyncio import Future
 from collections.abc import Awaitable
 from typing import Callable, Generic, Optional, TypeVar, Union, overload
 
-from .auxiliary import BaseAuxiliary, auxilia, get_auxiliaries, global_auxiliaries
 from .core import es
 from .exceptions import PropagationCancelled
 from .handler import generate_contexts
@@ -26,11 +25,6 @@ def new_target(event_t: type, condition: "StepOut", fut: Future):
             *condition.providers,
         ],
         priority=condition.priority,
-        auxiliaries=[
-            *global_auxiliaries,
-            *condition.auxiliaries,
-            *get_auxiliaries(event_t),
-        ],
     )
 
     async def inner(event: event_t):
@@ -68,7 +62,6 @@ class _step_iter(Generic[R, D]):
 class StepOut(Generic[R]):
     target: set[type]
     providers: list[Union[Provider, type[Provider]]]
-    auxiliaries: list[BaseAuxiliary]
     handler: TTarget[R]
     priority: int
 
@@ -77,13 +70,11 @@ class StepOut(Generic[R]):
         events: list[type],
         handler: Optional[Union[Callable[..., Awaitable[R]], Callable[..., R]]] = None,
         providers: Optional[list[Union[Provider, type[Provider]]]] = None,
-        auxiliaries: Optional[list[BaseAuxiliary]] = None,
         priority: int = 15,
         block: bool = False,
     ):
         self.target = set(events)
         self.providers = providers or []
-        self.auxiliaries = auxiliaries or []
         self.priority = priority
         self.handler = handler or (lambda: None)  # type: ignore
         self.block = block
@@ -126,8 +117,8 @@ class StepOut(Generic[R]):
 
         for et in self.target:
             callable_target = new_target(et, self, fut)  # type: ignore
-            aux = auxilia("step_out", lambda interface: isinstance(interface.event, et))
-            subscribers.append(es.on(et, callable_target, priority=self.priority, auxiliaries=[aux]))
+            # aux = auxilia("step_out", lambda interface: isinstance(interface.event, et))
+            subscribers.append(es.on(et, callable_target, priority=self.priority))
         try:
             return await asyncio.wait_for(fut, timeout) if timeout else await fut
         except asyncio.TimeoutError:

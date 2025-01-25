@@ -1,39 +1,47 @@
 from __future__ import annotations
 
-import sys
-from collections.abc import Awaitable, Sequence
+import abc
+from collections import defaultdict
+from collections.abc import Awaitable, Generator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, Optional, TypeVar, Union, cast, final
+from typing import Annotated, Any, Callable, Final, Generic, TypeVar, cast, final, overload
 from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
 
-from .auxiliary import BaseAuxiliary, Interface, cleanup, complete, prepare, sort_auxiliaries
-from .exceptions import InnerHandlerException, UndefinedRequirement, exception_handler
+from .exceptions import (
+    HandlerStop,
+    InnerHandlerException,
+    ProviderUnsatisfied,
+    UnresolvedRequirement,
+    exception_handler,
+)
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
-from .typing import CtxItem, Contexts, Force, TTarget, is_async_gen_callable, is_gen_callable, run_sync, run_sync_generator
+from .typing import (
+    Contexts,
+    CtxItem,
+    Force,
+    Result,
+    TTarget,
+    is_async_gen_callable,
+    is_gen_callable,
+    run_sync,
+    run_sync_generator,
+)
+
+STOP: Final = object()
+RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
 
 
-class _ManageExitStack(BaseAuxiliary):
-    @property
-    def id(self) -> str:
-        return "builtin:exit_stack"
+class ResultProvider(Provider[Any]):
+    def validate(self, param: Param):
+        return param.name == "result"
 
-    async def on_prepare(self, interface: Interface) -> Optional[Union[Interface.Update, bool]]:
-        if "$exit_stack" not in interface.ctx:
-            return interface.update(**{"$exit_stack": AsyncExitStack()})
-        return
-
-    async def on_cleanup(self, interface: Interface) -> Optional[bool]:
-        stack: AsyncExitStack = interface.ctx["$exit_stack"]
-        if error := interface.error:
-            await stack.__aexit__(type(error), error, error.__traceback__)
-        else:
-            await stack.aclose()
-        return
+    async def __call__(self, context: Contexts):
+        return context.get(RESULT)
 
 
 @dataclass(init=False, eq=True)
@@ -53,6 +61,13 @@ class Depend:
 
 def Depends(target: TTarget[Any], cache: bool = False) -> Any:
     return Depend(target, cache)
+
+
+def depends(cache: bool = False) -> Callable[[TTarget[Any]], Any]:
+    def wrapper(target: TTarget[Any]) -> Any:
+        return Depend(target, cache)
+
+    return wrapper
 
 
 @dataclass
@@ -83,7 +98,7 @@ class CompileParam:
             return res
         if self.default is not Empty:
             return self.default
-        raise UndefinedRequirement(self.name, self.annotation, self.default, self.providers)
+        raise UnresolvedRequirement(self.name, self.annotation, self.default, self.providers)
 
 
 def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> list[CompileParam]:
@@ -121,12 +136,19 @@ R = TypeVar("R")
 SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 
+class Propagator(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def compose(self) -> Generator[TTarget | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]: ...
+
+    def __iter__(self):
+        return self.compose()
+
+
 @final
 class Subscriber(Generic[R]):
     id: str
     callable_target: Callable[..., Awaitable[R]]
     priority: int
-    auxiliaries: dict[str, list[BaseAuxiliary]]
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
 
@@ -137,30 +159,35 @@ class Subscriber(Generic[R]):
         callable_target: TTarget[R],
         *,
         priority: int = 16,
-        auxiliaries: list[BaseAuxiliary] | None = None,
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         dispose: Callable[[Self], None] | None = None,
         temporary: bool = False,
+        skip_req_missing: bool = False,
     ) -> None:
         self.id = str(uuid4())
         self.priority = priority
+        self.skip_req_missing = skip_req_missing
         self.auxiliaries = {}
         providers = providers or []
         self.providers = [p() if isinstance(p, type) else p for p in providers]
-        auxiliaries = auxiliaries or []
+        self._propagates: list[Subscriber] = []
+        self._cursor = 0
 
-        if hasattr(callable_target, "__auxiliaries__"):
-            auxiliaries.extend(getattr(callable_target, "__auxiliaries__", []))
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
+        if hasattr(callable_target, "__propagates__"):
+            for slot in getattr(callable_target, "__propagates__", []):
+                self.propagates(*slot[0], prepend=slot[1])
         self.params = _compile(callable_target, self.providers)
         self.callable_target = callable_target  # type: ignore
+        self.has_cm = False
         self.is_cm = False
         if is_gen_callable(callable_target) or is_async_gen_callable(callable_target):
             if is_gen_callable(callable_target):
                 self._callable_target = asynccontextmanager(run_sync_generator(callable_target))
             else:
                 self._callable_target = asynccontextmanager(callable_target)  # type: ignore
+            self.has_cm = True
             self.is_cm = True
         elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (
             is_gen_callable(wrapped) or is_async_gen_callable(wrapped)
@@ -169,18 +196,13 @@ class Subscriber(Generic[R]):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
             else:
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
+            self.has_cm = True
             self.is_cm = True
         elif is_async(callable_target):
             self._callable_target = callable_target  # type: ignore
         else:
             self._callable_target = run_sync(callable_target)  # type: ignore
-        if self.is_cm:
-            auxiliaries.insert(0, _ManageExitStack())
-        auxiliaries = sort_auxiliaries(auxiliaries)
-        for aux in auxiliaries:
-            for scope, v in aux._overrides.items():
-                if v:
-                    self.auxiliaries.setdefault(scope, []).append(aux)
+
         self._dispose = dispose
         self.temporary = temporary
 
@@ -191,7 +213,8 @@ class Subscriber(Generic[R]):
         return await self.callable_target(*args, **kwargs)
 
     def __repr__(self):
-        return f"Subscriber::{self.callable_target.__name__}"
+        lineno = self.callable_target.__code__.co_firstlineno
+        return f"<Subscriber: {self.callable_target.__qualname__} at {self.callable_target.__module__}:{lineno}>"
 
     def __eq__(self, other):
         if isinstance(other, Subscriber):
@@ -203,15 +226,17 @@ class Subscriber(Generic[R]):
     def dispose(self):
         if self._dispose:
             self._dispose(self)
+        while self._propagates:
+            self._propagates[0].dispose()
 
     async def handle(self, context: Contexts, inner=False) -> R:
         if not inner:
             context["$subscriber"] = self
+            if self.has_cm and "$exit_stack" not in context:
+                context["$exit_stack"] = AsyncExitStack()
         try:
-            if "prepare" in self.auxiliaries:
-                interface = Interface(context, self.providers)
-                await prepare(self.auxiliaries["prepare"], interface)
-                interface.clear()
+            if self._cursor:
+                await self._run_propagate(context, self._propagates[: self._cursor])
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
@@ -228,31 +253,163 @@ class Subscriber(Generic[R]):
                         context["$depend_cache"][param.depend.sub.callable_target] = dep_res
                 else:
                     arguments[param.name] = await param.solve(context)
-            if "complete" in self.auxiliaries:
-                interface = Interface(arguments, self.providers)
-                await complete(self.auxiliaries["complete"], interface)
-                interface.clear()
             if self.is_cm:
                 stack: AsyncExitStack = context["$exit_stack"]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
             else:
                 result = await self._callable_target(**arguments)
-            context["$result"] = result
+            if self._propagates:
+                context["$result"] = result
+                result = (await self._run_propagate(context, self._propagates[self._cursor :])) or result
         except InnerHandlerException as e:
             if inner:
                 raise
             raise exception_handler(e.args[0], self.callable_target, context) from e  # type: ignore
         except Exception as e:
+            if isinstance(e, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
+                raise exception_handler(HandlerStop(), self.callable_target, context, inner) from None
             raise exception_handler(e, self.callable_target, context, inner) from e  # type: ignore
         finally:
-            _, exception, tb = sys.exc_info()
-            if exception:
-                context["$error"] = exception
-            if "cleanup" in self.auxiliaries:
-                interface = Interface(context, self.providers)
-                await cleanup(self.auxiliaries["cleanup"], interface)
-                interface.clear()
-            context.clear()
+            if not inner:
+                if self.has_cm and "$exit_stack" in context:
+                    await context["$exit_stack"].aclose()
+                    context.pop("$exit_stack")
+                context.clear()
         if self.temporary:
             self.dispose()
         return result
+
+    async def _run_propagate(self, context: Contexts, propagates: list[Subscriber]):
+        queue = sorted(propagates, key=lambda x: x.priority).copy()
+        pending: defaultdict[str, list[Subscriber]] = defaultdict(list)
+        while queue:
+            sub = queue.pop(0)
+            try:
+                result = await sub.handle(context, inner=True)
+            except InnerHandlerException as e:
+                exc = e.args[0]
+                if isinstance(exc, UnresolvedRequirement):
+                    pending[exc.__origin_args__[0]].append(sub)
+                elif isinstance(exc, ProviderUnsatisfied):
+                    pending[exc.source_key].append(sub)
+                else:
+                    raise
+            else:
+                if result is STOP:
+                    raise exception_handler(HandlerStop(), sub.callable_target, context, inner=True)
+                if isinstance(result, dict):
+                    context.update(result)
+                elif isinstance(result, Result):
+                    context["$result"] = result.value
+                elif result is not None and result is not False:
+                    context["$result"] = result
+                if pending:
+                    for key in list(pending.keys()):
+                        if key not in context:
+                            continue
+                        await self._run_propagate(context, pending.pop(key))
+        if pending:
+            key, (sub, *_) = pending.popitem()
+            param = next(p for p in sub.params if p.name == key)
+            raise exception_handler(
+                UnresolvedRequirement(param.name, param.annotation, param.default, param.providers),
+                sub.callable_target,
+                context,
+                inner=True,
+            )
+        return context.get(RESULT)
+
+    @overload
+    def propagate(
+        self,
+        func: TTarget[Any],
+        *,
+        prepend: bool = False,
+        priority: int = 16,
+        providers: list[Provider | ProviderFactory] | None = None,
+    ) -> Self: ...
+
+    @overload
+    def propagate(self, func: Propagator, *, providers: list[Provider | ProviderFactory] | None = None) -> Self: ...
+
+    @overload
+    def propagate(
+        self, *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None
+    ) -> Callable[[TTarget[Any]], Self]: ...
+
+    def propagate(
+        self,
+        func: TTarget[Any] | Propagator | None = None,
+        *,
+        prepend: bool = False,
+        priority: int = 16,
+        providers: list[Provider | ProviderFactory] | None = None,
+    ):
+        if isinstance(func, Propagator):
+            for slot in func.compose():
+                if isinstance(slot, tuple):
+                    self.propagate(slot[0], prepend=slot[1], priority=slot[2] if len(slot) == 3 else 16)
+                else:
+                    self.propagate(slot, priority=16)
+            return self
+
+        def wrapper(callable_target: TTarget[Any], /):
+            _providers = providers or []
+            _providers.extend(self.providers)
+            if prepend:
+
+                def _dispose(x: Subscriber):
+                    self._propagates.remove(x)
+                    self._cursor -= 1
+
+                if isinstance(callable_target, Subscriber):
+                    sub = callable_target
+                    origin_dispose = sub._dispose
+                    sub._dispose = lambda x: (origin_dispose(x), _dispose(x))  # type: ignore
+                else:
+                    sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=_dispose)
+                self._propagates.insert(self._cursor, sub)
+                self._cursor += 1
+            else:
+                if isinstance(callable_target, Subscriber):
+                    sub = callable_target
+                    sub.providers.append(ResultProvider())
+                    sub._recompile()
+                    origin_dispose = sub._dispose
+                    sub._dispose = lambda x: (origin_dispose(x), self._propagates.remove(x))  # type: ignore
+                else:
+                    _providers.append(ResultProvider())
+                    sub = Subscriber(
+                        callable_target,
+                        priority=priority,
+                        providers=_providers,
+                        dispose=lambda x: self._propagates.remove(x),
+                    )
+                self._propagates.append(sub)
+            if sub.has_cm:
+                self.has_cm = True
+            return self
+
+        if func:
+            return wrapper(func)
+        return wrapper
+
+    @overload
+    def propagates(self, *funcs: TTarget[Any], prepend: bool = False): ...
+
+    @overload
+    def propagates(self, *funcs: TTarget[Any] | Propagator): ...
+
+    def propagates(self, *funcs: TTarget[Any] | Propagator, prepend: bool = False):
+        for func in funcs:
+            self.propagate(func, prepend=prepend)  # type: ignore
+
+        return self
+
+    def get_propagator(self, func: TTarget[R]) -> Subscriber[R]:
+        for sub in self._propagates:
+            if sub.callable_target == func:
+                return sub
+            if hasattr(sub.callable_target, "__func__") and sub.callable_target.__func__ == func:  # type: ignore
+                return sub
+        raise ValueError(f"Propagator {func} not found")

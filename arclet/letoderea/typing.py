@@ -2,19 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Awaitable, Coroutine
+from collections.abc import AsyncGenerator, Awaitable, Coroutine, Generator
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Generator, Generic, Protocol, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, Union, overload
 from typing_extensions import ParamSpec, Self, TypeGuard
+
+from tarina import generic_isinstance
 
 T = TypeVar("T")
 T1 = TypeVar("T1")
 
 
-class CtxItem(Generic[T]):
-    ...
+class CtxItem(Generic[T]): ...
 
 
 class Contexts(dict[str, Any]):
@@ -28,7 +29,7 @@ class Contexts(dict[str, Any]):
         @overload
         def __getitem__(self, item: str) -> Any: ...
 
-        def __getitem__(self, item: Union[str, CtxItem[T1]]) -> Any: ...
+        def __getitem__(self, item: str | CtxItem[T1]) -> Any: ...
 
         @overload
         def get(self, __key: CtxItem[T1]) -> T1 | None: ...
@@ -45,7 +46,8 @@ class Contexts(dict[str, Any]):
         @overload
         def get(self, __key: CtxItem[T1], __default: T) -> T1 | T: ...
 
-        def get(self, __key: Union[str, CtxItem[T1]], __default: Any = ...) -> Any: ...  # type: ignore
+        def get(self, __key: str | CtxItem[T1], __default: Any = ...) -> Any: ...  # type: ignore
+
     ...
 
 
@@ -66,6 +68,14 @@ class Result(Generic[T]):
     """用于标记一个事件响应器的处理结果，通常应用在某个事件响应器的处理结果需要被事件发布者使用的情况"""
 
     value: T
+
+    @staticmethod
+    def check_result(event: Any, result: Result):
+        if not hasattr(event, "__result_type__"):
+            return result
+        if generic_isinstance(result.value, event.__result_type__):
+            return result
+        return
 
 
 class Resultable(Protocol[T]):

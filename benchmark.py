@@ -6,7 +6,7 @@ import time
 from cProfile import Profile
 from pprint import pprint
 
-from arclet.letoderea import Contexts, Param, Provider, es
+from arclet.letoderea import Contexts, Param, Provider, on
 
 loop = asyncio.new_event_loop()
 
@@ -24,7 +24,7 @@ class TestEvent:
             return "1"
 
 
-@es.on(TestEvent)
+@on(TestEvent)
 async def test_subscriber(a):
     pass
 

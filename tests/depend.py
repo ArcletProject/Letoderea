@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from arclet.letoderea import Contexts, Depends, es
-from arclet.letoderea.exceptions import ParsingStop
+from arclet.letoderea.exceptions import HandlerStop
 
 
 class ExampleEvent:
@@ -14,7 +14,7 @@ class ExampleEvent:
 def test_depend(m: str):
     if m == "aa":
         return True
-    raise ParsingStop
+    raise HandlerStop
 
 
 def TestDepend() -> bool:
@@ -30,7 +30,7 @@ async def main():
     try:
         a = ExampleEvent()
         await es.publish(a)
-    except ParsingStop:
+    except HandlerStop:
         return
 
 

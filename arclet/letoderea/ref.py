@@ -21,12 +21,22 @@ class Deref:
         self.__items[self.__last_key] = (False, lambda x: x(*args, **kwargs))
         return self
 
-    def __eq__(self, other):  # type: ignore
-        self.__items[self.__last_key] = (True, lambda x: x == other)
+    def _not(self):
+        self.__items[self.__last_key] = (True, lambda x: bool(x))
         return self
 
-    def __ne__(self, other):  # type: ignore
-        self.__items[self.__last_key] = (True, lambda x: x != other)
+    def __eq__(self, other, *, _is: bool = False):  # type: ignore
+        if _is:
+            self.__items[self.__last_key] = (True, lambda x: x is other)
+        else:
+            self.__items[self.__last_key] = (True, lambda x: x == other)
+        return self
+
+    def __ne__(self, other, *, _is: bool = False):  # type: ignore
+        if _is:
+            self.__items[self.__last_key] = (True, lambda x: x is not other)
+        else:
+            self.__items[self.__last_key] = (True, lambda x: x != other)
         return self
 
     def __lt__(self, other):
@@ -79,6 +89,12 @@ if TYPE_CHECKING:
 
     def generate(ref: Any) -> Callable[[Contexts], Any]: ...
 
+    def is_(ref: Any, value: Any) -> bool: ...
+
+    def is_not(ref: Any, value: Any) -> bool: ...
+
+    def not_(ref: Any) -> bool: ...
+
 else:
 
     def generate(ref: Deref) -> Callable[[Contexts], Any]:
@@ -98,6 +114,15 @@ else:
             return item
 
         return _get
+
+    def is_(ref: Deref, value: Any):
+        return ref.__eq__(value, _is=True)
+
+    def is_not(ref: Deref, value: Any):
+        return ref.__ne__(value, _is=True)
+
+    def not_(ref: Deref):
+        return ref._not()
 
 
 def deref(proxy_type: type[T]) -> T:

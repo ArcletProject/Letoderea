@@ -18,18 +18,18 @@ pip install arclet-letoderea
 ### 基本使用
 ```python
 import asyncio
-from arclet.letoderea import es, make_event
+import arclet.letoderea as le
 
-@make_event
+@le.make_event
 class TestEvent:
     name: str = "Letoderea"
 
-@es.on()
+@le.on()
 async def test_subscriber(name: str):
     print(name)
 
 async def main():
-    await es.publish(TestEvent())
+    await le.publish(TestEvent())
 
 asyncio.run(main())
 ```
@@ -37,22 +37,23 @@ asyncio.run(main())
 ### 依赖注入
 ```python
 import asyncio
-from arclet.letoderea import es, make_event, Depends
+import arclet.letoderea as le
 
-@make_event
+@le.make_event
 class TestEvent:
     name: str = "Letoderea"
 
+@le.depends()
 async def get_msg(event):
     return f"Hello, {event.name}"
-    
-@es.on(TestEvent)
-async def test_subscriber(msg: str = Depends(get_msg)):
+
+@le.on(TestEvent)
+async def test_subscriber(msg: str = get_msg):
     print(msg)
-    
+
 async def main():
-    await es.publish(TestEvent())
-     
+    await le.publish(TestEvent())
+
 asyncio.run(main())
 ```
 
@@ -61,33 +62,33 @@ asyncio.run(main())
 import asyncio
 import random
 from dataclasses import dataclass
-from arclet.letoderea import es, make_event
+import arclet.letoderea as le
 
-@make_event
+@le.make_event
 @dataclass
 class Event:
     name: str
 
-@make_event(name="rand")
+@le.make_event(name="rand")
 @dataclass
 class RandomData:
     seed: int
     
     __result_type__ = float
 
-@es.on(RandomData)
+@le.on(RandomData)
 def random_subscriber(seed: int):
     return random.Random(seed).random()
 
-@es.on(Event)
+@le.on(Event)
 async def event_subscriber(event: Event):
     print(f"Event: {event.name}")
-    result = await es.post(RandomData(42))
+    result = await le.post(RandomData(42))
     if result:
         print(f"Random: {result.value}")
 
 async def main():
-    await es.publish(Event("Letoderea"))
+    await le.publish(Event("Letoderea"))
     
 asyncio.run(main())
 ```
@@ -99,13 +100,13 @@ asyncio.run(main())
 - 事件可以是任何对象，只要实现了 `gather` 异步方法, 或使用 `EventSystem.define` 并传入 `supplier` 参数
 - `gather` 方法的参数为 `Contexts` 类型，用于传递上下文信息
 - 事件可以通过 `gather` 方法将自身想要传递的信息整合进 `Contexts` 中
-- 事件可以携带 `Provider` 与 `Auxiliary`，它们会在事件被订阅时注入到订阅者中
-- 订阅子类事件时，父类事件的 `Provider` 与 `Auxiliary` 会被继承
+- 事件可以携带 `Provider`，它们会在事件被订阅时注入到订阅者中
+- 订阅子类事件时，父类事件的 `Provider` 会被继承
 - 订阅父类事件时，其子类事件也会被分发给订阅者
 
 ### 订阅
 
-- 通过 `Scope.register`, `EventSystem.on`, `EventSystem.use` 或 `subscribe` 装饰器可以将一个函数注册为事件的订阅者
+- 通过 `Scope.register`, `EventSystem.on`, `EventSystem.use` 装饰器可以将一个函数注册为事件的订阅者
 - 上述方法会返回 `Subscriber` 类型对象，可以通过其 `.dispose` 方法取消订阅
 - 订阅者的参数可以是任何类型，事件系统会尝试从 `Contexts` 中查找对应的值并注入
 - 默认情况下 `event` 为名字的参数会被注入为事件的实例
@@ -153,14 +154,16 @@ asyncio.run(main())
 - `Scope.emit` 和 `Scope.bail` 方法用于将事件直接分发给属于自身的订阅者，`emit` 与 `bail` 的区别类似于 `publish` 与 `post`
 - `EventSystem.publish` 与 `EventSystem.post` 可以指定 `Scope`
 
-### 辅助
+### 传播
 
-- `Auxiliary` 提供了一系列辅助方法，方便事件的处理
-- `Auxiliary` 有三类方法, 每个方法有一个 `Interface` 参数，可用于操作 `Contexts` 或 `Provider`, 获取已执行的 `Auxiliary` 等:
-  - `on_prepare`: 用于在事件处理前执行
-  - `on_complete`: 用于在事件处理后执行
-  - `on_cleanup`: 用于在事件处理完成后执行
-- `Auxiliary` 可以设置 `before` 与 `after`，用于指定其与其他 `Auxiliary` 的执行顺序
+- `Subscriber` 类型对象被创建后，其能通过 `propagate` 方法来设置订阅的同级传播。
+- 传播中的订阅者会在当前订阅者执行后或执行前执行，取决于 `propagate` 的参数 `prepend`。 向后传播的订阅者能拿到上一个订阅者的返回值。
+- 传播中的订阅者会继承当前订阅者的 `Provider`。
+- 传播中的订阅者可以通过返回特殊值 `STOP` 来中止同级传播。
+- 对于传播中的订阅者，若其依赖注入的参数未满足，则会尝试延迟执行。若所有的传播订阅者都无法满足其依赖注入的参数，则会抛出异常。
+- `propagate` 方法可以为传播订阅者设置优先级，值越小优先级越高。
+- `propagate` 方法可以接受特殊类型 `Propagator`, 其有一个 `compose` 方法，用来提供一系列的传播订阅者。
+
 
 ## 开源协议
 本实现以 MIT 为开源协议。
