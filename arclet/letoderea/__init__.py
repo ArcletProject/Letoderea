@@ -11,6 +11,7 @@ from .event import BaseEvent as BaseEvent
 from .event import EVENT as EVENT
 from .exceptions import HandlerStop as HandlerStop
 from .exceptions import PropagationCancelled as PropagationCancelled
+from .handler import ExceptionEvent as ExceptionEvent
 from .provider import Param as Param
 from .provider import Provider as Provider
 from .provider import global_providers as global_providers
@@ -20,8 +21,8 @@ from .publisher import ProviderFactory as ProviderFactory
 from .publisher import Publisher as Publisher
 from .ref import deref as deref
 from .scope import Scope as Scope
-from .subscriber import Depend as Depend
 from .subscriber import STOP as STOP
+from .subscriber import Depend as Depend
 from .subscriber import Depends as Depends
 from .subscriber import depends as depends
 from .subscriber import Subscriber as Subscriber

@@ -209,7 +209,8 @@ class Subscriber(Generic[R]):
         return await self.callable_target(*args, **kwargs)
 
     def __repr__(self):
-        return f"Subscriber::{self.callable_target.__name__}"
+        lineno = self.callable_target.__code__.co_firstlineno
+        return f"<Subscriber: {self.callable_target.__qualname__} at {self.callable_target.__module__}:{lineno}>"
 
     def __eq__(self, other):
         if isinstance(other, Subscriber):
@@ -352,8 +353,6 @@ class Subscriber(Generic[R]):
                     sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=_dispose)
                 self._propagates.insert(self._cursor, sub)
                 self._cursor += 1
-                if sub.has_cm:
-                    self.has_cm = True
             else:
                 if isinstance(callable_target, Subscriber):
                     sub = callable_target
@@ -365,8 +364,8 @@ class Subscriber(Generic[R]):
                     _providers.append(ResultProvider())
                     sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=lambda x: self._propagates.remove(x))
                 self._propagates.append(sub)
-                if sub.has_cm:
-                    self.has_cm = True
+            if sub.has_cm:
+                self.has_cm = True
             return self
         if func:
             return wrapper(func)
@@ -385,3 +384,11 @@ class Subscriber(Generic[R]):
             self.propagate(func, prepend=prepend)  # type: ignore
 
         return self
+
+    def get_propagator(self, func: TTarget[R]) -> Subscriber[R]:
+        for sub in self._propagates:
+            if sub.callable_target == func:
+                return sub
+            if hasattr(sub.callable_target, "__func__") and sub.callable_target.__func__ == func:  # type: ignore
+                return sub
+        raise ValueError(f"Propagator {func} not found")

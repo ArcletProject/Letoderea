@@ -1,23 +1,38 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from collections.abc import Iterable
 from itertools import chain
 from typing import Any, Callable, Literal, overload
 from collections.abc import Awaitable
 
-from .event import EVENT, ExceptionEvent
+from .event import EVENT
 from .exceptions import PropagationCancelled, HandlerStop
-from .provider import get_providers
+from .provider import get_providers, provide
 from .publisher import search_publisher
 from .subscriber import Subscriber
-from .typing import Contexts, Result
+from .typing import Contexts, Result, Force
 
 
-async def publish_exc_event(origin: Any, exception: Exception):
+@dataclass(frozen=True)
+class ExceptionEvent:
+    origin: Any
+    subscriber: Subscriber
+    exception: BaseException
+
+    async def gather(self, context: Contexts):
+        context["exception"] = self.exception
+        context["origin"] = self.origin
+        context["subscriber"] = self.subscriber
+
+    __publisher__ = "internal/exception"
+    providers = [provide(Exception, "exception", validate=lambda p: issubclass(p.annotation, BaseException))]
+
+
+async def publish_exc_event(event: ExceptionEvent):
     from .scope import _scopes
 
-    event = ExceptionEvent(origin, exception)
     pub_id = search_publisher(event).id
     scopes = [sp for sp in _scopes.values() if sp.available]
     await dispatch(
@@ -63,17 +78,19 @@ async def dispatch(
     for priority in sorted(grouped.keys()):
         tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[priority]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        for result in results:
+        for _i, result in enumerate(results):
             if result is None:
                 continue
             if result.__class__ is PropagationCancelled:
                 return
             if isinstance(result, Exception):
                 if not isinstance(result, HandlerStop):
-                    await publish_exc_event(event, result)
+                    await publish_exc_event(ExceptionEvent(event, grouped[priority][_i], result))
                 continue
             if not return_result:
                 continue
+            if result.__class__ is Force:
+                return result.value  # type: ignore
             if isinstance(result, Result):
                 return Result.check_result(event, result)
             if result is not False:

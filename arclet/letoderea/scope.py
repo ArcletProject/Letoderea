@@ -9,8 +9,8 @@ from .context import scope_ctx
 from .handler import dispatch
 from .provider import Provider, ProviderFactory, global_providers
 from .publisher import Publisher, _backend_publisher, _publishers, filter_publisher, search_publisher
-from .subscriber import Subscriber
-from .typing import Result, Resultable
+from .subscriber import Subscriber, Propagator
+from .typing import Result, Resultable, TTarget
 
 T = TypeVar("T")
 
@@ -21,6 +21,7 @@ class Scope:
     id: str
     subscribers: dict[str, tuple[Subscriber, set[str]]]
     providers: list[Provider[Any] | ProviderFactory]
+    propagators: list[Propagator]
 
     def __init__(
         self,
@@ -30,6 +31,7 @@ class Scope:
         self.subscribers = {}
         self.available = True
         self.providers = []
+        self.propagators = []
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
@@ -55,14 +57,14 @@ class Scope:
         self,
         *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
-        """为发布器增加间接 Provider 或 Auxiliaries"""
+        """增加间接 Provider"""
         self.providers.extend(p() if isinstance(p, type) else p for p in args)
 
     def unbind(
         self,
         arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
-        """移除发布器的间接 Provider 或 Auxiliaries"""
+        """移除间接 Provider """
         if isinstance(arg, (ProviderFactory, Provider)):
             with suppress(ValueError):
                 self.providers.remove(arg)
@@ -156,6 +158,7 @@ class Scope:
                 dispose=self.remove_subscriber,
                 temporary=temporary,
             )
+            res.propagates(*self.propagators)
             self.subscribers[res.id] = (res, {pub.id for pub in pubs})
             return res
 

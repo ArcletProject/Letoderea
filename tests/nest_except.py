@@ -1,7 +1,7 @@
 import asyncio
 
 from arclet.letoderea import Contexts, Depends, Provider, es
-from arclet.letoderea.event import ExceptionEvent
+from arclet.letoderea.handler import ExceptionEvent
 from arclet.letoderea.provider import Param
 
 
@@ -31,8 +31,8 @@ async def handler(a: int = Depends(wrapper1)):
 
 
 @es.on(ExceptionEvent)
-async def exception_handler(exception: Exception):
-    print(repr(exception))
+async def exception_handler(event: ExceptionEvent):
+    print(repr(event))
 
 es.on(ExampleEvent, handler)
 
