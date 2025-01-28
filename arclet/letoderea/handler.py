@@ -92,8 +92,7 @@ async def dispatch(
                 return result.value  # type: ignore
             if isinstance(result, Result):
                 return Result.check_result(event, result)
-            if result is not False:
-                return Result.check_result(event, Result(result))
+            return Result.check_result(event, Result(result))
 
 
 async def generate_contexts(

@@ -264,7 +264,10 @@ class Subscriber(Generic[R]):
         except InnerHandlerException as e:
             if inner:
                 raise
-            raise exception_handler(e.args[0], self.callable_target, context) from e  # type: ignore
+            e1 = e.args[0]
+            if isinstance(e1, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
+                raise exception_handler(HandlerStop(), self.callable_target, context, inner) from None
+            raise exception_handler(e1, self.callable_target, context, inner) from e  # type: ignore
         except Exception as e:
             if isinstance(e, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
                 raise exception_handler(HandlerStop(), self.callable_target, context, inner) from None
@@ -301,7 +304,7 @@ class Subscriber(Generic[R]):
                     context.update(result)
                 elif isinstance(result, Result):
                     context["$result"] = result.value
-                elif result is not None and result is not False:
+                elif result is not None:
                     context["$result"] = result
                 if pending:
                     for key in list(pending.keys()):

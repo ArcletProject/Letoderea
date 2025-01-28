@@ -27,7 +27,7 @@ def new_target(event_t: type, condition: "StepOut", fut: Future):
         priority=condition.priority,
     )
 
-    async def inner(event: event_t):
+    async def inner(event: event_t):  # type: ignore
         if fut.done():
             return False
         ctx = await generate_contexts(event)

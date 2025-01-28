@@ -97,6 +97,7 @@ class Scope:
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
+        skip_req_missing: bool = False,
     ) -> Subscriber: ...
 
     @overload
@@ -108,6 +109,7 @@ class Scope:
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
+        skip_req_missing: bool = False,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def register(
@@ -119,6 +121,7 @@ class Scope:
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
+        skip_req_missing: bool = False,
     ):
         """注册一个订阅者"""
         providers = providers or []
@@ -151,6 +154,7 @@ class Scope:
                 providers=_providers,
                 dispose=self.remove_subscriber,
                 temporary=temporary,
+                skip_req_missing=skip_req_missing,
             )
             res.propagates(*self.propagators)
             self.subscribers[res.id] = (res, {pub.id for pub in pubs})

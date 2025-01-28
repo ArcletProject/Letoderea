@@ -27,6 +27,7 @@ class EventSystem:
         self.loop: asyncio.AbstractEventLoop | None = None
         _scopes["$global"] = self._global_scope
         self.external_gathers = {}
+        self.global_skip_req_missing = False
 
         def _remove(es):
             for task in es._ref_tasks:
@@ -168,6 +169,7 @@ class EventSystem:
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         temporary: bool = False,
+        skip_req_missing: bool | None = None,
     ) -> Subscriber: ...
 
     @overload
@@ -180,6 +182,7 @@ class EventSystem:
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         temporary: bool = False,
+        skip_req_missing: bool | None = None,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     @overload
@@ -191,6 +194,7 @@ class EventSystem:
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         temporary: bool = False,
+        skip_req_missing: bool | None = None,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def on(
@@ -200,15 +204,17 @@ class EventSystem:
         priority: int = 16,
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         temporary: bool = False,
+        skip_req_missing: bool | None = None,
     ):
+        _skip_req_missing = self.global_skip_req_missing if skip_req_missing is None else skip_req_missing
         if events:
             for target in events if isinstance(events, tuple) else (events,):
                 self.define(target)
         if not (scope := scope_ctx.get()):
             scope = self._global_scope
         if not func:
-            return scope.register(events=events, priority=priority, providers=providers, temporary=temporary)
-        return scope.register(func, events=events, priority=priority, providers=providers, temporary=temporary)
+            return scope.register(events=events, priority=priority, providers=providers, skip_req_missing=_skip_req_missing, temporary=temporary)
+        return scope.register(func, events=events, priority=priority, providers=providers, skip_req_missing=_skip_req_missing, temporary=temporary)
 
     @overload
     def use(
@@ -221,6 +227,7 @@ class EventSystem:
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         temporary: bool = False,
+        skip_req_missing: bool | None = None,
     ) -> Subscriber: ...
 
     @overload
@@ -233,6 +240,7 @@ class EventSystem:
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         temporary: bool = False,
+        skip_req_missing: bool | None = None,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def use(
@@ -244,12 +252,14 @@ class EventSystem:
             Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
         ) = None,
         temporary: bool = False,
+        skip_req_missing: bool | None = None,
     ):
+        _skip_req_missing = self.global_skip_req_missing if skip_req_missing is None else skip_req_missing
         if not (scope := scope_ctx.get()):
             scope = self._global_scope
         if not func:
-            return scope.register(priority=priority, providers=providers, temporary=temporary, publisher=pub)
-        return scope.register(func, priority=priority, providers=providers, temporary=temporary, publisher=pub)
+            return scope.register(priority=priority, providers=providers, temporary=temporary, skip_req_missing=_skip_req_missing, publisher=pub)
+        return scope.register(func, priority=priority, providers=providers, temporary=temporary, skip_req_missing=_skip_req_missing, publisher=pub)
 
 
 es = EventSystem()
