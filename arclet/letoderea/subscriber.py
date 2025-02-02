@@ -226,6 +226,7 @@ class Subscriber(Generic[R]):
     def dispose(self):
         if self._dispose:
             self._dispose(self)
+        self._dispose = None
         while self._propagates:
             self._propagates[0].dispose()
 
@@ -330,15 +331,15 @@ class Subscriber(Generic[R]):
         prepend: bool = False,
         priority: int = 16,
         providers: list[Provider | ProviderFactory] | None = None,
-    ) -> Self: ...
+    ) -> Callable[[], None]: ...
 
     @overload
-    def propagate(self, func: Propagator, *, providers: list[Provider | ProviderFactory] | None = None) -> Self: ...
+    def propagate(self, func: Propagator, *, providers: list[Provider | ProviderFactory] | None = None) -> Callable[[], None]: ...
 
     @overload
     def propagate(
         self, *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None
-    ) -> Callable[[TTarget[Any]], Self]: ...
+    ) -> Callable[[TTarget[Any]], Callable[[], None]]: ...
 
     def propagate(
         self,
@@ -349,12 +350,18 @@ class Subscriber(Generic[R]):
         providers: list[Provider | ProviderFactory] | None = None,
     ):
         if isinstance(func, Propagator):
+            disposes = []
             for slot in func.compose():
-                if isinstance(slot, tuple):
+                disposes.append(
                     self.propagate(slot[0], prepend=slot[1], priority=slot[2] if len(slot) == 3 else 16)
-                else:
-                    self.propagate(slot, priority=16)
-            return self
+                    if isinstance(slot, tuple)
+                    else self.propagate(slot, priority=16)
+                )
+
+            def _():
+                for dispose in disposes:
+                    dispose()
+            return _
 
         def wrapper(callable_target: TTarget[Any], /):
             _providers = providers or []
@@ -391,17 +398,11 @@ class Subscriber(Generic[R]):
                 self._propagates.append(sub)
             if sub.has_cm:
                 self.has_cm = True
-            return self
+            return sub.dispose
 
         if func:
             return wrapper(func)
         return wrapper
-
-    @overload
-    def propagates(self, *funcs: TTarget[Any], prepend: bool = False): ...
-
-    @overload
-    def propagates(self, *funcs: TTarget[Any] | Propagator): ...
 
     def propagates(self, *funcs: TTarget[Any] | Propagator, prepend: bool = False):
         for func in funcs:
