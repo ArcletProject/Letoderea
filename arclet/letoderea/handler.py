@@ -33,11 +33,10 @@ async def publish_exc_event(event: ExceptionEvent):
     from .scope import _scopes
 
     pub_id = search_publisher(event).id
+    if pub_id == "$backend":
+        return
     scopes = [sp for sp in _scopes.values() if sp.available]
-    await dispatch(
-        chain.from_iterable(sp.iter_subscribers(pub_id) for sp in scopes),
-        event,
-    )
+    await dispatch(chain.from_iterable(sp.iter_subscribers(pub_id) for sp in scopes), event)
 
 
 @overload

@@ -95,6 +95,8 @@ def run_sync(call: Callable[P, T]) -> Callable[P, Coroutine[None, None, T]]:
         pfunc = partial(call, *args, **kwargs)
         context = copy_context()
         result = await loop.run_in_executor(None, partial(context.run, pfunc))
+        if inspect.isawaitable(result):
+            return await result
         return result
 
     return _wrapper

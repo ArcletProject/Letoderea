@@ -6,10 +6,10 @@ from collections.abc import Awaitable, Generator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Final, Generic, TypeVar, cast, final, overload
-from typing_extensions import Self, get_args, get_origin
+from typing_extensions import Self, get_args, get_origin, ParamSpec
 from uuid import uuid4
 
-from tarina import Empty, is_async, signatures
+from tarina import Empty, is_async, signatures, is_coroutinefunction
 
 from .exceptions import (
     HandlerStop,
@@ -331,14 +331,26 @@ class Subscriber(Generic[R]):
         prepend: bool = False,
         priority: int = 16,
         providers: list[Provider | ProviderFactory] | None = None,
+        temporary: bool = False,
     ) -> Callable[[], None]: ...
 
     @overload
-    def propagate(self, func: Propagator, *, providers: list[Provider | ProviderFactory] | None = None) -> Callable[[], None]: ...
+    def propagate(
+        self,
+        func: Propagator,
+        *,
+        providers: list[Provider | ProviderFactory] | None = None,
+        temporary: bool = False,
+    ) -> Callable[[], None]: ...
 
     @overload
     def propagate(
-        self, *, prepend: bool = False, priority: int = 16, providers: list[Provider | ProviderFactory] | None = None
+        self,
+        *,
+        prepend: bool = False,
+        priority: int = 16,
+        providers: list[Provider | ProviderFactory] | None = None,
+        temporary: bool = False,
     ) -> Callable[[TTarget[Any]], Callable[[], None]]: ...
 
     def propagate(
@@ -348,6 +360,7 @@ class Subscriber(Generic[R]):
         prepend: bool = False,
         priority: int = 16,
         providers: list[Provider | ProviderFactory] | None = None,
+        temporary: bool = False,
     ):
         if isinstance(func, Propagator):
             disposes = []
@@ -376,13 +389,21 @@ class Subscriber(Generic[R]):
                     sub = callable_target
                     origin_dispose = sub._dispose
                     sub._dispose = lambda x: (origin_dispose(x), _dispose(x))  # type: ignore
+                    sub.temporary = temporary
                 else:
-                    sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=_dispose)
+                    sub = Subscriber(
+                        callable_target,
+                        priority=priority,
+                        providers=_providers,
+                        dispose=_dispose,
+                        temporary=temporary,
+                    )
                 self._propagates.insert(self._cursor, sub)
                 self._cursor += 1
             else:
                 if isinstance(callable_target, Subscriber):
                     sub = callable_target
+                    sub.temporary = temporary
                     sub.providers.append(ResultProvider())
                     sub._recompile()
                     origin_dispose = sub._dispose
@@ -394,6 +415,7 @@ class Subscriber(Generic[R]):
                         priority=priority,
                         providers=_providers,
                         dispose=lambda x: self._propagates.remove(x),
+                        temporary=temporary,
                     )
                 self._propagates.append(sub)
             if sub.has_cm:
@@ -417,3 +439,19 @@ class Subscriber(Generic[R]):
             if hasattr(sub.callable_target, "__func__") and sub.callable_target.__func__ == func:  # type: ignore
                 return sub
         raise ValueError(f"Propagator {func} not found")
+
+
+P = ParamSpec("P")
+
+
+def defer(ctx: Contexts | TTarget, func: Callable[P, Any], *args: P.args, **kwargs: P.kwargs):
+    if isinstance(ctx, dict):
+        sub = ctx[SUBSCRIBER]
+    elif isinstance(ctx, Subscriber):
+        sub = ctx
+    else:
+        raise TypeError(f"Unsupported type {type(ctx)}")
+    if isinstance(func, Subscriber) or is_coroutinefunction(func):
+        async def _(): await func(*args, **kwargs)
+        return sub.propagate(_, temporary=True)
+    return sub.propagate(lambda: func(*args, **kwargs), temporary=True)
