@@ -11,14 +11,6 @@ class UnresolvedRequirement(Exception):
     __origin_args__: tuple[str, Any, Any, list[Any]]
 
 
-class PropagationCancelled(Exception):
-    pass
-
-
-class HandlerStop(Exception):
-    pass
-
-
 class ProviderUnsatisfied(Exception):
     def __init__(self, source_key: str):
         self.source_key = source_key
@@ -64,16 +56,9 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
             e.__traceback__,
         )
         return exc
-    if isinstance(
-        e,
-        (
-            PropagationCancelled,
-            InnerHandlerException,
-            ProviderUnsatisfied,
-        ),
-    ):
-        return InnerHandlerException(e) if inner else e
     if inner:
         return InnerHandlerException(e)
+    if isinstance(e, (InnerHandlerException, ProviderUnsatisfied)):
+        return e
     traceback.print_exception(e.__class__, e, e.__traceback__)
     return e

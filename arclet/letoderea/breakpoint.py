@@ -4,10 +4,9 @@ from collections.abc import Awaitable
 from typing import Callable, Generic, Optional, TypeVar, Union, overload
 
 from .core import es
-from .exceptions import PropagationCancelled
 from .handler import generate_contexts
 from .provider import Provider, get_providers, global_providers
-from .subscriber import Subscriber
+from .subscriber import Subscriber, ExitState
 from .typing import TCallable, TTarget
 
 R = TypeVar("R")
@@ -35,7 +34,7 @@ def new_target(event_t: type, condition: "StepOut", fut: Future):
         if result is not None and not fut.done():
             fut.set_result(result)
             if condition.block:
-                raise PropagationCancelled()
+                return ExitState.block
 
     return inner
 

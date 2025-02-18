@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+from enum import Enum, auto
 from collections import defaultdict
 from collections.abc import Awaitable, Generator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -31,7 +32,14 @@ from .typing import (
     run_sync_generator,
 )
 
-STOP: Final = type("STOP", (), {})
+
+class ExitState(Enum):
+    stop = auto()
+    block = auto()
+
+
+STOP: Final[ExitState] = ExitState.stop
+BLOCK: Final[ExitState] = ExitState.block
 RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
 
 
@@ -229,23 +237,24 @@ class Subscriber(Generic[R]):
         while self._propagates:
             self._propagates[0].dispose()
 
-    async def handle(self, context: Contexts, inner=False) -> R | type[STOP]:
+    async def handle(self, context: Contexts, inner=False) -> R | ExitState:
         if not inner:
             context["$subscriber"] = self
             if self.has_cm and "$exit_stack" not in context:
                 context["$exit_stack"] = AsyncExitStack()
         try:
             if self._cursor:
-                await self._run_propagate(context, self._propagates[: self._cursor])
+                _res = await self._run_propagate(context, self._propagates[: self._cursor])
+                if _res is STOP or _res is BLOCK:
+                    return _res
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
                     if not param.depend.cache:
                         dep_res = await param.depend.sub.handle(context.copy(), inner=True)  # type: ignore
-                        if dep_res is STOP:
-                            return STOP
+                        if dep_res is STOP or dep_res is BLOCK:
+                            return dep_res
                         arguments[param.name] = dep_res
-                        #arguments[param.name] = await param.depend.sub.handle(context.copy(), inner=True)  # type: ignore
                         continue
                     if "$depend_cache" not in context:
                         context["$depend_cache"] = {}
@@ -253,8 +262,8 @@ class Subscriber(Generic[R]):
                         arguments[param.name] = context["$depend_cache"][param.depend.sub.callable_target]
                     else:
                         dep_res = await param.depend.sub.handle(context.copy(), inner=True)  # type: ignore
-                        if dep_res is STOP:
-                            return STOP
+                        if dep_res is STOP or dep_res is BLOCK:
+                            return dep_res
                         arguments[param.name] = dep_res
                         context["$depend_cache"][param.depend.sub.callable_target] = dep_res
                 else:
@@ -267,7 +276,7 @@ class Subscriber(Generic[R]):
             if self._propagates:
                 context["$result"] = result
                 result = (await self._run_propagate(context, self._propagates[self._cursor :])) or result
-                if result is STOP:
+                if result is STOP or result is BLOCK:
                     return result
         except InnerHandlerException as e:
             if inner:
@@ -275,12 +284,10 @@ class Subscriber(Generic[R]):
             e1 = e.args[0]
             if isinstance(e1, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
                 return STOP
-                #raise exception_handler(HandlerStop(), self.callable_target, context, inner) from None
             raise exception_handler(e1, self.callable_target, context, inner) from e  # type: ignore
         except Exception as e:
             if isinstance(e, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
                 return STOP
-                #raise exception_handler(HandlerStop(), self.callable_target, context, inner) from None
             raise exception_handler(e, self.callable_target, context, inner) from e  # type: ignore
         finally:
             if not inner:
@@ -288,8 +295,8 @@ class Subscriber(Generic[R]):
                     await context["$exit_stack"].aclose()
                     context.pop("$exit_stack")
                 context.clear()
-        if self.temporary:
-            self.dispose()
+            if self.temporary:
+                self.dispose()
         return result
 
     async def _run_propagate(self, context: Contexts, propagates: list[Subscriber]):
@@ -308,9 +315,8 @@ class Subscriber(Generic[R]):
                 else:
                     raise
             else:
-                if result is STOP:
-                    return STOP
-                    #raise exception_handler(HandlerStop(), sub.callable_target, context, inner=True)
+                if result is STOP or result is BLOCK:
+                    return result
                 if isinstance(result, dict):
                     context.update(result)
                 elif isinstance(result, Result):

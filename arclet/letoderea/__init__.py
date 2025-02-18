@@ -9,7 +9,6 @@ from .decorate import propagate as propagate
 from .decorate import refuse_event as refuse_event
 from .event import EVENT as EVENT
 from .event import BaseEvent as BaseEvent
-from .exceptions import PropagationCancelled as PropagationCancelled
 from .handler import ExceptionEvent as ExceptionEvent
 from .provider import Param as Param
 from .provider import Provider as Provider
@@ -20,7 +19,9 @@ from .publisher import ProviderFactory as ProviderFactory
 from .publisher import Publisher as Publisher
 from .ref import deref as deref
 from .scope import Scope as Scope
+from .subscriber import ExitState as ExitState
 from .subscriber import STOP as STOP
+from .subscriber import BLOCK as BLOCK
 from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .subscriber import Depend as Depend
 from .subscriber import Depends as Depends

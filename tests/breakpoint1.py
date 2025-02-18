@@ -32,7 +32,7 @@ async def test():
         return
     event.set()
     print('[subscriber] >>> wait for msg: "continue!" ')
-    out = StepOut([ExampleEvent], handler)
+    out = StepOut([ExampleEvent], handler, block=True)
     print("[subscriber] >>> current out:", out)
     async for res in out():
         if res is None:
@@ -42,6 +42,11 @@ async def test():
             break
         print("[subscriber] >>> wait result:", f'"{res}"')
     event.clear()
+
+
+@es.on(ExampleEvent)
+async def other(event: ExampleEvent):
+    print("[other] >>> receive event:", event.msg)
 
 
 a = ExampleEvent()
