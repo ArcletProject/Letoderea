@@ -9,7 +9,6 @@ from .decorate import propagate as propagate
 from .decorate import refuse_event as refuse_event
 from .event import EVENT as EVENT
 from .event import BaseEvent as BaseEvent
-from .exceptions import HandlerStop as HandlerStop
 from .exceptions import PropagationCancelled as PropagationCancelled
 from .handler import ExceptionEvent as ExceptionEvent
 from .provider import Param as Param

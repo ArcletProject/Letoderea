@@ -67,7 +67,6 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
     if isinstance(
         e,
         (
-            HandlerStop,
             PropagationCancelled,
             InnerHandlerException,
             ProviderUnsatisfied,
