@@ -164,14 +164,15 @@ class Scope:
             return register_wrapper(func)
         return register_wrapper
 
-    def get_subscribers(self, publisher_id: str) -> list[Subscriber]:
+    def get_subscribers(self, publisher_id: str, pass_backend: bool = True) -> list[Subscriber]:
         return [
-            slot[0] for slot in self.subscribers.values() if publisher_id in slot[1] or _backend_publisher.id in slot[1]
+            slot[0] for slot in self.subscribers.values()
+            if publisher_id in slot[1] or (pass_backend and _backend_publisher.id in slot[1])
         ]
 
-    def iter_subscribers(self, publisher_id: str):
+    def iter_subscribers(self, publisher_id: str, pass_backend: bool = True):
         for slot in self.subscribers.values():
-            if publisher_id in slot[1] or _backend_publisher.id in slot[1]:
+            if publisher_id in slot[1] or (pass_backend and _backend_publisher.id in slot[1]):
                 yield slot[0]
 
     def dispose(self):

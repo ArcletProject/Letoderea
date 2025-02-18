@@ -25,17 +25,21 @@ class ExceptionEvent:
         context["subscriber"] = self.subscriber
 
     __publisher__ = "internal/exception"
-    providers = [provide(Exception, "exception", validate=lambda p: issubclass(p.annotation, BaseException))]
+    providers = [
+        provide(
+            BaseException,
+            "exception",
+            validate=lambda p: (p.annotation and issubclass(p.annotation, BaseException)) or p.name == "exception"
+        )
+    ]
 
 
 async def publish_exc_event(event: ExceptionEvent):
     from .scope import _scopes
 
     pub_id = search_publisher(event).id
-    if pub_id == "$backend":
-        return
     scopes = [sp for sp in _scopes.values() if sp.available]
-    await dispatch(chain.from_iterable(sp.iter_subscribers(pub_id) for sp in scopes), event)
+    await dispatch(chain.from_iterable(sp.iter_subscribers(pub_id, pass_backend=False) for sp in scopes), event)
 
 
 @overload
@@ -80,7 +84,9 @@ async def dispatch(
                 continue
             if result is ExitState.block:
                 return
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
+                if isinstance(event, ExceptionEvent):
+                    return
                 await publish_exc_event(ExceptionEvent(event, grouped[priority][_i], result))
                 continue
             if not return_result:
