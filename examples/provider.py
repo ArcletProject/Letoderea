@@ -42,7 +42,7 @@ class TestEvent1(TestEvent):
 with Scope("test").context() as scope:
 
     @scope.register(providers=[IntProvider(), FloatProvider()], publisher=Publisher(TestEvent1))
-    async def test_subscriber(
+    async def sub(
         name0: str,
         age0: int,
         is_true0: bool,
@@ -72,7 +72,7 @@ with Scope("test").context() as scope:
         ...
 
 
-pprint(test_subscriber.params)
+pprint(sub.params)
 
 
 async def main():
@@ -80,7 +80,7 @@ async def main():
     s = time.perf_counter_ns()
     ctx = await generate_contexts(ev)
     for _ in range(20000):
-        await test_subscriber.handle(ctx.copy())
+        await sub.handle(ctx.copy())
     e = time.perf_counter_ns()
     n = e - s
     print(f"used {n/10e8}, {20000*10e8/n}o/s")

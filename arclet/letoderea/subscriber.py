@@ -464,3 +464,8 @@ def defer(ctx: Contexts | TTarget, func: Callable[..., Any]):
     else:
         raise TypeError(f"Unsupported type {type(ctx)}")
     return sub.propagate(func, temporary=True)
+
+
+def params(ctx: Contexts):
+    sub = ctx[SUBSCRIBER]
+    return sub.params

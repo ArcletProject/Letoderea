@@ -74,7 +74,7 @@ class EventSystem:
             self.external_gathers[target] = publisher.external_gather
         return publisher
 
-    def publish(self, event: Any, scope: str | Scope | None = None):
+    def publish(self, event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
         """发布事件"""
         loop = self.loop or asyncio.get_running_loop()
         pub_id = search_publisher(event).id
@@ -84,6 +84,7 @@ class EventSystem:
                     sp.iter_subscribers(pub_id),
                     event,
                     external_gather=self.external_gathers.get(event.__class__, None),
+                    inherit_ctx=inherit_ctx,
                 )
             )
             self._ref_tasks.add(task)
@@ -95,6 +96,7 @@ class EventSystem:
                     scope.iter_subscribers(pub_id),
                     event,
                     external_gather=self.external_gathers.get(event.__class__, None),
+                    inherit_ctx=inherit_ctx,
                 )
             )
             self._ref_tasks.add(task)
@@ -106,6 +108,7 @@ class EventSystem:
                 chain.from_iterable(sp.iter_subscribers(pub_id) for sp in scopes),
                 event,
                 external_gather=self.external_gathers.get(event.__class__, None),
+                inherit_ctx=inherit_ctx,
             )
         )
         self._ref_tasks.add(task)

@@ -48,6 +48,7 @@ async def dispatch(
     event: Any,
     *,
     external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+    inherit_ctx: Contexts | None = None,
 ) -> None: ...
 
 
@@ -58,6 +59,7 @@ async def dispatch(
     *,
     return_result: Literal[True],
     external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+    inherit_ctx: Contexts | None = None,
 ) -> Result | None: ...
 
 
@@ -67,10 +69,11 @@ async def dispatch(
     *,
     return_result: bool = False,
     external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+    inherit_ctx: Contexts | None = None,
 ):
     if not subscribers:
         return
-    contexts = await generate_contexts(event, external_gather)
+    contexts = await generate_contexts(event, external_gather, inherit_ctx)
     grouped: dict[int, list[Subscriber]] = {}
     for s in subscribers:
         if (priority := s.priority) not in grouped:
@@ -99,13 +102,16 @@ async def dispatch(
 
 
 async def generate_contexts(
-    event: Any, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None
+    event: Any, external_gather: Callable[[Any], Awaitable[Contexts]] | None = None, inherit_ctx: Contexts | None = None
 ) -> Contexts:
     if external_gather:
         contexts = await external_gather(event)
     else:
         contexts: Contexts = {EVENT: event}  # type: ignore
         await event.gather(contexts)
+    if inherit_ctx:
+        inherit_ctx.update(contexts)
+        return inherit_ctx
     return contexts
 
 
