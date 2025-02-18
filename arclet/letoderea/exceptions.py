@@ -2,6 +2,7 @@ import inspect
 import pprint
 import sys
 import traceback
+from types import CodeType
 from typing import Any, Callable
 
 from .typing import Contexts
@@ -24,7 +25,7 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
     if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
         name, *_, pds = e.args
         param = inspect.signature(callable_target).parameters[name]
-        code = callable_target.__code__  # type: ignore
+        code: CodeType = callable_target.__code__  # type: ignore
         etype: type[Exception] = type(  # type: ignore
             "UnresolvedRequirement",
             (
@@ -37,12 +38,10 @@ def exception_handler(e: Exception, callable_target: Callable, contexts: Context
         if sys.version_info >= (3, 10):
             _args += (code.co_firstlineno, len(name) + 1)
         exc: SyntaxError = etype(
-            f"Unable to parse parameter ({param})"
-            f"\n--------------------------------------------------"
-            f"\nproviders on parameter ({param}):"
-            f"\n{pprint.pformat(pds)}"
-            f"\n--------------------------------------------------"
-            f"\ncurrent context"
+            f"Unable to parse parameter `{param}`"
+            f"\n> providers on parameter `{param}`: "
+            f"\n{pprint.pformat(pds, indent=2)}"
+            f"\n> current context"
             f"\n{pprint.pformat(contexts)}",
             _args,
         )

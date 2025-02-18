@@ -301,7 +301,7 @@ class Subscriber(Generic[R]):
 
     async def _run_propagate(self, context: Contexts, propagates: list[Subscriber]):
         queue = sorted(propagates, key=lambda x: x.priority).copy()
-        pending: defaultdict[str, list[Subscriber]] = defaultdict(list)
+        pending: defaultdict[str, list[tuple[Subscriber, Exception]]] = defaultdict(list)
         while queue:
             sub = queue.pop(0)
             try:
@@ -309,9 +309,9 @@ class Subscriber(Generic[R]):
             except InnerHandlerException as e:
                 exc = e.args[0]
                 if isinstance(exc, UnresolvedRequirement):
-                    pending[exc.__origin_args__[0]].append(sub)
+                    pending[exc.__origin_args__[0]].append((sub, exc))
                 elif isinstance(exc, ProviderUnsatisfied):
-                    pending[exc.source_key].append(sub)
+                    pending[exc.source_key].append((sub, exc))
                 else:
                     raise
             else:
@@ -327,13 +327,12 @@ class Subscriber(Generic[R]):
                     for key in list(pending.keys()):
                         if key not in context:
                             continue
-                        await self._run_propagate(context, pending.pop(key))
+                        await self._run_propagate(context, [x[0] for x in pending.pop(key)])
         if pending:
-            key, (sub, *_) = pending.popitem()
-            param = next(p for p in sub.params if p.name == key)
+            key, (slot, *_) = pending.popitem()
             raise exception_handler(
-                UnresolvedRequirement(param.name, param.annotation, param.default, param.providers),
-                sub.callable_target,
+                slot[1],
+                slot[0].callable_target,
                 context,
                 inner=True,
             )

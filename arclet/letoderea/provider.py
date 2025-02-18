@@ -81,7 +81,7 @@ def provide(
             return await run_always_await(call, context)  # type: ignore
 
         def __repr__(self):
-            return f"Provider::{_id}(origin={origin})"
+            return f"{_id.title()}(origin={origin}{(', target=' + repr(target)) if target else ''})"
 
     _Provider.priority = priority
     return type(_id, (_Provider,), {})()
