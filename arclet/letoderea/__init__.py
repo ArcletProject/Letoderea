@@ -9,6 +9,9 @@ from .decorate import propagate as propagate
 from .decorate import refuse_event as refuse_event
 from .event import EVENT as EVENT
 from .event import BaseEvent as BaseEvent
+from .exceptions import UnresolvedRequirement as UnresolvedRequirement
+from .exceptions import ProviderUnsatisfied as ProviderUnsatisfied
+from .exceptions import switch_print_traceback as switch_print_traceback
 from .handler import ExceptionEvent as ExceptionEvent
 from .provider import Param as Param
 from .provider import Provider as Provider

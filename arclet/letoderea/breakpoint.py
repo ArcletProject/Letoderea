@@ -67,7 +67,7 @@ class StepOut(Generic[R]):
     def __init__(
         self,
         events: list[type],
-        handler: Optional[Union[Callable[..., Awaitable[R]], Callable[..., R]]] = None,
+        handler: Optional[Union[Callable[..., Awaitable[Optional[R]]], Callable[..., Optional[R]]]] = None,
         providers: Optional[list[Union[Provider, type[Provider]]]] = None,
         priority: int = 15,
         block: bool = False,

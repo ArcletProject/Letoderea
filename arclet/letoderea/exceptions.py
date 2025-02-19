@@ -21,43 +21,53 @@ class InnerHandlerException(Exception):
     pass
 
 
-def exception_handler(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):
-    if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
-        name, *_, pds = e.args
-        param = inspect.signature(callable_target).parameters[name]
-        code: CodeType = callable_target.__code__  # type: ignore
-        etype: type[Exception] = type(  # type: ignore
-            "UnresolvedRequirement",
-            (
-                UnresolvedRequirement,
-                SyntaxError,
-            ),
-            {},
-        )
-        _args = (code.co_filename, code.co_firstlineno, 1, str(param))
-        if sys.version_info >= (3, 10):
-            _args += (code.co_firstlineno, len(name) + 1)
-        exc: SyntaxError = etype(
-            f"Unable to parse parameter `{param}`"
-            f"\n> providers on parameter `{param}`: "
-            f"\n{pprint.pformat(pds, indent=2)}"
-            f"\n> current context"
-            f"\n{pprint.pformat(contexts)}",
-            _args,
-        )
-        exc.__origin_args__ = e.args
-        exc.__traceback__ = e.__traceback__
+class ExceptionHandler:
+    print_traceback = True
+
+    @staticmethod
+    def call(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):
+        if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
+            name, *_, pds = e.args
+            param = inspect.signature(callable_target).parameters[name]
+            code: CodeType = callable_target.__code__  # type: ignore
+            etype: type[Exception] = type(  # type: ignore
+                "UnresolvedRequirement",
+                (
+                    UnresolvedRequirement,
+                    SyntaxError,
+                ),
+                {},
+            )
+            _args = (code.co_filename, code.co_firstlineno, 1, str(param))
+            if sys.version_info >= (3, 10):
+                _args += (code.co_firstlineno, len(name) + 1)
+            exc: SyntaxError = etype(
+                f"Unable to parse parameter `{param}`"
+                f"\n> providers on parameter `{param}`: "
+                f"\n{pprint.pformat(pds, indent=2)}"
+                f"\n> current context"
+                f"\n{pprint.pformat(contexts)}",
+                _args,
+            )
+            exc.__origin_args__ = e.args
+            exc.__traceback__ = e.__traceback__
+            if inner:
+                return InnerHandlerException(exc)
+            if ExceptionHandler.print_traceback:
+                traceback.print_exception(
+                    etype,
+                    exc,
+                    e.__traceback__,
+                )
+            return exc
         if inner:
-            return InnerHandlerException(exc)
-        traceback.print_exception(
-            etype,
-            exc,
-            e.__traceback__,
-        )
-        return exc
-    if inner:
-        return InnerHandlerException(e)
-    if isinstance(e, (InnerHandlerException, ProviderUnsatisfied)):
+            return InnerHandlerException(e)
+        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied)):
+            return e
+        if ExceptionHandler.print_traceback:
+            traceback.print_exception(e.__class__, e, e.__traceback__)
         return e
-    traceback.print_exception(e.__class__, e, e.__traceback__)
-    return e
+
+
+def switch_print_traceback(flag: bool):
+    ExceptionHandler.print_traceback = flag

@@ -42,6 +42,29 @@ async def test_communicate():
 
 
 @pytest.mark.asyncio
+async def test_result_validate():
+    results = []
+
+    @le.on(TestEvent1)
+    async def s1(foo, bar):
+        assert foo in ("1", "2")
+        assert bar == "res_ster"
+        res = await le.post(TestEvent2(foo))
+        results.append(res)
+
+    @le.on(TestEvent2)
+    async def s2(foo):
+        if foo == "2":
+            return 12345
+        return f"res_{foo}"
+
+    await le.publish(TestEvent1("1", "res_ster"))
+    assert results[0] and results[0].value == "res_1"
+    await le.publish(TestEvent1("2", "res_ster"))
+    assert not results[1]
+
+
+@pytest.mark.asyncio
 async def test_inherit():
     event = TestEvent1("1", "res_ster")
 

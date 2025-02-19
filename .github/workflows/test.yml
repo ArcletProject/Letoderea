@@ -1,0 +1,29 @@
+name: Test & Track
+on: push
+jobs:
+  test:
+    strategy:
+      matrix:
+        py_ver: ['3.9', '3.10', '3.11', '3.12']
+    runs-on:  ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        name: Ensure Python Runtime
+        with:
+          python-version: ${{matrix.py_ver}}
+          architecture: 'x64'
+      - name: Ensure PDM & twine
+        run: |
+          python3 -m pip install pdm
+      - name: Install Package
+        run: |
+          pdm install
+      - name: Test & Report
+        run: |
+          pdm run test
+      - uses: codecov/codecov-action@v4
+        if: matrix.py_ver == '3.12'
+        with:
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}

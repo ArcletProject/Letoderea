@@ -16,7 +16,7 @@ from .exceptions import (
     InnerHandlerException,
     ProviderUnsatisfied,
     UnresolvedRequirement,
-    exception_handler,
+    ExceptionHandler,
 )
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -284,11 +284,11 @@ class Subscriber(Generic[R]):
             e1 = e.args[0]
             if isinstance(e1, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
                 return STOP
-            raise exception_handler(e1, self.callable_target, context, inner) from e  # type: ignore
+            raise ExceptionHandler.call(e1, self.callable_target, context, inner) from e
         except Exception as e:
             if isinstance(e, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
                 return STOP
-            raise exception_handler(e, self.callable_target, context, inner) from e  # type: ignore
+            raise ExceptionHandler.call(e, self.callable_target, context, inner) from e
         finally:
             if not inner:
                 if self.has_cm and "$exit_stack" in context:
@@ -330,7 +330,7 @@ class Subscriber(Generic[R]):
                         await self._run_propagate(context, [x[0] for x in pending.pop(key)])
         if pending:
             key, (slot, *_) = pending.popitem()
-            raise exception_handler(
+            raise ExceptionHandler.call(
                 slot[1],
                 slot[0].callable_target,
                 context,

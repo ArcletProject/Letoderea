@@ -70,7 +70,7 @@ asyncio_default_fixture_loop_scope = "session"
 [tool.coverage.run]
 branch = true
 source = ["."]
-omit = ["./examples/*.py", "exam*.py"]
+omit = ["./examples/*.py", "exam*.py", "./arclet/letoderea/ref.py", "benchmark.py"]
 
 [tool.coverage.report]
 
@@ -93,3 +93,6 @@ exclude_lines = [
     "def __eq__",
     "except ImportError:",
 ]
+
+[tool.pdm.scripts]
+test = {composite = ["coverage run --rcfile=pyproject.toml -m pytest -vv -Wignore", "coverage xml", "coverage report -m"]}

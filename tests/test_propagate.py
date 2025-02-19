@@ -27,15 +27,27 @@ async def test_propagate():
 
     @le.on(TestEvent)
     async def s(foo: str):
-        assert foo == "1"
+        assert foo in ("1", "2")
         executed.append(1)
         return foo
 
     s.propagate(as_int)
-    result = await le.post(TestEvent("1"))
 
+    @s.propagate()
+    async def _(result):
+        if result > 1:
+            return le.STOP
+        executed.append(1)
+        return result
+
+    ans = await le.post(TestEvent("1"))
     assert executed
-    assert result and result.value == 1
+    assert ans and ans.value == 1
+
+    executed.clear()
+    ans = await le.post(TestEvent("2"))
+    assert executed
+    assert not ans
 
 
 @pytest.mark.asyncio
