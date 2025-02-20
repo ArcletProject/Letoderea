@@ -1,6 +1,6 @@
 [project]
 name = "arclet-letoderea"
-version = "0.15.2"
+version = "0.16.0"
 description = "A high-performance, simple-structured event system, relies on asyncio"
 authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
@@ -15,9 +15,12 @@ keywords = ["asyncio", "event-system", "dispatch", "dependency-injection"]
 classifiers = [
     "Operating System :: OS Independent",
     "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Typing :: Typed",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
 ]
 
