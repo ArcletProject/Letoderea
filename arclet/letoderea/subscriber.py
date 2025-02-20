@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+from weakref import WeakSet
 from enum import Enum, auto
 from collections import defaultdict
 from collections.abc import Awaitable, Generator, Sequence
@@ -151,6 +152,9 @@ class Propagator(metaclass=abc.ABCMeta):
         return self.compose()
 
 
+_TPG = TypeVar("_TPG", bound=Propagator)
+
+
 @final
 class Subscriber(Generic[R]):
     id: str
@@ -178,6 +182,7 @@ class Subscriber(Generic[R]):
         providers = providers or []
         self.providers = [p() if isinstance(p, type) else p for p in providers]
         self._propagates: list[Subscriber] = []
+        self._propagator_cache: WeakSet[Propagator] = WeakSet()
         self._cursor = 0
 
         if hasattr(callable_target, "__providers__"):
@@ -385,11 +390,8 @@ class Subscriber(Generic[R]):
                     if isinstance(slot, tuple)
                     else self.propagate(slot, priority=16)
                 )
-
-            def _():
-                for dispose in disposes:
-                    dispose()
-            return _
+            self._propagator_cache.add(func)
+            return lambda: [dispose() for dispose in disposes] or self._propagator_cache.discard(func)
 
         def wrapper(callable_target: TTarget[Any], /):
             _providers = providers or []
@@ -447,13 +449,24 @@ class Subscriber(Generic[R]):
 
         return self
 
-    def get_propagator(self, func: TTarget[R]) -> Subscriber[R]:
+    @overload
+    def get_propagator(self, func: type[_TPG]) -> _TPG: ...
+
+    @overload
+    def get_propagator(self, func: TTarget[R]) -> Subscriber[R]: ...
+
+    def get_propagator(self, func: TTarget[R] | type[_TPG]):
+        if isinstance(func, type):
+            for pro in self._propagator_cache:
+                if isinstance(pro, func):
+                    return pro
+            raise ValueError(f"Propagator {func} not found")  # pragma: no cover
         for sub in self._propagates:
             if sub.callable_target == func:
                 return sub
             if hasattr(sub.callable_target, "__func__") and sub.callable_target.__func__ == func:  # type: ignore
                 return sub
-        raise ValueError(f"Propagator {func} not found")
+        raise ValueError(f"Propagator {func} not found")  # pragma: no cover
 
 
 def defer(ctx: Contexts | TTarget, func: Callable[..., Any]):

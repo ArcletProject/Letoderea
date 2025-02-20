@@ -1,3 +1,5 @@
+from datetime import datetime
+import asyncio
 import pytest
 
 from dataclasses import dataclass
@@ -48,6 +50,8 @@ async def test_propagate():
     ans = await le.post(TestEvent("2"))
     assert executed
     assert not ans
+
+    assert s.get_propagator(as_int).callable_target is as_int
 
 
 @pytest.mark.asyncio
@@ -141,3 +145,48 @@ async def test_dependency_condition():
 
     await s.handle(ctx.copy())
     assert executed == [2, 1]
+
+
+class Interval(le.Propagator):
+    def __init__(self, interval: float):
+        self.interval = interval
+        self.last_time = None
+        self.success = True
+
+    async def before(self):
+        if self.last_time is not None:
+            self.success = (datetime.now() - self.last_time).total_seconds() > self.interval
+            if not self.success:
+                return le.STOP
+        return {"last_time": self.last_time}
+
+    async def after(self):
+        if self.success:
+            self.last_time = datetime.now()
+
+    def compose(self):
+        yield self.before, True
+        yield self.after, False
+
+
+@pytest.mark.asyncio
+async def test_propagator():
+    executed = []
+
+    @le.on(TestEvent)
+    @le.propagate(Interval(0.3))
+    async def s(last_time, foo: str):
+        if not executed:
+            assert last_time is None
+        else:
+            assert last_time
+        executed.append(foo)
+
+    await le.publish(TestEvent("1"))
+    await asyncio.sleep(0.2)
+    await le.publish(TestEvent("2"))
+    await asyncio.sleep(0.2)
+    await le.publish(TestEvent("3"))
+
+    assert executed == ["1", "3"]
+    assert s.get_propagator(Interval).success
