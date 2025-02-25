@@ -282,7 +282,6 @@ def make_event(*, name: str) -> Callable[[type[C]], type[C]]: ...
 def make_event(cls: type[C] | None = None, *, name: str | None = None):
 
     def wrapper(_cls: type[C], /):
-
         if not hasattr(_cls, "gather"):
             annotation = getattr(_cls, "__annotations__", {})
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from asyncio import Queue
 from collections.abc import Mapping
-from contextlib import suppress
 from dataclasses import is_dataclass
 from typing import Any, Callable, Final, Protocol, TypeVar, cast, runtime_checkable
 
@@ -26,12 +25,7 @@ class Publisher:
     id: str
     providers: list[Provider[Any] | ProviderFactory]
 
-    def __init__(
-        self,
-        target: type[Any],
-        id_: str | None = None,
-        queue_size: int = -1,
-    ):
+    def __init__(self, target: type[Any], id_: str | None = None, queue_size: int = -1):
         if id_:
             self.id = id_
         elif hasattr(target, "__publisher__"):
@@ -58,25 +52,15 @@ class Publisher:
         """被动提供事件方法， 由 event system 主动轮询"""
         return await self.event_queue.get()
 
-    def bind(
-        self,
-        *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
-    ) -> None:
+    def bind(self, *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
         """为发布器增加间接 Provider 或 Auxiliaries"""
         self.providers.extend(p() if isinstance(p, type) else p for p in args)
 
-    def unbind(
-        self,
-        arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
-    ) -> None:
+    def unbind(self, arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
         """移除发布器的间接 Provider 或 Auxiliaries"""
-        if isinstance(arg, (ProviderFactory, Provider)):
-            with suppress(ValueError):
-                self.providers.remove(arg)
-        else:
-            for p in self.providers.copy():
-                if isinstance(p, arg):
-                    self.providers.remove(p)
+        idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
+        for i in reversed(idx):
+            self.providers.pop(i)
 
     def validate(self, event):
         return isinstance(event, self.target)
@@ -97,10 +81,7 @@ class __BackendPublisher(Publisher):
     def __init__(self):
         self.id = "$backend"
         self.providers = []
-        self.auxiliaries = []
-
-    def validate(self, event):
-        return True
+        self.validate = lambda event: True
 
 
 _backend_publisher: Final[__BackendPublisher] = __BackendPublisher()
@@ -109,13 +90,7 @@ _backend_publisher: Final[__BackendPublisher] = __BackendPublisher()
 class ExternalPublisher(Publisher):
     """宽松的发布器，任意对象都可以作为事件被发布"""
 
-    def __init__(
-        self,
-        target: type[T],
-        id_: str | None = None,
-        supplier: Callable[[T], Mapping[str, Any]] | None = None,
-        queue_size: int = -1,
-    ):
+    def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T], Mapping[str, Any]] | None = None, queue_size: int = -1):
         super().__init__(target, id_, queue_size=queue_size)
 
         async def _(event):
@@ -130,20 +105,12 @@ class ExternalPublisher(Publisher):
 
 
 def filter_publisher(target: type[Any]):
-    if hasattr(target, "__publisher__"):
-        label = target.__publisher__
-    else:
-        label = f"$event:{target.__name__}"
-    if label in _publishers:
+    if (label := getattr(target, "__publisher__", f"$event:{target.__name__}")) in _publishers:
         return _publishers[label]
-    for pub in _publishers.values():
-        if pub.target is target:
-            return pub
+    return next((pub for pub in _publishers.values() if pub.target is target), None)
 
 
 def search_publisher(event: Any) -> Publisher:
-    if hasattr(event, "__publisher__") and (pub := _publishers.get(event.__publisher__)):
-        return pub
-    if pub := _publishers.get(f"$event:{type(event).__name__}"):
+    if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__name__}")):
         return pub
     return next((pub for pub in _publishers.values() if pub.validate(event)), _backend_publisher)

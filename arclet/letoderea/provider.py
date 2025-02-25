@@ -23,20 +23,16 @@ class Param(NamedTuple):
     is_empty: bool
 
 
-_local_storage: dict[type["Provider"], type] = {}
-
-
 @dataclass(init=False, repr=True)
 class Provider(Generic[T], metaclass=ABCMeta):
     priority: ClassVar[int] = 20
     origin: type[T]
 
     def __init__(self):
-        self.origin = _local_storage[self.__class__]  # type: ignore
+        self.origin = self.__class__.__orig_bases__[0].__args__[0]  # type: ignore
 
     def __init_subclass__(cls, **kwargs):
-        _local_storage[cls] = cls.__orig_bases__[0].__args__[0]  # type: ignore
-        if _local_storage[cls] is T:
+        if cls.__orig_bases__[0].__args__[0] is T:  # type: ignore
             raise TypeError("Subclass of Provider must be generic. If you need a wildcard, please using `typing.Any`")
 
     def validate(self, param: Param):
@@ -44,17 +40,12 @@ class Provider(Generic[T], metaclass=ABCMeta):
         return (
             self.origin == param.annotation
             or (isinstance(anno, type) and anno is not bool and generic_issubclass(anno, self.origin))
-            or (
-                not (self.origin is bool and generic_issubclass(anno, int))
-                and generic_issubclass(self.origin, param.annotation)
-            )
+            or (not (self.origin is bool and generic_issubclass(anno, int)) and generic_issubclass(self.origin, param.annotation))
         )
 
     @abstractmethod
     async def __call__(self, context: Contexts) -> T | None:
-        """
-        依据提供模式，从集合中提供一个对象
-        """
+        """依据提供模式，从集合中提供一个对象"""
         raise NotImplementedError
 
 
@@ -93,25 +84,13 @@ def provide(
 class ProviderFactory(metaclass=ABCMeta):
     @abstractmethod
     def validate(self, param: Param) -> Provider | None:
-        """
-        依据参数类型自行分配对应 Provider
-        """
+        """依据参数类型自行分配对应 Provider"""
 
 
-@lru_cache(4096)
-def get_providers(
-    event: Any,
-) -> list[Provider[Any] | ProviderFactory]:
-    res = []
-    for cls in reversed(event.__mro__[:-1]):  # type: ignore
-        res.extend(getattr(cls, "providers", []))
-    res.extend(
-        p
-        for _, p in inspect.getmembers(
-            event,
-            lambda x: inspect.isclass(x) and issubclass(x, (Provider, ProviderFactory)),
-        )
-    )
+@lru_cache
+def get_providers(event: Any) -> list[Provider[Any] | ProviderFactory]:
+    res = [p for cls in reversed(event.__mro__[:-1]) for p in getattr(cls, "providers", [])]  # type: ignore
+    res.extend(p for _, p in inspect.getmembers(event, lambda x: inspect.isclass(x) and issubclass(x, (Provider, ProviderFactory))))
     providers = [p() if isinstance(p, type) else p for p in res]
     return list({p.__class__: p for p in providers}.values())
 

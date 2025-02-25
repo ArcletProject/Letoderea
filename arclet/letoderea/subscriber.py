@@ -324,18 +324,11 @@ class Subscriber(Generic[R]):
                 elif result is not None:
                     context["$result"] = result
                 if pending:
-                    for key in list(pending.keys()):
-                        if key not in context:
-                            continue
+                    for key in filter(context.__contains__, list(pending.keys())):
                         await self._run_propagate(context, [x[0] for x in pending.pop(key)])
         if pending:
             key, (slot, *_) = pending.popitem()
-            raise ExceptionHandler.call(
-                slot[1],
-                slot[0].callable_target,
-                context,
-                inner=True,
-            )
+            raise ExceptionHandler.call(slot[1], slot[0].callable_target,context, inner=True)
         return context.get(RESULT)
 
     @overload
@@ -391,47 +384,34 @@ class Subscriber(Generic[R]):
             self._propagator_cache.add(func)
             return lambda: [dispose() for dispose in disposes] or self._propagator_cache.discard(func)
 
+        def _dispose(x: Subscriber):
+            self._propagates.remove(x)
+            self._cursor -= 1
+
         def wrapper(callable_target: TTarget[Any], /):
+            if isinstance(callable_target, Subscriber):
+                raise ValueError("Subscriber can't be propagated")
             _providers = providers or []
             _providers.extend(self.providers)
             if prepend:
-
-                def _dispose(x: Subscriber):
-                    self._propagates.remove(x)
-                    self._cursor -= 1
-
-                if isinstance(callable_target, Subscriber):
-                    sub = callable_target
-                    origin_dispose = sub._dispose
-                    sub._dispose = lambda x: (origin_dispose(x), _dispose(x))  # type: ignore
-                    sub.temporary = temporary
-                else:
-                    sub = Subscriber(
-                        callable_target,
-                        priority=priority,
-                        providers=_providers,
-                        dispose=_dispose,
-                        temporary=temporary,
-                    )
+                sub = Subscriber(
+                    callable_target,
+                    priority=priority,
+                    providers=_providers,
+                    dispose=_dispose,
+                    temporary=temporary,
+                )
                 self._propagates.insert(self._cursor, sub)
                 self._cursor += 1
             else:
-                if isinstance(callable_target, Subscriber):
-                    sub = callable_target
-                    sub.temporary = temporary
-                    sub.providers.append(ResultProvider())
-                    sub._recompile()
-                    origin_dispose = sub._dispose
-                    sub._dispose = lambda x: (origin_dispose(x), self._propagates.remove(x))  # type: ignore
-                else:
-                    _providers.append(ResultProvider())
-                    sub = Subscriber(
-                        callable_target,
-                        priority=priority,
-                        providers=_providers,
-                        dispose=lambda x: self._propagates.remove(x),
-                        temporary=temporary,
-                    )
+                _providers.append(ResultProvider())
+                sub = Subscriber(
+                    callable_target,
+                    priority=priority,
+                    providers=_providers,
+                    dispose=lambda x: self._propagates.remove(x),
+                    temporary=temporary,
+                )
                 self._propagates.append(sub)
             if sub.has_cm:
                 self.has_cm = True

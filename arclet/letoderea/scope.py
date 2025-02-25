@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from secrets import token_urlsafe
 from typing import Any, Callable, TypeVar, overload
 
@@ -18,30 +18,19 @@ _scopes: dict[str, Scope] = {}
 
 
 class Scope:
-    id: str
-    subscribers: dict[str, tuple[Subscriber, set[str]]]
-    providers: list[Provider[Any] | ProviderFactory]
-    propagators: list[Propagator]
-
-    def __init__(
-        self,
-        id_: str | None = None,
-    ):
+    def __init__(self, id_: str | None = None):
         self.id = id_ or token_urlsafe(16)
-        self.subscribers = {}
+        self.subscribers: dict[str, tuple[Subscriber, set[str]]] = {}
         self.available = True
-        self.providers = []
-        self.propagators = []
+        self.providers: list[Provider[Any] | ProviderFactory] = []
+        self.propagators: list[Propagator] = []
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
     async def emit(self, event: Any) -> None:
         """主动向自己的订阅者发布事件"""
-        await dispatch(
-            self.iter_subscribers(search_publisher(event).id),
-            event,
-        )
+        await dispatch(self.iter_subscribers(search_publisher(event).id), event)
 
     @overload
     async def bail(self, event: Resultable[T]) -> Result[T] | None: ...
@@ -53,10 +42,7 @@ class Scope:
         """主动向自己的订阅者发布事件, 并返回结果"""
         return await dispatch(self.iter_subscribers(search_publisher(event).id), event, return_result=True)
 
-    def bind(
-        self,
-        *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
-    ) -> None:
+    def bind(self, *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
         """增加间接 Provider"""
         self.providers.extend(p() if isinstance(p, type) else p for p in args)
 
@@ -65,13 +51,9 @@ class Scope:
         arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
     ) -> None:
         """移除间接 Provider"""
-        if isinstance(arg, (ProviderFactory, Provider)):
-            with suppress(ValueError):
-                self.providers.remove(arg)
-        else:
-            for p in self.providers.copy():
-                if isinstance(p, arg):
-                    self.providers.remove(p)
+        idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
+        for i in reversed(idx):
+            self.providers.pop(i)
 
     @contextmanager
     def context(self):
@@ -82,9 +64,7 @@ class Scope:
             scope_ctx.reset(token)
 
     def remove_subscriber(self, subscriber: Subscriber) -> None:
-        """
-        移除订阅者
-        """
+        """移除订阅者"""
         self.subscribers.pop(subscriber.id, None)
 
     @overload
@@ -132,22 +112,12 @@ class Scope:
         elif not events:
             pubs = [_backend_publisher]
         else:
-            pubs = [
-                *filter(
-                    None, (filter_publisher(target) for target in (events if isinstance(events, tuple) else (events,)))
-                )
-            ]
-            if not pubs:
-                pubs = [Publisher(target) for target in (events if isinstance(events, tuple) else (events,))]
+            _events = events if isinstance(events, tuple) else (events,)
+            pubs = [*filter(None, (filter_publisher(target) for target in _events))] or [Publisher(target) for target in _events]
         pub_providers = [p for pub in pubs for p in pub.providers]
 
         def register_wrapper(exec_target: Callable, /) -> Subscriber:
-            _providers = [
-                *global_providers,
-                *pub_providers,
-                *self.providers,
-                *providers,
-            ]
+            _providers = [*global_providers, *pub_providers, *self.providers, *providers]
             res = Subscriber(
                 exec_target,
                 priority=priority,
@@ -165,10 +135,7 @@ class Scope:
         return register_wrapper
 
     def get_subscribers(self, publisher_id: str, pass_backend: bool = True) -> list[Subscriber]:
-        return [
-            slot[0] for slot in self.subscribers.values()
-            if publisher_id in slot[1] or (pass_backend and _backend_publisher.id in slot[1])
-        ]
+        return [slot[0] for slot in self.subscribers.values() if publisher_id in slot[1] or (pass_backend and _backend_publisher.id in slot[1])]
 
     def iter_subscribers(self, publisher_id: str, pass_backend: bool = True):
         for slot in self.subscribers.values():
