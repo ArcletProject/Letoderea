@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import abc
 from weakref import WeakSet
-from enum import Enum, auto
 from collections import defaultdict
 from collections.abc import Awaitable, Generator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Final, Generic, TypeVar, cast, final, overload
+from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload
 from typing_extensions import Self, get_args, get_origin
 from uuid import uuid4
 
@@ -18,6 +17,9 @@ from .exceptions import (
     ProviderUnsatisfied,
     UnresolvedRequirement,
     ExceptionHandler,
+    STOP,
+    BLOCK,
+    _Exit,
 )
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -34,13 +36,6 @@ from .typing import (
 )
 
 
-class ExitState(Enum):
-    stop = auto()
-    block = auto()
-
-
-STOP: Final[ExitState] = ExitState.stop
-BLOCK: Final[ExitState] = ExitState.block
 RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
 
 
@@ -65,6 +60,18 @@ class Depend:
     def init_subscriber(self, provider: list[Provider | ProviderFactory]):
         self.sub = Subscriber(self.target, providers=provider)
         return self
+
+    async def __call__(self, context: Contexts):
+        if not self.cache:
+            return await self.sub.handle(context.copy(), inner=True)
+        if "$depend_cache" not in context:
+            context["$depend_cache"] = {}
+        if self.target in context["$depend_cache"]:
+            return context["$depend_cache"][self.target]
+        dep_res = await self.sub.handle(context.copy(), inner=True)
+        if dep_res is not STOP and dep_res is not BLOCK:
+            context["$depend_cache"][self.target] = dep_res
+        return dep_res
 
 
 def Depends(target: TTarget[Any], cache: bool = False) -> Any:
@@ -146,9 +153,9 @@ SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 class Propagator(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def compose(self) -> Generator[TTarget | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]: ...
+    def compose(self) -> Generator[TTarget | Propagator | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]: ...
 
-    def __iter__(self):
+    def __iter__(self):  # pragma: no cover
         return self.compose()
 
 
@@ -218,10 +225,10 @@ class Subscriber(Generic[R]):
         self._dispose = dispose
         self.temporary = temporary
 
-    def _recompile(self):
+    def _recompile(self):  # pragma: no cover
         self.params = _compile(self.callable_target, self.providers)
 
-    async def __call__(self, *args, **kwargs) -> R:
+    async def __call__(self, *args, **kwargs) -> R:  # pragma: no cover
         return await self.callable_target(*args, **kwargs)
 
     def __repr__(self):
@@ -242,7 +249,7 @@ class Subscriber(Generic[R]):
         while self._propagates:
             self._propagates[0].dispose()
 
-    async def handle(self, context: Contexts, inner=False) -> R | ExitState:
+    async def handle(self, context: Contexts, inner=False) -> R | _Exit:
         if not inner:
             context["$subscriber"] = self
             if self.has_cm and "$exit_stack" not in context:
@@ -251,26 +258,14 @@ class Subscriber(Generic[R]):
             if self._cursor:
                 _res = await self._run_propagate(context, self._propagates[: self._cursor])
                 if _res is STOP or _res is BLOCK:
-                    return _res
+                    return _res  # type: ignore
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
-                    if not param.depend.cache:
-                        dep_res = await param.depend.sub.handle(context.copy(), inner=True)  # type: ignore
-                        if dep_res is STOP or dep_res is BLOCK:
-                            return dep_res
-                        arguments[param.name] = dep_res
-                        continue
-                    if "$depend_cache" not in context:
-                        context["$depend_cache"] = {}
-                    if param.depend.sub.callable_target in context["$depend_cache"]:
-                        arguments[param.name] = context["$depend_cache"][param.depend.sub.callable_target]
-                    else:
-                        dep_res = await param.depend.sub.handle(context.copy(), inner=True)  # type: ignore
-                        if dep_res is STOP or dep_res is BLOCK:
-                            return dep_res
-                        arguments[param.name] = dep_res
-                        context["$depend_cache"][param.depend.sub.callable_target] = dep_res
+                    dep_res = await param.depend(context)
+                    if dep_res is STOP or dep_res is BLOCK:
+                        return dep_res
+                    arguments[param.name] = dep_res
                 else:
                     arguments[param.name] = await param.solve(context)
             if self.is_cm:
@@ -320,7 +315,7 @@ class Subscriber(Generic[R]):
                 else:
                     raise
             else:
-                if result is STOP or result is BLOCK:
+                if isinstance(result, _Exit):
                     return result
                 if isinstance(result, dict):
                     context.update(result)
@@ -385,11 +380,14 @@ class Subscriber(Generic[R]):
         if isinstance(func, Propagator):
             disposes = []
             for slot in func.compose():
-                disposes.append(
-                    self.propagate(slot[0], prepend=slot[1], priority=slot[2] if len(slot) == 3 else 16)
-                    if isinstance(slot, tuple)
-                    else self.propagate(slot, priority=16)
-                )
+                if isinstance(slot, Propagator):
+                    disposes.append(self.propagate(slot))
+                else:
+                    disposes.append(
+                        self.propagate(slot[0], prepend=slot[1], priority=slot[2] if len(slot) == 3 else 16)
+                        if isinstance(slot, tuple)
+                        else self.propagate(slot, priority=16)
+                    )
             self._propagator_cache.add(func)
             return lambda: [dispose() for dispose in disposes] or self._propagator_cache.discard(func)
 

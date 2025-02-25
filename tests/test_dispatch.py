@@ -98,3 +98,58 @@ async def test_priority():
 
     await le.publish(TestEvent("f", "b"))
     assert executed == [2, 1]
+
+
+@pytest.mark.asyncio
+async def test_exit_state():
+    from arclet.letoderea import STOP, ExitState
+    executed = []
+
+    @le.on(TestEvent, priority=10)
+    async def _1():
+        executed.append(1)
+
+    @le.on(TestEvent, priority=12)
+    async def _2():
+        executed.append(2)
+
+    await le.publish(TestEvent("f", "b"))
+    assert executed == [1, 2]
+
+    _1.dispose()
+    executed.clear()
+
+    @le.on(TestEvent, priority=10)
+    async def _3():
+        executed.append(1)
+        return STOP
+
+    await le.publish(TestEvent("f", "b"))
+    assert executed == [1, 2]
+
+    _3.dispose()
+    executed.clear()
+
+    @le.on(TestEvent, priority=10)
+    async def _4():
+        executed.append(1)
+        return ExitState.BLOCK
+
+    await le.publish(TestEvent("f", "b"))
+    assert executed == [1]
+
+    _4.dispose()
+    executed.clear()
+
+    @le.on(TestEvent, priority=10)
+    async def _5():
+        executed.append(0)
+        raise STOP
+
+    @le.on(TestEvent, priority=11)
+    async def _6():
+        executed.append(1)
+        raise ExitState.BLOCK
+
+    await le.publish(TestEvent("f", "b"))
+    assert executed == [0, 1]

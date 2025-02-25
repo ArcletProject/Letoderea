@@ -7,9 +7,10 @@ from itertools import chain
 from typing import Any, Callable, Literal, overload
 
 from .event import EVENT
+from .exceptions import STOP, BLOCK
 from .provider import get_providers, provide
 from .publisher import search_publisher
-from .subscriber import Subscriber, ExitState
+from .subscriber import Subscriber
 from .typing import Contexts, Force, Result
 
 
@@ -83,13 +84,15 @@ async def dispatch(
         tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[priority]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for _i, result in enumerate(results):
-            if result is None or result is ExitState.stop:
+            if result is None:
                 continue
-            if result is ExitState.block:
-                return
             if isinstance(result, BaseException):
                 if isinstance(event, ExceptionEvent):
                     return
+                if result is BLOCK:
+                    return
+                if result is STOP:
+                    continue
                 await publish_exc_event(ExceptionEvent(event, grouped[priority][_i], result))
                 continue
             if not return_result:

@@ -3,7 +3,7 @@ import pprint
 import sys
 import traceback
 from types import CodeType
-from typing import Any, Callable
+from typing import Any, Callable, Final
 
 from .typing import Contexts
 
@@ -15,6 +15,18 @@ class UnresolvedRequirement(Exception):
 class ProviderUnsatisfied(Exception):
     def __init__(self, source_key: str):
         self.source_key = source_key
+
+
+class _Exit(Exception):
+    pass
+
+
+class _ExitStop(_Exit):
+    pass
+
+
+class _ExitBlock(_Exit):
+    pass
 
 
 class InnerHandlerException(Exception):
@@ -39,7 +51,7 @@ class ExceptionHandler:
                 {},
             )
             _args = (code.co_filename, code.co_firstlineno, 1, str(param))
-            if sys.version_info >= (3, 10):
+            if sys.version_info >= (3, 10):  # pragma: no cover
                 _args += (code.co_firstlineno, len(name) + 1)
             exc: SyntaxError = etype(
                 f"Unable to parse parameter `{param}`"
@@ -53,7 +65,7 @@ class ExceptionHandler:
             exc.__traceback__ = e.__traceback__
             if inner:
                 return InnerHandlerException(exc)
-            if ExceptionHandler.print_traceback:
+            if ExceptionHandler.print_traceback:  # pragma: no cover
                 traceback.print_exception(
                     etype,
                     exc,
@@ -62,12 +74,16 @@ class ExceptionHandler:
             return exc
         if inner:
             return InnerHandlerException(e)
-        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied)):
+        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied, _ExitBlock, _ExitStop)):
             return e
-        if ExceptionHandler.print_traceback:
+        if ExceptionHandler.print_traceback:  # pragma: no cover
             traceback.print_exception(e.__class__, e, e.__traceback__)
         return e
 
 
-def switch_print_traceback(flag: bool):
+def switch_print_traceback(flag: bool):  # pragma: no cover
     ExceptionHandler.print_traceback = flag
+
+
+STOP: Final = _ExitStop()
+BLOCK: Final = _ExitBlock()

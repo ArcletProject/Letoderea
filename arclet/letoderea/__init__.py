@@ -12,6 +12,8 @@ from .event import BaseEvent as BaseEvent
 from .exceptions import UnresolvedRequirement as UnresolvedRequirement
 from .exceptions import ProviderUnsatisfied as ProviderUnsatisfied
 from .exceptions import switch_print_traceback as switch_print_traceback
+from .exceptions import STOP as STOP
+from .exceptions import BLOCK as BLOCK
 from .handler import ExceptionEvent as ExceptionEvent
 from .provider import Param as Param
 from .provider import Provider as Provider
@@ -24,9 +26,6 @@ from .ref import deref as deref
 from .scope import Scope as Scope
 from .subscriber import defer as defer
 from .subscriber import params as params
-from .subscriber import ExitState as ExitState
-from .subscriber import STOP as STOP
-from .subscriber import BLOCK as BLOCK
 from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .subscriber import Depend as Depend
 from .subscriber import Depends as Depends
@@ -40,3 +39,8 @@ publish = es.publish
 post = es.post
 on = es.on
 use = es.use
+
+
+class ExitState:
+    STOP = STOP
+    BLOCK = BLOCK

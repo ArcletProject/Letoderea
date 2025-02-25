@@ -26,9 +26,14 @@ async def test_depend():
 
     depend = le.Depends(dep, cache=True)
 
+    @le.depends()
+    async def dep1(foo: str, p: int):
+        return f"{foo}-{p}"
+
     @le.on(TestEvent, providers=[le.provide(int, "p", call=lambda _: 1)])
-    async def s1(a=depend, b=depend):
+    async def s1(a=depend, b=depend, c=dep1):
         assert a == b == "1+1"
+        assert c == "1-1"
         executed.append(1)
 
     for _ in range(5):

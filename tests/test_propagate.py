@@ -161,8 +161,7 @@ class Interval(le.Propagator):
         return {"last_time": self.last_time}
 
     async def after(self):
-        if self.success:
-            self.last_time = datetime.now()
+        self.last_time = datetime.now()
 
     def compose(self):
         yield self.before, True
@@ -173,13 +172,15 @@ class Interval(le.Propagator):
 async def test_propagator():
     executed = []
 
+    class MyPropagator(le.Propagator):
+        def compose(self):
+            yield lambda: executed.append(1), True
+            yield Interval(0.3)
+
     @le.on(TestEvent)
-    @le.propagate(Interval(0.3))
+    @le.propagate(MyPropagator())
     async def s(last_time, foo: str):
-        if not executed:
-            assert last_time is None
-        else:
-            assert last_time
+        assert last_time is None or isinstance(last_time, datetime)
         executed.append(foo)
 
     await le.publish(TestEvent("1"))
@@ -188,5 +189,5 @@ async def test_propagator():
     await asyncio.sleep(0.2)
     await le.publish(TestEvent("3"))
 
-    assert executed == ["1", "3"]
+    assert executed == [1, "1", 1, 1, "3"]
     assert s.get_propagator(Interval).success
