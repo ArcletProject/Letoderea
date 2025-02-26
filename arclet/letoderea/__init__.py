@@ -12,6 +12,7 @@ from .event import BaseEvent as BaseEvent
 from .exceptions import UnresolvedRequirement as UnresolvedRequirement
 from .exceptions import ProviderUnsatisfied as ProviderUnsatisfied
 from .exceptions import switch_print_traceback as switch_print_traceback
+from .exceptions import ExitState as ExitState
 from .exceptions import STOP as STOP
 from .exceptions import BLOCK as BLOCK
 from .handler import ExceptionEvent as ExceptionEvent
@@ -39,8 +40,3 @@ publish = es.publish
 post = es.post
 on = es.on
 use = es.use
-
-
-class ExitState:
-    STOP = STOP
-    BLOCK = BLOCK

@@ -106,50 +106,50 @@ async def test_exit_state():
     executed = []
 
     @le.on(TestEvent, priority=10)
-    async def _1():
+    async def s_1():
         executed.append(1)
 
     @le.on(TestEvent, priority=12)
-    async def _2():
+    async def s_2():
         executed.append(2)
 
     await le.publish(TestEvent("f", "b"))
     assert executed == [1, 2]
 
-    _1.dispose()
+    s_1.dispose()
     executed.clear()
 
     @le.on(TestEvent, priority=10)
-    async def _3():
+    async def s_3():
         executed.append(1)
         return STOP
 
     await le.publish(TestEvent("f", "b"))
     assert executed == [1, 2]
 
-    _3.dispose()
+    s_3.dispose()
     executed.clear()
 
     @le.on(TestEvent, priority=10)
-    async def _4():
+    async def s_4():
         executed.append(1)
-        return ExitState.BLOCK
+        return ExitState.block
 
     await le.publish(TestEvent("f", "b"))
     assert executed == [1]
 
-    _4.dispose()
+    s_4.dispose()
     executed.clear()
 
     @le.on(TestEvent, priority=10)
-    async def _5():
+    async def s_5():
         executed.append(0)
         raise STOP
 
     @le.on(TestEvent, priority=11)
-    async def _6():
+    async def s_6():
         executed.append(1)
-        raise ExitState.BLOCK
+        raise ExitState.block
 
     await le.publish(TestEvent("f", "b"))
     assert executed == [0, 1]

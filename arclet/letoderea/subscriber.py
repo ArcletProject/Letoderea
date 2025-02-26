@@ -19,7 +19,7 @@ from .exceptions import (
     ExceptionHandler,
     STOP,
     BLOCK,
-    _Exit,
+    ExitState,
 )
 from .provider import Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -249,7 +249,7 @@ class Subscriber(Generic[R]):
         while self._propagates:
             self._propagates[0].dispose()
 
-    async def handle(self, context: Contexts, inner=False) -> R | _Exit:
+    async def handle(self, context: Contexts, inner=False) -> R | ExitState:
         if not inner:
             context["$subscriber"] = self
             if self.has_cm and "$exit_stack" not in context:
@@ -258,7 +258,7 @@ class Subscriber(Generic[R]):
             if self._cursor:
                 _res = await self._run_propagate(context, self._propagates[: self._cursor])
                 if _res is STOP or _res is BLOCK:
-                    return _res  # type: ignore
+                    return _res
             arguments: Contexts = {}  # type: ignore
             for param in self.params:
                 if param.depend:
@@ -315,7 +315,7 @@ class Subscriber(Generic[R]):
                 else:
                     raise
             else:
-                if isinstance(result, _Exit):
+                if isinstance(result, ExitState):
                     return result
                 if isinstance(result, dict):
                     context.update(result)

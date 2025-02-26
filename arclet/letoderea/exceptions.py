@@ -2,6 +2,7 @@ import inspect
 import pprint
 import sys
 import traceback
+from enum import Enum
 from types import CodeType
 from typing import Any, Callable, Final
 
@@ -17,16 +18,12 @@ class ProviderUnsatisfied(Exception):
         self.source_key = source_key
 
 
-class _Exit(Exception):
-    pass
+class ExitState(Exception, Enum):
+    stop = "Handle stopped"
+    block = "Propagation blocked"
 
-
-class _ExitStop(_Exit):
-    pass
-
-
-class _ExitBlock(_Exit):
-    pass
+    def __str__(self):
+        return super(Exception, self).__str__()
 
 
 class InnerHandlerException(Exception):
@@ -74,7 +71,7 @@ class ExceptionHandler:
             return exc
         if inner:
             return InnerHandlerException(e)
-        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied, _ExitBlock, _ExitStop)):
+        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied, ExitState)):
             return e
         if ExceptionHandler.print_traceback:  # pragma: no cover
             traceback.print_exception(e.__class__, e, e.__traceback__)
@@ -85,5 +82,5 @@ def switch_print_traceback(flag: bool):  # pragma: no cover
     ExceptionHandler.print_traceback = flag
 
 
-STOP: Final = _ExitStop()
-BLOCK: Final = _ExitBlock()
+STOP: Final = ExitState.stop
+BLOCK: Final = ExitState.block

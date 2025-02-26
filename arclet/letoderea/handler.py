@@ -86,13 +86,13 @@ async def dispatch(
         for _i, result in enumerate(results):
             if result is None:
                 continue
+            if result is BLOCK:
+                return
+            if result is STOP:
+                continue
             if isinstance(result, BaseException):
                 if isinstance(event, ExceptionEvent):
                     return
-                if result is BLOCK:
-                    return
-                if result is STOP:
-                    continue
                 await publish_exc_event(ExceptionEvent(event, grouped[priority][_i], result))
                 continue
             if not return_result:
