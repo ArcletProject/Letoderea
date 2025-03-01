@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from asyncio import Queue
 from collections.abc import Mapping
-from dataclasses import is_dataclass
-from typing import Any, Callable, Final, Protocol, TypeVar, cast, runtime_checkable
+from typing import Any, Callable, Awaitable, Protocol, TypeVar, runtime_checkable
 
 from tarina import generic_isinstance
 
-from .provider import Provider, ProviderFactory, get_providers
-from .typing import Contexts
+from .typing import is_typed_dict
 
 T = TypeVar("T")
 
@@ -21,20 +19,35 @@ class Publishable(Protocol):
 _publishers: dict[str, "Publisher"] = {}
 
 
+async def _supplier(event: Any) -> dict[str, Any]:
+    if isinstance(event, dict):
+        return event
+    ctx = vars(event)
+    return {k: v for k, v in ctx.items() if not k.startswith("_")}
+
+
+async def _gather(event: Any):
+    ctx = {}
+    await event.gather(ctx)
+    return ctx
+
+
 class Publisher:
     id: str
-    providers: list[Provider[Any] | ProviderFactory]
 
-    def __init__(self, target: type[Any], id_: str | None = None, queue_size: int = -1):
+    def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T], Awaitable[Mapping[str, Any]]] | None = None, queue_size: int = -1):
         if id_:
             self.id = id_
         elif hasattr(target, "__publisher__"):
-            self.id = target.__publisher__
+            self.id = target.__publisher__  # type: ignore
         else:
             self.id = f"$event:{target.__name__}"
         self.target = target
+        self.gather: Callable[[Any], Awaitable[Mapping[str, Any]]] = supplier or _supplier
+        if hasattr(target, "gather"):
+            self.gather = _gather
         self.event_queue = Queue(queue_size)
-        self.providers = [*get_providers(target)]
+        self.validate = (lambda x: generic_isinstance(x, target)) if is_typed_dict(target) else (lambda x: isinstance(x, target))
         _publishers[self.id] = self
 
     def __repr__(self):
@@ -52,56 +65,8 @@ class Publisher:
         """被动提供事件方法， 由 event system 主动轮询"""
         return await self.event_queue.get()
 
-    def bind(self, *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
-        """为发布器增加间接 Provider 或 Auxiliaries"""
-        self.providers.extend(p() if isinstance(p, type) else p for p in args)
-
-    def unbind(self, arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
-        """移除发布器的间接 Provider 或 Auxiliaries"""
-        idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
-        for i in reversed(idx):
-            self.providers.pop(i)
-
-    def validate(self, event):
-        return isinstance(event, self.target)
-
     def dispose(self):
         _publishers.pop(self.id, None)
-
-
-def _supplier(event: Any) -> dict[str, Any]:
-    if isinstance(event, dict):
-        return event
-    if is_dataclass(event):
-        return vars(event)
-    return {}
-
-
-class __BackendPublisher(Publisher):
-    def __init__(self):
-        self.id = "$backend"
-        self.providers = []
-        self.validate = lambda event: True
-
-
-_backend_publisher: Final[__BackendPublisher] = __BackendPublisher()
-
-
-class ExternalPublisher(Publisher):
-    """宽松的发布器，任意对象都可以作为事件被发布"""
-
-    def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T], Mapping[str, Any]] | None = None, queue_size: int = -1):
-        super().__init__(target, id_, queue_size=queue_size)
-
-        async def _(event):
-            data = {"$event": event, **((supplier or _supplier)(event))}
-            data = {k: v for k, v in data.items() if not k.startswith("_")}
-            return cast(Contexts, data)
-
-        self.external_gather = _
-
-    def validate(self, event):
-        return generic_isinstance(event, self.target)
 
 
 def filter_publisher(target: type[Any]):
@@ -110,7 +75,28 @@ def filter_publisher(target: type[Any]):
     return next((pub for pub in _publishers.values() if pub.target is target), None)
 
 
-def search_publisher(event: Any) -> Publisher:
+def search_publisher(event: Any):
     if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__name__}")):
         return pub
-    return next((pub for pub in _publishers.values() if pub.validate(event)), _backend_publisher)
+    return next((pub for pub in _publishers.values() if pub.validate(event)), None)
+
+
+def define(
+    target: type[T],
+    supplier: Callable[[T], Awaitable[Mapping[str, Any]]] | None = None,
+    name: str | None = None,
+) -> Publisher:
+    if name and name in _publishers:
+        return _publishers[name]
+    if (_id := getattr(target, "__publisher__", f"$event:{target.__name__}")) in _publishers:
+        return _publishers[_id]
+    return Publisher(target, name or _id, supplier)
+
+
+def gather(target: type[T]):
+    def wrapper(func: Callable[[T], Awaitable[Mapping[str, Any]]]):
+        pub = filter_publisher(target) or define(target)
+        pub.gather = func
+        return func
+
+    return wrapper

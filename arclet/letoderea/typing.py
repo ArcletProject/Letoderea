@@ -3,13 +3,20 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import AsyncGenerator, Awaitable, Coroutine, Generator
-from contextvars import copy_context
 from dataclasses import dataclass
-from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, Union, overload
+from functools import wraps
+from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, TypedDict, Union, overload, cast
 from typing_extensions import ParamSpec, Self, TypeGuard
 
 from tarina import generic_isinstance
+
+
+_TypedDictMeta = type(TypedDict.__mro_entries__(...)[0])  # type: ignore
+
+
+def is_typed_dict(cls: Any) -> bool:
+    return cls.__class__ is _TypedDictMeta
+
 
 T = TypeVar("T")
 T1 = TypeVar("T1")
@@ -51,6 +58,7 @@ class Contexts(dict[str, Any]):
     ...
 
 
+EVENT: CtxItem[Any] = cast(CtxItem, "$event")
 TTarget = Union[Callable[..., Awaitable[T]], Callable[..., T]]
 TCallable = TypeVar("TCallable", bound=TTarget[Any])
 P = ParamSpec("P")
@@ -91,10 +99,7 @@ def run_sync(call: Callable[P, T]) -> Callable[P, Coroutine[None, None, T]]:
 
     @wraps(call)
     async def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        loop = asyncio.get_running_loop()
-        pfunc = partial(call, *args, **kwargs)
-        context = copy_context()
-        result = await loop.run_in_executor(None, partial(context.run, pfunc))
+        result = await asyncio.to_thread(call, *args, **kwargs)
         if inspect.isawaitable(result):
             return await result
         return result

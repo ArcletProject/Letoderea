@@ -1,10 +1,9 @@
 from typing import TYPE_CHECKING, Any, Callable, Union, overload
 
-from .event import EVENT
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import STOP, Propagator, Subscriber, _compile
-from .typing import Contexts, TTarget
+from .typing import EVENT, Contexts, TTarget
 
 
 def bind(*args: Union[Provider, type[Provider]]):

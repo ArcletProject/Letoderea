@@ -25,18 +25,18 @@ class TestEvent:
 
 
 @on(TestEvent)
-async def test_subscriber(a):
+async def sub(a):
     pass
 
 
 a = TestEvent()
 ctx: Contexts = {"$event": a}  # type: ignore
 tasks = []
-pprint(test_subscriber.params)
+pprint(sub.params)
 count = 20000
 
 
-tasks.extend(loop.create_task(test_subscriber.handle(ctx.copy())) for _ in range(count))
+tasks.extend(loop.create_task(sub.handle(ctx.copy())) for _ in range(count))
 
 
 async def main():
@@ -54,7 +54,7 @@ print(f"{n / count} ns per task with {count} tasks gather")
 
 async def main1():
     for _ in range(count):
-        await test_subscriber.handle(ctx.copy())
+        await sub.handle(ctx.copy())
 
 
 s = time.perf_counter_ns()
@@ -74,7 +74,7 @@ print(f"{n / count} ns per loop with {count} loops")
 
 async def main2():
     for _ in range(count):
-        await test_subscriber.handle(ctx.copy())
+        await sub.handle(ctx.copy())
 
 
 prof = Profile()

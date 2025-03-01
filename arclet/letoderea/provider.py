@@ -10,8 +10,7 @@ from typing import Any, Callable, ClassVar, Generic, NamedTuple, TypeVar
 from tarina import generic_issubclass, run_always_await
 from tarina.generic import get_origin
 
-from .event import EVENT
-from .typing import Contexts
+from .typing import Contexts, EVENT
 
 T = TypeVar("T")
 

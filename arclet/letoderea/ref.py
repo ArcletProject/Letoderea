@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast
 
-from .event import EVENT
-from .typing import Contexts
+from .typing import Contexts, EVENT
 
 T = TypeVar("T")
 

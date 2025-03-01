@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Mapping, Sequence
+from collections.abc import Sequence
 from itertools import chain
 from typing import Any, Callable, TypeVar, overload
 from weakref import finalize
 
 from .context import scope_ctx
-from .event import BaseEvent
 from .handler import dispatch
 from .provider import Provider, ProviderFactory
-from .publisher import ExternalPublisher, Publisher, _publishers, search_publisher
+from .publisher import Publisher, search_publisher, _publishers, define
 from .scope import Scope, _scopes
 from .subscriber import Subscriber
 from .typing import Contexts, Result, Resultable
@@ -21,15 +20,13 @@ T = TypeVar("T")
 class EventSystem:
     _ref_tasks = set()
     _global_scope = Scope("$global")
-    external_gathers: dict[type, Callable[[Any], Awaitable[Contexts]]]
 
     def __init__(self):
         self.loop: asyncio.AbstractEventLoop | None = None
         _scopes["$global"] = self._global_scope
-        self.external_gathers = {}
         self.global_skip_req_missing = False
 
-        def _remove(es):
+        def _remove(es):  # pragma: no cover
             for task in es._ref_tasks:
                 if not task.done():
                     task.cancel()
@@ -53,37 +50,16 @@ class EventSystem:
         _scopes[sp.id] = sp
         return sp
 
-    def define(
-        self,
-        target: type[T],
-        name: str | None = None,
-        supplier: Callable[[T], Mapping[str, Any]] | None = None,
-    ) -> Publisher:
-        if name and name in _publishers:
-            return _publishers[name]
-        if hasattr(target, "__publisher__"):
-            _id = target.__publisher__  # type: ignore
-        else:
-            _id = f"$event:{target.__name__}"
-        if _id in _publishers:
-            return _publishers[_id]
-        if issubclass(target, BaseEvent):
-            publisher = Publisher(target, name)
-        else:
-            publisher = ExternalPublisher(target, name, supplier)
-            self.external_gathers[target] = publisher.external_gather
-        return publisher
-
     def publish(self, event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
         """发布事件"""
         loop = self.loop or asyncio.get_running_loop()
-        pub_id = search_publisher(event).id
+        pub = search_publisher(event)
         if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
             task = loop.create_task(
                 dispatch(
-                    sp.iter_subscribers(pub_id),
+                    sp.iter_subscribers(pub),
                     event,
-                    external_gather=self.external_gathers.get(event.__class__, None),
+                    pub.gather if pub else None,
                     inherit_ctx=inherit_ctx,
                 )
             )
@@ -93,9 +69,9 @@ class EventSystem:
         if isinstance(scope, Scope) and scope.available:
             task = loop.create_task(
                 dispatch(
-                    scope.iter_subscribers(pub_id),
+                    scope.iter_subscribers(pub),
                     event,
-                    external_gather=self.external_gathers.get(event.__class__, None),
+                    pub.gather if pub else None,
                     inherit_ctx=inherit_ctx,
                 )
             )
@@ -105,9 +81,9 @@ class EventSystem:
         scopes = [sp for sp in _scopes.values() if sp.available]
         task = loop.create_task(
             dispatch(
-                chain.from_iterable(sp.iter_subscribers(pub_id) for sp in scopes),
+                chain.from_iterable(sp.iter_subscribers(pub) for sp in scopes),
                 event,
-                external_gather=self.external_gathers.get(event.__class__, None),
+                pub.gather if pub else None,
                 inherit_ctx=inherit_ctx,
             )
         )
@@ -124,14 +100,14 @@ class EventSystem:
     def post(self, event: Any, scope: str | Scope | None = None):
         """发布事件并返回第一个响应结果"""
         loop = self.loop or asyncio.get_running_loop()
-        pub_id = search_publisher(event).id
+        pub = search_publisher(event)
         if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
             task = loop.create_task(
                 dispatch(
-                    sp.iter_subscribers(pub_id),
+                    sp.iter_subscribers(pub),
                     event,
+                    pub.gather if pub else None,
                     return_result=True,
-                    external_gather=self.external_gathers.get(event.__class__, None),
                 )
             )
             self._ref_tasks.add(task)
@@ -140,10 +116,10 @@ class EventSystem:
         if isinstance(scope, Scope) and scope.available:
             task = loop.create_task(
                 dispatch(
-                    scope.iter_subscribers(pub_id),
+                    scope.iter_subscribers(pub),
                     event,
+                    pub.gather if pub else None,
                     return_result=True,
-                    external_gather=self.external_gathers.get(event.__class__, None),
                 )
             )
             self._ref_tasks.add(task)
@@ -151,10 +127,10 @@ class EventSystem:
             return task
         task = loop.create_task(
             dispatch(
-                chain.from_iterable(sp.iter_subscribers(pub_id) for sp in _scopes.values() if sp.available),
+                chain.from_iterable(sp.iter_subscribers(pub) for sp in _scopes.values() if sp.available),
                 event,
+                pub.gather if pub else None,
                 return_result=True,
-                external_gather=self.external_gathers.get(event.__class__, None),
             )
         )
         self._ref_tasks.add(task)
@@ -164,7 +140,7 @@ class EventSystem:
     @overload
     def on(
         self,
-        events: type | tuple[type, ...],
+        event: type,
         func: Callable[..., Any],
         *,
         priority: int = 16,
@@ -178,7 +154,7 @@ class EventSystem:
     @overload
     def on(
         self,
-        events: type | tuple[type, ...],
+        event: type,
         *,
         priority: int = 16,
         providers: (
@@ -202,7 +178,7 @@ class EventSystem:
 
     def on(
         self,
-        events: type | tuple[type, ...] | None = None,
+        event: type | None = None,
         func: Callable[..., Any] | None = None,
         priority: int = 16,
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
@@ -210,14 +186,11 @@ class EventSystem:
         skip_req_missing: bool | None = None,
     ):
         _skip_req_missing = self.global_skip_req_missing if skip_req_missing is None else skip_req_missing
-        if events:
-            for target in events if isinstance(events, tuple) else (events,):
-                self.define(target)
         if not (scope := scope_ctx.get()):
             scope = self._global_scope
         if not func:
-            return scope.register(events=events, priority=priority, providers=providers, skip_req_missing=_skip_req_missing, temporary=temporary)
-        return scope.register(func, events=events, priority=priority, providers=providers, skip_req_missing=_skip_req_missing, temporary=temporary)
+            return scope.register(event=event, priority=priority, providers=providers, skip_req_missing=_skip_req_missing, temporary=temporary)
+        return scope.register(func, event=event, priority=priority, providers=providers, skip_req_missing=_skip_req_missing, temporary=temporary)
 
     @overload
     def use(
@@ -282,18 +255,14 @@ def make_event(*, name: str) -> Callable[[type[C]], type[C]]: ...
 def make_event(cls: type[C] | None = None, *, name: str | None = None):
 
     def wrapper(_cls: type[C], /):
-        if not hasattr(_cls, "gather"):
-            annotation = getattr(_cls, "__annotations__", {})
+        annotation = getattr(_cls, "__annotations__", {})
 
-            async def _gather(self, context: Contexts):
-                for key in annotation:
-                    if key in ("providers", "auxiliaries"):
-                        continue
-                    context[key] = getattr(self, key, None)
+        async def _gather(self: C):
+            return {key: getattr(self, key, None) for key in annotation if key not in ("providers", "auxiliaries")}
 
-            _cls.gather = _gather  # type: ignore
-
-        _cls.__publisher__ = es.define(_cls, name).id  # type: ignore
+        pub = define(_cls, _gather, name)
+        _cls.__publisher__ = pub.id  # type: ignore
+        _cls.__context_gather__ = pub.gather  # type: ignore
         return _cls  # type: ignore
 
     if cls:

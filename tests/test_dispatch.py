@@ -73,7 +73,9 @@ async def test_event_dispatch():
 async def test_external_dispatch():
     executed = []
 
-    le.es.define(int, supplier=lambda x: {"name": str(x)})
+    @le.gather(int)
+    async def _(num: int):
+        return {"name": str(num)}
 
     @le.on(int)
     async def s(name: str):
