@@ -15,7 +15,7 @@ class FloatProvider(Provider[float]):
         return 1.23
 
 
-class TestEvent:
+class ProviderEvent:
 
     async def gather(self, context: Contexts):
         context["name"] = "Letoderea"
@@ -25,7 +25,7 @@ class TestEvent:
             return context["name"]
 
 
-class TestEvent1(TestEvent):
+class ProviderEvent1(ProviderEvent):
 
     async def gather(self, context: Contexts):
         await super().gather(context)
@@ -39,7 +39,7 @@ class TestEvent1(TestEvent):
 @pytest.mark.asyncio
 async def test_providers():
 
-    @es.on(TestEvent1, providers=[IntProvider(), FloatProvider()])
+    @es.on(ProviderEvent1, providers=[IntProvider(), FloatProvider()])
     async def test_subscriber(
         name0: str,
         age0: int,
@@ -71,6 +71,6 @@ async def test_providers():
         assert is_true0 is is_true1 is is_true2 is is_true3 is is_true4 is is_true5 is True
         assert num0 == num1 == num2 == num3 == num4 == num5 == 1.23
 
-    ctx = await generate_contexts(TestEvent1())
+    ctx = await generate_contexts(ProviderEvent1())
     await test_subscriber.handle(ctx)
 

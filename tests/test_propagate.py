@@ -8,7 +8,7 @@ import arclet.letoderea as le
 
 @le.make_event
 @dataclass
-class TestEvent:
+class PropagateEvent:
     foo: str
 
 
@@ -27,7 +27,7 @@ async def int_when_int(ctx: le.Contexts):
 async def test_propagate():
     executed = []
 
-    @le.on(TestEvent)
+    @le.on(PropagateEvent)
     async def s(foo: str):
         assert foo in ("1", "2")
         executed.append(1)
@@ -42,12 +42,12 @@ async def test_propagate():
         executed.append(1)
         return result
 
-    ans = await le.post(TestEvent("1"))
+    ans = await le.post(PropagateEvent("1"))
     assert executed
     assert ans and ans.value == 1
 
     executed.clear()
-    ans = await le.post(TestEvent("2"))
+    ans = await le.post(PropagateEvent("2"))
     assert executed
     assert not ans
 
@@ -59,13 +59,13 @@ async def test_prepend_propagate():
 
     executed = []
 
-    @le.on(TestEvent)
+    @le.on(PropagateEvent)
     async def s(bar: int):
         assert bar == 1
         executed.append(1)
 
     s.propagate(int_when_int, prepend=True)
-    await le.publish(TestEvent("1"))
+    await le.publish(PropagateEvent("1"))
 
     assert executed
 
@@ -74,7 +74,7 @@ async def test_prepend_propagate():
 async def test_prepend_condition():
     executed = []
 
-    @le.on(TestEvent)
+    @le.on(PropagateEvent)
     async def s():
         executed.append(1)
 
@@ -85,8 +85,8 @@ async def test_prepend_condition():
             return
         return le.STOP
 
-    await le.publish(TestEvent("1"))
-    await le.publish(TestEvent("2"))
+    await le.publish(PropagateEvent("1"))
+    await le.publish(PropagateEvent("2"))
     assert len(executed) == 3
 
 
@@ -98,12 +98,12 @@ async def test_defer():
         assert foo == "1"
         executed.append(1)
 
-    @le.on(TestEvent)
+    @le.on(PropagateEvent)
     async def s():
         le.defer(s, deferred)
         executed.append(1)
 
-    await le.publish(TestEvent("1"))
+    await le.publish(PropagateEvent("1"))
     assert len(executed) == 2
 
 
@@ -112,9 +112,9 @@ async def test_dependency_condition():
     from arclet.letoderea.handler import generate_contexts
     from arclet.letoderea.exceptions import UnresolvedRequirement
     executed = []
-    ctx = await generate_contexts(TestEvent("1"))
+    ctx = await generate_contexts(PropagateEvent("1"))
 
-    @le.on(TestEvent)
+    @le.on(PropagateEvent)
     async def s():
         executed.append(1)
 
@@ -177,17 +177,17 @@ async def test_propagator():
             yield lambda: executed.append(1), True
             yield Interval(0.3)
 
-    @le.on(TestEvent)
+    @le.on(PropagateEvent)
     @le.propagate(MyPropagator())
     async def s(last_time, foo: str):
         assert last_time is None or isinstance(last_time, datetime)
         executed.append(foo)
 
-    await le.publish(TestEvent("1"))
+    await le.publish(PropagateEvent("1"))
     await asyncio.sleep(0.2)
-    await le.publish(TestEvent("2"))
+    await le.publish(PropagateEvent("2"))
     await asyncio.sleep(0.2)
-    await le.publish(TestEvent("3"))
+    await le.publish(PropagateEvent("3"))
 
     assert executed == [1, "1", 1, 1, "3"]
     assert s.get_propagator(Interval).success

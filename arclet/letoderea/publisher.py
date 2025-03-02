@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from asyncio import Queue
 from collections.abc import Mapping
-from typing import Any, Callable, Awaitable, Protocol, TypeVar, runtime_checkable
+from typing import Any, Callable, Generic, Awaitable, Protocol, TypeVar, runtime_checkable
 
 from tarina import generic_isinstance
 
@@ -32,7 +32,7 @@ async def _gather(event: Any):
     return ctx
 
 
-class Publisher:
+class Publisher(Generic[T]):
     id: str
 
     def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T], Awaitable[Mapping[str, Any]]] | None = None, queue_size: int = -1):
@@ -43,7 +43,7 @@ class Publisher:
         else:
             self.id = f"$event:{target.__name__}"
         self.target = target
-        self.gather: Callable[[Any], Awaitable[Mapping[str, Any]]] = supplier or _supplier
+        self.gather: Callable[[T], Awaitable[Mapping[str, Any]]] = supplier or _supplier
         if hasattr(target, "gather"):
             self.gather = _gather
         self.event_queue = Queue(queue_size)
@@ -53,15 +53,15 @@ class Publisher:
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
-    def unsafe_push(self, event: Any) -> None:
+    def unsafe_push(self, event: T) -> None:
         """将事件放入队列，等待被 event system 主动轮询; 该方法可能引发 QueueFull 异常"""
         self.event_queue.put_nowait(event)
 
-    async def push(self, event: Any):
+    async def push(self, event: T):
         """将事件放入队列，等待被 event system 主动轮询"""
         await self.event_queue.put(event)
 
-    async def supply(self) -> Any:
+    async def supply(self) -> T:
         """被动提供事件方法， 由 event system 主动轮询"""
         return await self.event_queue.get()
 
@@ -69,13 +69,13 @@ class Publisher:
         _publishers.pop(self.id, None)
 
 
-def filter_publisher(target: type[Any]):
+def filter_publisher(target: type[T]) -> Publisher[T] | None:
     if (label := getattr(target, "__publisher__", f"$event:{target.__name__}")) in _publishers:
         return _publishers[label]
     return next((pub for pub in _publishers.values() if pub.target is target), None)
 
 
-def search_publisher(event: Any):
+def search_publisher(event: T) -> Publisher[T] | None:
     if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__name__}")):
         return pub
     return next((pub for pub in _publishers.values() if pub.validate(event)), None)
@@ -85,7 +85,7 @@ def define(
     target: type[T],
     supplier: Callable[[T], Awaitable[Mapping[str, Any]]] | None = None,
     name: str | None = None,
-) -> Publisher:
+) -> Publisher[T]:
     if name and name in _publishers:
         return _publishers[name]
     if (_id := getattr(target, "__publisher__", f"$event:{target.__name__}")) in _publishers:

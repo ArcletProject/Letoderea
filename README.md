@@ -25,7 +25,7 @@ import arclet.letoderea as le
 class TestEvent:
     name: str = "Letoderea"
 
-@le.on()
+@le.collect
 async def test_subscriber(name: str):
     print(name)
 

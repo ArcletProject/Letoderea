@@ -10,7 +10,8 @@ def pytest_runtest_setup(item):
 
 
 def pytest_runtest_teardown(item):
-    _publishers.clear()
-    _scopes.clear()
+    scopes = list(_scopes.values())
+    for sp in scopes:
+        sp.dispose()
     _scopes["$global"] = es._global_scope = Scope("$global")
     return None

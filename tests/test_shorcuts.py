@@ -5,8 +5,8 @@ from arclet.letoderea import bypass_if, enter_if, es, on
 from arclet.letoderea.ref import deref
 
 
-class TestEvent:
-    type: str = "TestEvent"
+class ShortcutEvent:
+    type: str = "ShortcutEvent"
     flag: bool = False
     msg: str
 
@@ -20,19 +20,19 @@ class TestEvent:
 async def test_annotated():
     executed = []
 
-    @es.on(TestEvent)
+    @es.on(ShortcutEvent)
     async def s(flag: Annotated[bool, "flag"]):
         assert flag is False
         executed.append(1)
 
     def func(x): return x["msg"] + "!"
 
-    @es.on(TestEvent)
+    @es.on(ShortcutEvent)
     async def s1(a: Annotated[str, func]):
         assert a == "hello!"
         executed.append(1)
 
-    e = TestEvent()
+    e = ShortcutEvent()
     await es.publish(e)
     assert len(executed) == 2
 
@@ -42,27 +42,27 @@ async def test_deref():
     executed = []
 
     @on()
-    @enter_if(deref(TestEvent).flag)
-    async def s(flag: Annotated[bool, "flag"], a: Annotated[str, deref(TestEvent).msg]):
+    @enter_if(deref(ShortcutEvent).flag)
+    async def s(flag: Annotated[bool, "flag"], a: Annotated[str, deref(ShortcutEvent).msg]):
         assert flag is True
         assert a == "hello"
         executed.append(1)
 
     @on()
-    @bypass_if(deref(TestEvent).flag)
+    @bypass_if(deref(ShortcutEvent).flag)
     async def s1(
-        flag: Annotated[bool, deref(TestEvent).flag],
-        t: Annotated[int, deref(TestEvent).type],
+        flag: Annotated[bool, deref(ShortcutEvent).flag],
+        t: Annotated[int, deref(ShortcutEvent).type],
         a: Annotated[str, "msg"]
     ):
         assert flag is False
-        assert t == "TestEvent"
+        assert t == "ShortcutEvent"
         assert a == "hello"
         executed.append(1)
 
-    e1 = TestEvent()
+    e1 = ShortcutEvent()
     e1.flag = True
     await es.publish(e1)
-    e2 = TestEvent()
+    e2 = ShortcutEvent()
     await es.publish(e2)
     assert len(executed) == 2

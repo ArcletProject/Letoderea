@@ -41,3 +41,4 @@ publish = es.publish
 post = es.post
 on = es.on
 use = es.use
+collect = es.on()

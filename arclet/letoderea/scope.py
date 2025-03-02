@@ -105,17 +105,20 @@ class Scope:
     ):
         """注册一个订阅者"""
         providers = providers or []
+        event_providers = get_providers(event) if event else []
         if isinstance(publisher, Publisher):
             pub_id = publisher.id
+            event_providers = get_providers(publisher.target)
         elif isinstance(publisher, str) and publisher in _publishers:
             pub_id = publisher
+            event_providers = get_providers(_publishers[publisher].target)
         elif not event:
             pub_id = "$backend"
         else:
             pub_id = (filter_publisher(event) or Publisher(event)).id
 
         def register_wrapper(exec_target: Callable, /) -> Subscriber:
-            _providers = [*global_providers, *(get_providers(event) if event else ()), *self.providers, *providers]
+            _providers = [*global_providers, *event_providers, *self.providers, *providers]
             res = Subscriber(
                 exec_target,
                 priority=priority,
@@ -133,13 +136,13 @@ class Scope:
         return register_wrapper
 
     def get_subscribers(self, publisher: Publisher | None, pass_backend: bool = True) -> list[Subscriber]:
-        pub_id = publisher.id if publisher else "$backend" if pass_backend else None
-        return [slot[0] for slot in self.subscribers.values() if pub_id and slot[1] == pub_id]
+        pub_id = publisher.id if publisher else None
+        return [slot[0] for slot in self.subscribers.values() if pub_id and (pub_id and slot[1] == pub_id) or (pass_backend and slot[1] == "$backend")]
 
     def iter_subscribers(self, publisher: Publisher | None, pass_backend: bool = True):
-        pub_id = publisher.id if publisher else "$backend" if pass_backend else None
+        pub_id = publisher.id if publisher else None
         for slot in self.subscribers.values():
-            if pub_id and slot[1] == pub_id:
+            if (pub_id and slot[1] == pub_id) or (pass_backend and slot[1] == "$backend"):
                 yield slot[0]
 
     def dispose(self):

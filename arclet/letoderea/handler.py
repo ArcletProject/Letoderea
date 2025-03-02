@@ -8,7 +8,7 @@ from typing import Any, Callable, Literal, overload, Mapping
 
 from .exceptions import STOP, BLOCK
 from .provider import get_providers, provide
-from .publisher import search_publisher
+from .publisher import search_publisher, gather, define
 from .subscriber import Subscriber
 from .typing import EVENT, Contexts, Force, Result
 
@@ -19,12 +19,6 @@ class ExceptionEvent:
     subscriber: Subscriber
     exception: BaseException
 
-    async def gather(self, context: Contexts):
-        context["exception"] = self.exception
-        context["origin"] = self.origin
-        context["subscriber"] = self.subscriber
-
-    __publisher__ = "internal/exception"
     providers = [
         provide(
             BaseException,
@@ -34,11 +28,19 @@ class ExceptionEvent:
     ]
 
 
+exc_pub = define(ExceptionEvent, name="internal/exception")
+
+
+@gather(ExceptionEvent)
+async def _(event: ExceptionEvent):
+    return {"exception": event.exception, "origin": event.origin, "subscriber": event.subscriber}
+
+
 async def publish_exc_event(event: ExceptionEvent):
     from .scope import _scopes
 
     scopes = [sp for sp in _scopes.values() if sp.available]
-    await dispatch(chain.from_iterable(sp.iter_subscribers(search_publisher(event), pass_backend=False) for sp in scopes), event)
+    await dispatch(chain.from_iterable(sp.iter_subscribers(exc_pub, pass_backend=False) for sp in scopes), event, exc_pub.gather)
 
 
 @overload
