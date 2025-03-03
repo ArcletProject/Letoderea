@@ -5,39 +5,38 @@ import arclet.letoderea as le
 
 @le.make_event
 @dataclass
-class TestEvent1:
+class BaseEvent:
     foo: str
-    bar: str
+
+    __result_type__ = str
 
 
 @le.make_event
 @dataclass
-class TestEvent2:
-    foo: str
-
-    __result_type__ = str
+class DeriveEvent(BaseEvent):
+    bar: str
 
 
 @pytest.mark.asyncio
 async def test_communicate():
     results = []
 
-    @le.on(TestEvent1)
+    @le.on(DeriveEvent)
     async def s1(foo, bar):
         assert foo == "1"
         assert bar == "res_ster"
-        res = await le.post(TestEvent2("2"))
+        res = await le.post(BaseEvent("2"))
         results.append(res)
 
-    @le.on(TestEvent2)
+    @le.on(BaseEvent)
     async def s2(foo):
         assert foo == "2"
         return f"res_{foo}"
 
-    await le.publish(TestEvent1("1", "res_ster"))
+    await le.publish(DeriveEvent("1", "res_ster"))
     assert results[0] and results[0].value == "res_2"
     s2.dispose()
-    await le.publish(TestEvent1("1", "res_ster"))
+    await le.publish(DeriveEvent("1", "res_ster"))
     assert not results[1]
 
 
@@ -45,40 +44,40 @@ async def test_communicate():
 async def test_result_validate():
     results = []
 
-    @le.on(TestEvent1)
+    @le.on(DeriveEvent)
     async def s1(foo, bar):
         assert foo in ("1", "2")
         assert bar == "res_ster"
-        res = await le.post(TestEvent2(foo))
+        res = await le.post(BaseEvent(foo))
         results.append(res)
 
-    @le.on(TestEvent2)
+    @le.on(BaseEvent)
     async def s2(foo):
         if foo == "2":
             return 12345
         return f"res_{foo}"
 
-    await le.publish(TestEvent1("1", "res_ster"))
+    await le.publish(DeriveEvent("1", "res_ster"))
     assert results[0] and results[0].value == "res_1"
-    await le.publish(TestEvent1("2", "res_ster"))
+    await le.publish(DeriveEvent("2", "res_ster"))
     assert not results[1]
 
 
 @pytest.mark.asyncio
 async def test_inherit():
-    event = TestEvent1("1", "res_ster")
+    event = DeriveEvent("1", "res_ster")
 
     finish = []
 
-    @le.on(TestEvent1)
+    @le.on(DeriveEvent)
     async def s(ctx: le.Contexts, foo, bar):
         assert foo == "1"
         assert bar == "res_ster"
-        le.publish(TestEvent2("2"), inherit_ctx=ctx.copy())
+        le.publish(BaseEvent("2"), inherit_ctx=ctx.copy())
 
-    @le.on(TestEvent2)
-    async def t(event: TestEvent2, foo, bar):
-        assert isinstance(event, TestEvent2)
+    @le.on(BaseEvent)
+    async def t(event: BaseEvent, foo, bar):
+        assert isinstance(event, BaseEvent)
         assert foo == "2"
         assert bar == "res_ster"
         finish.append(1)

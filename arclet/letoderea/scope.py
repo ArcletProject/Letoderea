@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from contextlib import contextmanager
 from secrets import token_urlsafe
-from typing import Any, Callable, TypeVar, overload
+from typing import Any, Callable, ClassVar, TypeVar, overload
 
-from .context import scope_ctx
+from tarina import ContextModel
+
 from .handler import dispatch
 from .provider import Provider, ProviderFactory, global_providers, get_providers
 from .publisher import Publisher, _publishers, filter_publisher, search_publisher
@@ -17,7 +18,12 @@ T = TypeVar("T")
 _scopes: dict[str, Scope] = {}
 
 
+scope_ctx: ContextModel["Scope"] = ContextModel("scope_ctx")
+
+
 class Scope:
+    global_skip_req_missing: ClassVar[bool] = False
+
     def __init__(self, id_: str | None = None):
         self.id = id_ or token_urlsafe(16)
         self.subscribers: dict[str, tuple[Subscriber, str]] = {}
@@ -77,7 +83,7 @@ class Scope:
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
-        skip_req_missing: bool = False,
+        skip_req_missing: bool | None = None,
     ) -> Subscriber: ...
 
     @overload
@@ -89,7 +95,7 @@ class Scope:
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
-        skip_req_missing: bool = False,
+        skip_req_missing: bool | None = None,
     ) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
     def register(
@@ -101,9 +107,10 @@ class Scope:
         providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
         publisher: str | Publisher | None = None,
         temporary: bool = False,
-        skip_req_missing: bool = False,
+        skip_req_missing: bool | None = None,
     ):
         """注册一个订阅者"""
+        _skip_req_missing = self.global_skip_req_missing if skip_req_missing is None else skip_req_missing
         providers = providers or []
         event_providers = get_providers(event) if event else []
         if isinstance(publisher, Publisher):
@@ -125,7 +132,7 @@ class Scope:
                 providers=_providers,
                 dispose=self.remove_subscriber,
                 temporary=temporary,
-                skip_req_missing=skip_req_missing,
+                skip_req_missing=_skip_req_missing,
             )
             res.propagates(*self.propagators)
             self.subscribers[res.id] = (res, pub_id)
@@ -149,3 +156,109 @@ class Scope:
         self.available = False
         self.subscribers.clear()
         _scopes.pop(self.id, None)
+
+
+_scopes["$global"] = Scope("$global")
+
+
+def configure(skip_req_missing: bool = False):
+    global global_skip_req_missing
+    global_skip_req_missing = skip_req_missing
+
+
+@overload
+def on(
+    event: type,
+    func: Callable[..., Any],
+    *,
+    priority: int = 16,
+    providers: (
+        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+    ) = None,
+    temporary: bool = False,
+    skip_req_missing: bool | None = None,
+) -> Subscriber: ...
+
+
+@overload
+def on(
+    event: type,
+    *,
+    priority: int = 16,
+    providers: (
+        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+    ) = None,
+    temporary: bool = False,
+    skip_req_missing: bool | None = None,
+) -> Callable[[Callable[..., Any]], Subscriber]: ...
+
+
+@overload
+def on(
+    *,
+    priority: int = 16,
+    providers: (
+        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+    ) = None,
+    temporary: bool = False,
+    skip_req_missing: bool | None = None,
+) -> Callable[[Callable[..., Any]], Subscriber]: ...
+
+
+def on(
+    event: type | None = None,
+    func: Callable[..., Any] | None = None,
+    priority: int = 16,
+    providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
+    temporary: bool = False,
+    skip_req_missing: bool | None = None,
+):
+    if not (scope := scope_ctx.get()):
+        scope = _scopes["$global"]
+    if not func:
+        return scope.register(event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, temporary=temporary)
+    return scope.register(func, event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, temporary=temporary)
+
+
+@overload
+def use(
+    pub: str | Publisher,
+    func: Callable[..., Any],
+    *,
+    priority: int = 16,
+    providers: (
+        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+    ) = None,
+    temporary: bool = False,
+    skip_req_missing: bool | None = None,
+) -> Subscriber: ...
+
+
+@overload
+def use(
+    pub: str | Publisher,
+    *,
+    priority: int = 16,
+    providers: (
+        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+    ) = None,
+    temporary: bool = False,
+    skip_req_missing: bool | None = None,
+) -> Callable[[Callable[..., Any]], Subscriber]: ...
+
+
+def use(
+    pub: str | Publisher,
+    func: Callable[..., Any] | None = None,
+    priority: int = 16,
+    providers: (
+        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
+    ) = None,
+    temporary: bool = False,
+    skip_req_missing: bool | None = None,
+):
+    if not (scope := scope_ctx.get()):
+        scope = _scopes["$global"]
+    if not func:
+        return scope.register(priority=priority, providers=providers, temporary=temporary, skip_req_missing=skip_req_missing, publisher=pub)
+    return scope.register(func, priority=priority, providers=providers, temporary=temporary, skip_req_missing=skip_req_missing, publisher=pub)

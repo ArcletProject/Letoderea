@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from arclet.letoderea import Contexts, Provider, es
+from arclet.letoderea import Contexts, Provider, on
 from arclet.letoderea.handler import generate_contexts
 
 
@@ -39,7 +39,7 @@ class ProviderEvent1(ProviderEvent):
 @pytest.mark.asyncio
 async def test_providers():
 
-    @es.on(ProviderEvent1, providers=[IntProvider(), FloatProvider()])
+    @on(ProviderEvent1, providers=[IntProvider(), FloatProvider()])
     async def test_subscriber(
         name0: str,
         age0: int,

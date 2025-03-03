@@ -36,12 +36,7 @@ class Publisher(Generic[T]):
     id: str
 
     def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T], Awaitable[Mapping[str, Any]]] | None = None, queue_size: int = -1):
-        if id_:
-            self.id = id_
-        elif hasattr(target, "__publisher__"):
-            self.id = target.__publisher__  # type: ignore
-        else:
-            self.id = f"$event:{target.__name__}"
+        self.id = id_ or getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")
         self.target = target
         self.gather: Callable[[T], Awaitable[Mapping[str, Any]]] = supplier or _supplier
         if hasattr(target, "gather"):
@@ -70,13 +65,13 @@ class Publisher(Generic[T]):
 
 
 def filter_publisher(target: type[T]) -> Publisher[T] | None:
-    if (label := getattr(target, "__publisher__", f"$event:{target.__name__}")) in _publishers:
+    if (label := getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")) in _publishers:
         return _publishers[label]
     return next((pub for pub in _publishers.values() if pub.target is target), None)
 
 
 def search_publisher(event: T) -> Publisher[T] | None:
-    if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__name__}")):
+    if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
         return pub
     return next((pub for pub in _publishers.values() if pub.validate(event)), None)
 
@@ -88,7 +83,7 @@ def define(
 ) -> Publisher[T]:
     if name and name in _publishers:
         return _publishers[name]
-    if (_id := getattr(target, "__publisher__", f"$event:{target.__name__}")) in _publishers:
+    if (_id := getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")) in _publishers:
         return _publishers[_id]
     return Publisher(target, name or _id, supplier)
 

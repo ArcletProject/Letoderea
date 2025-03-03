@@ -20,14 +20,14 @@ class ShortcutEvent:
 async def test_annotated():
     executed = []
 
-    @es.on(ShortcutEvent)
+    @on(ShortcutEvent)
     async def s(flag: Annotated[bool, "flag"]):
         assert flag is False
         executed.append(1)
 
     def func(x): return x["msg"] + "!"
 
-    @es.on(ShortcutEvent)
+    @on(ShortcutEvent)
     async def s1(a: Annotated[str, func]):
         assert a == "hello!"
         executed.append(1)

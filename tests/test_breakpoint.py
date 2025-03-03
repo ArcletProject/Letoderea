@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from arclet.letoderea import deref, enter_if, es
+from arclet.letoderea import deref, enter_if, es, on
 from arclet.letoderea.breakpoint import StepOut
 from arclet.letoderea.typing import Contexts
 
@@ -32,7 +32,7 @@ async def test_breakpoint():
         print("[breakpoint] <<< receive event:", msg)
         executed.append(2)
 
-    @es.on(ExampleEvent)
+    @on(ExampleEvent)
     @enter_if(deref(ExampleEvent).msg == "hello")
     async def s():
         if event.is_set():

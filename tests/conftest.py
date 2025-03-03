@@ -1,6 +1,4 @@
-from arclet.letoderea import es
-from arclet.letoderea.scope import Scope, _scopes
-from arclet.letoderea.publisher import _publishers
+from arclet.letoderea import scope
 from arclet.letoderea.exceptions import ExceptionHandler
 
 
@@ -10,8 +8,8 @@ def pytest_runtest_setup(item):
 
 
 def pytest_runtest_teardown(item):
-    scopes = list(_scopes.values())
+    scopes = list(scope._scopes.values())
     for sp in scopes:
         sp.dispose()
-    _scopes["$global"] = es._global_scope = Scope("$global")
+    scope._scopes["$global"] = scope.Scope("$global")
     return None

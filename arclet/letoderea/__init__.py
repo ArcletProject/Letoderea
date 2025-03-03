@@ -24,6 +24,8 @@ from .publisher import define as define
 from .publisher import gather as gather
 from .ref import deref as deref
 from .scope import Scope as Scope
+from .scope import on as on
+from .scope import use as use
 from .subscriber import defer as defer
 from .subscriber import params as params
 from .subscriber import SUBSCRIBER as SUBSCRIBER
@@ -39,6 +41,4 @@ from .typing import Force as Force
 
 publish = es.publish
 post = es.post
-on = es.on
-use = es.use
-collect = es.on()
+collect = on()
