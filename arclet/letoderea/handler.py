@@ -4,11 +4,11 @@ import asyncio
 from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from itertools import chain
-from typing import Any, Callable, Literal, overload, Mapping
+from typing import Any, Callable, Literal, overload
 
 from .exceptions import STOP, BLOCK
 from .provider import get_providers, provide
-from .publisher import search_publisher, gather, define
+from .publisher import gather, define
 from .subscriber import Subscriber
 from .typing import EVENT, Contexts, Force, Result
 
@@ -32,8 +32,8 @@ exc_pub = define(ExceptionEvent, name="internal/exception")
 
 
 @gather(ExceptionEvent)
-async def _(event: ExceptionEvent):
-    return {"exception": event.exception, "origin": event.origin, "subscriber": event.subscriber}
+async def _(event: ExceptionEvent, context: Contexts):
+    return context.update(exception=event.exception, origin=event.origin, subscriber=event.subscriber)
 
 
 async def publish_exc_event(event: ExceptionEvent):
@@ -47,7 +47,7 @@ async def publish_exc_event(event: ExceptionEvent):
 async def dispatch(
     subscribers: Iterable[Subscriber],
     event: Any,
-    gather: Callable[[Any], Awaitable[Mapping[str, Any]]] | None = None,
+    gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
     *,
     inherit_ctx: Contexts | None = None,
 ) -> None: ...
@@ -57,7 +57,7 @@ async def dispatch(
 async def dispatch(
     subscribers: Iterable[Subscriber],
     event: Any,
-    gather: Callable[[Any], Awaitable[Mapping[str, Any]]] | None = None,
+    gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
     *,
     return_result: Literal[True],
     inherit_ctx: Contexts | None = None,
@@ -67,7 +67,7 @@ async def dispatch(
 async def dispatch(
     subscribers: Iterable[Subscriber],
     event: Any,
-    gather: Callable[[Any], Awaitable[Mapping[str, Any]]] | None = None,
+    gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
     *,
     return_result: bool = False,
     inherit_ctx: Contexts | None = None,
@@ -105,15 +105,13 @@ async def dispatch(
 
 
 async def generate_contexts(
-    event: Any, gather: Callable[[Any], Awaitable[Mapping[str, Any]]] | None = None, inherit_ctx: Contexts | None = None
+    event: Any, gather:  Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None, inherit_ctx: Contexts | None = None
 ) -> Contexts:
     contexts: Contexts = {EVENT: event}  # type: ignore
     if gather:
-        contexts.update(await gather(event))
-    elif hasattr(event, "gather"):
-        await event.gather(contexts)
-    elif hasattr(event, "__context_gather__"):
-        contexts.update(await event.__context_gather__())
+        await gather(event, contexts)
+    elif (_gather := getattr(event, "__context_gather__", getattr(event, "gather", None))) is not None:
+        await _gather(contexts)
     if inherit_ctx:
         inherit_ctx.update(contexts)
         return inherit_ctx
@@ -123,7 +121,7 @@ async def generate_contexts(
 async def run_handler(
     target: Callable,
     event: Any,
-    external_gather: Callable[[Any], Awaitable[Contexts]] | None = None,
+    external_gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
 ):
     contexts = await generate_contexts(event, external_gather)
     _target = Subscriber(target, providers=get_providers(event.__class__))

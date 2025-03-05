@@ -147,8 +147,8 @@ def make_event(cls: type[C] | None = None, *, name: str | None = None):
     def wrapper(_cls: type[C], /):
         annotation = {k: v for c in reversed(_cls.__mro__[:-1]) for k, v in getattr(c, "__annotations__", {}).items()}
 
-        async def _gather(self: C):
-            return {key: getattr(self, key, None) for key in annotation if key != "providers"}
+        async def _gather(self: C, ctx: Contexts):
+            return ctx.update({key: getattr(self, key, None) for key in annotation if key != "providers"})
 
         id_ = name or f"$event:{_cls.__module__}.{_cls.__name__}"
         parent_publisher = {getattr(c, "__publisher__", None) for c in _cls.__mro__[1:-1]}

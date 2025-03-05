@@ -1,18 +1,20 @@
 import asyncio
 
-from arclet.letoderea import es
-
-es.define(int, supplier=lambda x: {"name": str(x)})
+import arclet.letoderea as le
 
 
-@es.on(int)
+async def _supplier(x: int, ctx): ctx.update(name=str(x))
+le.define(int, supplier=_supplier)
+
+
+@le.on(int)
 async def test_subscriber(name: str):
     print(name)
 
 
 async def main():
-    await es.publish(1)
-    await es.publish(2)
+    await le.publish(1)
+    await le.publish(2)
 
 
 asyncio.run(main())

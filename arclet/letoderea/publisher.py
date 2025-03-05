@@ -1,46 +1,31 @@
 from __future__ import annotations
 
 from asyncio import Queue
-from collections.abc import Mapping
-from typing import Any, Callable, Generic, Awaitable, Protocol, TypeVar, runtime_checkable
+from typing import Any, Callable, Generic, Awaitable, TypeVar
 
 from tarina import generic_isinstance
 
-from .typing import is_typed_dict
+from .typing import Contexts, is_typed_dict
 
 T = TypeVar("T")
-
-
-@runtime_checkable
-class Publishable(Protocol):
-    __publisher__: str
-
-
 _publishers: dict[str, "Publisher"] = {}
 
 
-async def _supplier(event: Any) -> dict[str, Any]:
+async def _supplier(event: Any, context: Contexts):
     if isinstance(event, dict):
-        return event
-    ctx = vars(event)
-    return {k: v for k, v in ctx.items() if not k.startswith("_")}
-
-
-async def _gather(event: Any):
-    ctx = {}
-    await event.gather(ctx)
-    return ctx
+        return context.update(event)
+    return context.update({k: v for k, v in vars(event).items() if not k.startswith("_")})
 
 
 class Publisher(Generic[T]):
     id: str
 
-    def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T], Awaitable[Mapping[str, Any]]] | None = None, queue_size: int = -1):
+    def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None, queue_size: int = -1):
         self.id = id_ or getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")
         self.target = target
-        self.gather: Callable[[T], Awaitable[Mapping[str, Any]]] = supplier or _supplier
+        self.gather: Callable[[T, Contexts], Awaitable[Contexts | None]] = supplier or _supplier
         if hasattr(target, "gather"):
-            self.gather = _gather
+            self.gather = target.gather  # type: ignore
         self.event_queue = Queue(queue_size)
         self.validate = (lambda x: generic_isinstance(x, target)) if is_typed_dict(target) else (lambda x: isinstance(x, target))
         _publishers[self.id] = self
@@ -78,7 +63,7 @@ def search_publisher(event: T) -> Publisher[T] | None:
 
 def define(
     target: type[T],
-    supplier: Callable[[T], Awaitable[Mapping[str, Any]]] | None = None,
+    supplier: Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None,
     name: str | None = None,
 ) -> Publisher[T]:
     if name and name in _publishers:
@@ -89,7 +74,7 @@ def define(
 
 
 def gather(target: type[T]):
-    def wrapper(func: Callable[[T], Awaitable[Mapping[str, Any]]]):
+    def wrapper(func: Callable[[T, Contexts], Awaitable[Contexts | None]]):
         pub = filter_publisher(target) or define(target)
         pub.gather = func
         return func

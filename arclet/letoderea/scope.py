@@ -44,7 +44,7 @@ class Scope:
     @overload
     async def bail(self, event: Any) -> Result[Any] | None: ...
 
-    async def bail(self, event: Any) -> Result | None:
+    async def bail(self, event: Any) -> Result[Any] | None:
         """主动向自己的订阅者发布事件, 并返回结果"""
         return await dispatch(self.iter_subscribers(search_publisher(event)), event, return_result=True)
 

@@ -74,8 +74,8 @@ async def test_external_dispatch():
     executed = []
 
     @le.gather(int)
-    async def _(num: int):
-        return {"name": str(num)}
+    async def _(num: int, ctx):
+        return ctx.update(name=str(num))
 
     @le.on(int)
     async def s(name: str):
