@@ -73,7 +73,7 @@ async def test_event_dispatch():
 async def test_external_dispatch():
     executed = []
 
-    @le.gather(int)
+    @le.gather
     async def _(num: int, ctx):
         return ctx.update(name=str(num))
 

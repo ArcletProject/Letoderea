@@ -31,7 +31,7 @@ class ExceptionEvent:
 exc_pub = define(ExceptionEvent, name="internal/exception")
 
 
-@gather(ExceptionEvent)
+@gather
 async def _(event: ExceptionEvent, context: Contexts):
     return context.update(exception=event.exception, origin=event.origin, subscriber=event.subscriber)
 
@@ -40,14 +40,14 @@ async def publish_exc_event(event: ExceptionEvent):
     from .scope import _scopes
 
     scopes = [sp for sp in _scopes.values() if sp.available]
-    await dispatch(chain.from_iterable(sp.iter_subscribers(exc_pub, pass_backend=False) for sp in scopes), event, exc_pub.gather)
+    await dispatch(chain.from_iterable(sp.iter_subscribers(exc_pub, pass_backend=False) for sp in scopes), event, exc_pub.supplier)
 
 
 @overload
 async def dispatch(
     subscribers: Iterable[Subscriber],
     event: Any,
-    gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
+    supplier: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
     *,
     inherit_ctx: Contexts | None = None,
 ) -> None: ...
@@ -57,7 +57,7 @@ async def dispatch(
 async def dispatch(
     subscribers: Iterable[Subscriber],
     event: Any,
-    gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
+    supplier: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
     *,
     return_result: Literal[True],
     inherit_ctx: Contexts | None = None,
@@ -67,14 +67,14 @@ async def dispatch(
 async def dispatch(
     subscribers: Iterable[Subscriber],
     event: Any,
-    gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
+    supplier: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
     *,
     return_result: bool = False,
     inherit_ctx: Contexts | None = None,
 ):
     if not subscribers:
         return
-    contexts = await generate_contexts(event, gather, inherit_ctx)
+    contexts = await generate_contexts(event, supplier, inherit_ctx)
     grouped: dict[int, list[Subscriber]] = {}
     for s in subscribers:
         if (priority := s.priority) not in grouped:
@@ -105,11 +105,11 @@ async def dispatch(
 
 
 async def generate_contexts(
-    event: Any, gather:  Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None, inherit_ctx: Contexts | None = None
+    event: Any, supplier:  Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None, inherit_ctx: Contexts | None = None
 ) -> Contexts:
     contexts: Contexts = {EVENT: event}  # type: ignore
-    if gather:
-        await gather(event, contexts)
+    if supplier:
+        await supplier(event, contexts)
     elif (_gather := getattr(event, "__context_gather__", getattr(event, "gather", None))) is not None:
         await _gather(contexts)
     if inherit_ctx:

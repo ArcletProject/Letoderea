@@ -49,7 +49,7 @@ class EventSystem:
                 dispatch(
                     sp.iter_subscribers(pub),
                     event,
-                    pub.gather if pub else None,
+                    pub.supplier if pub else None,
                     inherit_ctx=inherit_ctx,
                 )
             )
@@ -61,7 +61,7 @@ class EventSystem:
                 dispatch(
                     scope.iter_subscribers(pub),
                     event,
-                    pub.gather if pub else None,
+                    pub.supplier if pub else None,
                     inherit_ctx=inherit_ctx,
                 )
             )
@@ -73,7 +73,7 @@ class EventSystem:
             dispatch(
                 chain.from_iterable(sp.iter_subscribers(pub) for sp in scopes),
                 event,
-                pub.gather if pub else None,
+                pub.supplier if pub else None,
                 inherit_ctx=inherit_ctx,
             )
         )
@@ -96,7 +96,7 @@ class EventSystem:
                 dispatch(
                     sp.iter_subscribers(pub),
                     event,
-                    pub.gather if pub else None,
+                    pub.supplier if pub else None,
                     return_result=True,
                 )
             )
@@ -108,7 +108,7 @@ class EventSystem:
                 dispatch(
                     scope.iter_subscribers(pub),
                     event,
-                    pub.gather if pub else None,
+                    pub.supplier if pub else None,
                     return_result=True,
                 )
             )
@@ -119,7 +119,7 @@ class EventSystem:
             dispatch(
                 chain.from_iterable(sp.iter_subscribers(pub) for sp in _scopes.values() if sp.available),
                 event,
-                pub.gather if pub else None,
+                pub.supplier if pub else None,
                 return_result=True,
             )
         )
@@ -156,7 +156,7 @@ def make_event(cls: type[C] | None = None, *, name: str | None = None):
             id_ = _cls.__publisher__  # type: ignore
         pub = Publisher(_cls, id_=id_, supplier=_gather)
         _cls.__publisher__ = pub.id  # type: ignore
-        _cls.__context_gather__ = pub.gather  # type: ignore
+        _cls.__context_gather__ = pub.supplier  # type: ignore
         return _cls  # type: ignore
 
     if cls:

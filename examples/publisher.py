@@ -1,6 +1,6 @@
 import asyncio
 
-from arclet.letoderea import Contexts, es, provide
+from arclet.letoderea import Contexts, es, define, provide
 
 
 class TestEvent:
@@ -10,14 +10,14 @@ class TestEvent:
     async def gather(self, context: Contexts):
         context["name"] = self.name
 
+    providers = [provide(str, call="name")]
 
-test = provide(str, call="name")
-pub = es.define(TestEvent, "test")
-pub.bind(test)
+
+pub = define(TestEvent, name="test")
 
 
 @es.use(pub)
-async def test_subscriber1(a: str):
+async def subscriber1(a: str):
     print(a)
 
 
