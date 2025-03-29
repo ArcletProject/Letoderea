@@ -4,6 +4,7 @@ from asyncio import Queue
 from typing import Any, Callable, Generic, Awaitable, TypeVar, get_type_hints
 from tarina import generic_isinstance
 
+from .provider import Provider, ProviderFactory, get_providers
 from .typing import Contexts, is_typed_dict
 
 T = TypeVar("T")
@@ -20,6 +21,7 @@ class Publisher(Generic[T]):
     id: str
 
     def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None, queue_size: int = -1):
+        self.providers: list[Provider | ProviderFactory] = get_providers(target)
         if not isinstance(target, type) and not id_:  # pragma: no cover
             raise TypeError("Publisher with generic type must have a name")
         self.id = id_ or getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")
@@ -56,6 +58,19 @@ class Publisher(Generic[T]):
 
     def dispose(self):
         _publishers.pop(self.id, None)
+
+    def bind(self, *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
+        """增加间接 Provider"""
+        self.providers.extend(p() if isinstance(p, type) else p for p in args)
+
+    def unbind(
+        self,
+        arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
+    ) -> None:
+        """移除间接 Provider"""
+        idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
+        for i in reversed(idx):
+            self.providers.pop(i)
 
 
 def filter_publisher(target: type[T]) -> Publisher[T] | None:

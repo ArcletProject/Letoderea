@@ -1,6 +1,8 @@
 from .breakpoint import StepOut as StepOut
-from .core import es as es
+from .core import publish as publish
+from .core import post as post
 from .core import make_event as make_event
+from .core import ExceptionEvent as ExceptionEvent
 from .decorate import allow_event as allow_event
 from .decorate import bind as bind
 from .decorate import bypass_if as bypass_if
@@ -13,7 +15,6 @@ from .exceptions import switch_print_traceback as switch_print_traceback
 from .exceptions import ExitState as ExitState
 from .exceptions import STOP as STOP
 from .exceptions import BLOCK as BLOCK
-from .handler import ExceptionEvent as ExceptionEvent
 from .provider import Param as Param
 from .provider import Provider as Provider
 from .provider import global_providers as global_providers
@@ -39,7 +40,4 @@ from .typing import EVENT as EVENT
 from .typing import Contexts as Contexts
 from .typing import Force as Force
 
-
-publish = es.publish
-post = es.post
-
+from . import core as es  # noqa: F401

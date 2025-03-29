@@ -7,11 +7,9 @@ from typing import Any, Callable, ClassVar, TypeVar, overload
 
 from tarina import ContextModel
 
-from .handler import dispatch
-from .provider import Provider, ProviderFactory, global_providers, get_providers
-from .publisher import Publisher, _publishers, filter_publisher, search_publisher
+from .provider import TProviders, Provider, ProviderFactory, global_providers
+from .publisher import Publisher, _publishers, filter_publisher
 from .subscriber import Propagator, Subscriber
-from .typing import Result, Resultable
 
 T = TypeVar("T")
 
@@ -33,20 +31,6 @@ class Scope:
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
-
-    async def emit(self, event: Any) -> None:
-        """主动向自己的订阅者发布事件"""
-        await dispatch(self.iter_subscribers(search_publisher(event)), event)
-
-    @overload
-    async def bail(self, event: Resultable[T]) -> Result[T] | None: ...
-
-    @overload
-    async def bail(self, event: Any) -> Result[Any] | None: ...
-
-    async def bail(self, event: Any) -> Result[Any] | None:
-        """主动向自己的订阅者发布事件, 并返回结果"""
-        return await dispatch(self.iter_subscribers(search_publisher(event)), event, return_result=True)
 
     def bind(self, *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
         """增加间接 Provider"""
@@ -74,55 +58,28 @@ class Scope:
         self.subscribers.pop(subscriber.id, None)
 
     @overload
-    def register(
-        self,
-        func: Callable[..., Any],
-        event: type | None = None,
-        *,
-        priority: int = 16,
-        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
-        publisher: str | Publisher | None = None,
-        temporary: bool = False,
-        skip_req_missing: bool | None = None,
-    ) -> Subscriber: ...
+    def register(self, func: Callable[..., Any], event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
 
     @overload
-    def register(
-        self,
-        *,
-        event: type | None = None,
-        priority: int = 16,
-        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
-        publisher: str | Publisher | None = None,
-        temporary: bool = False,
-        skip_req_missing: bool | None = None,
-    ) -> Callable[[Callable[..., Any]], Subscriber]: ...
+    def register(self, *, event: type | None = None, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
-    def register(
-        self,
-        func: Callable[..., Any] | None = None,
-        event: type | None = None,
-        *,
-        priority: int = 16,
-        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
-        publisher: str | Publisher | None = None,
-        temporary: bool = False,
-        skip_req_missing: bool | None = None,
-    ):
+    def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
         """注册一个订阅者"""
         _skip_req_missing = self.global_skip_req_missing if skip_req_missing is None else skip_req_missing
         providers = providers or []
-        event_providers = get_providers(event) if event else []
         if isinstance(publisher, Publisher):
             pub_id = publisher.id
-            event_providers = get_providers(publisher.target)
+            event_providers = publisher.providers
         elif isinstance(publisher, str) and publisher in _publishers:
             pub_id = publisher
-            event_providers = get_providers(_publishers[publisher].target)
+            event_providers = _publishers[publisher].providers
         elif not event:
             pub_id = "$backend"
+            event_providers = []
         else:
-            pub_id = (filter_publisher(event) or Publisher(event)).id
+            pub = (filter_publisher(event) or Publisher(event))
+            pub_id = pub.id
+            event_providers = pub.providers
 
         def register_wrapper(exec_target: Callable, /) -> Subscriber:
             _providers = [*global_providers, *event_providers, *self.providers, *providers]
@@ -131,7 +88,7 @@ class Scope:
                 priority=priority,
                 providers=_providers,
                 dispose=self.remove_subscriber,
-                temporary=temporary,
+                once=once,
                 skip_req_missing=_skip_req_missing,
             )
             res.propagates(*self.propagators)
@@ -142,11 +99,11 @@ class Scope:
             return register_wrapper(func)
         return register_wrapper
 
-    def get_subscribers(self, publisher: Publisher | None, pass_backend: bool = True) -> list[Subscriber]:
+    def get_subs(self, publisher: Publisher | None, pass_backend: bool = True) -> list[Subscriber]:
         pub_id = publisher.id if publisher else None
         return [slot[0] for slot in self.subscribers.values() if pub_id and (pub_id and slot[1] == pub_id) or (pass_backend and slot[1] == "$backend")]
 
-    def iter_subscribers(self, publisher: Publisher | None, pass_backend: bool = True):
+    def iter_subs(self, publisher: Publisher | None, pass_backend: bool = True):
         pub_id = publisher.id if publisher else None
         for slot in self.subscribers.values():
             if (pub_id and slot[1] == pub_id) or (pass_backend and slot[1] == "$backend"):
@@ -167,114 +124,52 @@ def configure(skip_req_missing: bool = False):
 
 
 @overload
-def on(
-    event: type,
-    func: Callable[..., Any],
-    *,
-    priority: int = 16,
-    providers: (
-        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
-    ) = None,
-    temporary: bool = False,
-    skip_req_missing: bool | None = None,
-) -> Subscriber: ...
+def on(event: type, func: Callable[..., Any], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
 
 
 @overload
-def on(
-    event: type,
-    *,
-    priority: int = 16,
-    providers: (
-        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
-    ) = None,
-    temporary: bool = False,
-    skip_req_missing: bool | None = None,
-) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def on(event: type, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
 
 @overload
-def on(
-    *,
-    priority: int = 16,
-    providers: (
-        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
-    ) = None,
-    temporary: bool = False,
-    skip_req_missing: bool | None = None,
-) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def on(*, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
 
-def on(
-    event: type | None = None,
-    func: Callable[..., Any] | None = None,
-    priority: int = 16,
-    providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
-    temporary: bool = False,
-    skip_req_missing: bool | None = None,
-):
+def on(event: type | None = None, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, temporary=temporary)
-    return scope.register(func, event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, temporary=temporary)
+        return scope.register(event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, once=once)
+    return scope.register(func, event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, once=once)
 
 
 @overload
-def collect(func: Callable[..., Any], *, priority: int = 16, temporary: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
+def collect(func: Callable[..., Any], *, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
 
 
 @overload
-def collect(*, priority: int = 16, temporary: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def collect(*, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
 
-def collect(func: Callable[..., Any] | None = None, priority: int = 16, temporary: bool = False, skip_req_missing: bool | None = None):
+def collect(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(event=None, priority=priority, skip_req_missing=skip_req_missing, temporary=temporary)
-    return scope.register(func, event=None, priority=priority, skip_req_missing=skip_req_missing, temporary=temporary)
+        return scope.register(event=None, priority=priority, skip_req_missing=skip_req_missing, once=once)
+    return scope.register(func, event=None, priority=priority, skip_req_missing=skip_req_missing, once=once)
 
 
 @overload
-def use(
-    pub: str | Publisher,
-    func: Callable[..., Any],
-    *,
-    priority: int = 16,
-    providers: (
-        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
-    ) = None,
-    temporary: bool = False,
-    skip_req_missing: bool | None = None,
-) -> Subscriber: ...
+def use(pub: str | Publisher, func: Callable[..., Any], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
 
 
 @overload
-def use(
-    pub: str | Publisher,
-    *,
-    priority: int = 16,
-    providers: (
-        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
-    ) = None,
-    temporary: bool = False,
-    skip_req_missing: bool | None = None,
-) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def use(pub: str | Publisher, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
 
-def use(
-    pub: str | Publisher,
-    func: Callable[..., Any] | None = None,
-    priority: int = 16,
-    providers: (
-        Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]] | None
-    ) = None,
-    temporary: bool = False,
-    skip_req_missing: bool | None = None,
-):
+def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(priority=priority, providers=providers, temporary=temporary, skip_req_missing=skip_req_missing, publisher=pub)
-    return scope.register(func, priority=priority, providers=providers, temporary=temporary, skip_req_missing=skip_req_missing, publisher=pub)
+        return scope.register(priority=priority, providers=providers, once=once, skip_req_missing=skip_req_missing, publisher=pub)
+    return scope.register(func, priority=priority, providers=providers, once=once, skip_req_missing=skip_req_missing, publisher=pub)

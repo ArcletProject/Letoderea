@@ -109,7 +109,7 @@ async def test_defer():
 
 @pytest.mark.asyncio
 async def test_dependency_condition():
-    from arclet.letoderea.handler import generate_contexts
+    from arclet.letoderea.typing import generate_contexts
     from arclet.letoderea.exceptions import UnresolvedRequirement
     executed = []
     ctx = await generate_contexts(PropagateEvent("1"))

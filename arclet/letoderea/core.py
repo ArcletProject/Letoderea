@@ -1,134 +1,184 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
+from collections.abc import Awaitable, Iterable
+from dataclasses import dataclass
 from itertools import chain
-from typing import Any, Callable, TypeVar, overload
-from weakref import finalize
+from typing import Any, Callable, Coroutine, Literal, TypeVar, overload
 
-from .handler import dispatch
-from .publisher import Publisher, search_publisher, _publishers
-from .scope import Scope, on, use, _scopes
-from .typing import Contexts, Result, Resultable
+from .exceptions import STOP, BLOCK
+from .publisher import Publisher, gather, define, search_publisher, _publishers
+from .provider import get_providers, provide
+from .scope import Scope, on, use, _scopes  # noqa: F401
+from .subscriber import Subscriber
+from .typing import Contexts, Force, Result, Resultable, generate_contexts
+
 
 T = TypeVar("T")
 
 
-class EventSystem:
+@dataclass(frozen=True)
+class ExceptionEvent:
+    origin: Any
+    subscriber: Subscriber
+    exception: BaseException
 
-    def __init__(self):
-        self._ref_tasks = set()
-        self.loop: asyncio.AbstractEventLoop | None = None
-        self.on = on
-        self.use = use
-
-        def _remove(es):  # pragma: no cover
-            for task in es._ref_tasks:
-                if not task.done():
-                    task.cancel()
-            es._ref_tasks.clear()
-
-        finalize(self, _remove, self)
-
-    async def setup_fetch(self):
-        self._ref_tasks.add(asyncio.create_task(self._loop_fetch()))
-
-    async def _loop_fetch(self):
-        while True:
-            for publisher in _publishers.values():
-                if not (event := (await publisher.supply())):
-                    continue
-                self.post(event)
-            await asyncio.sleep(0.05)
-
-    def publish(self, event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
-        """发布事件"""
-        loop = self.loop or asyncio.get_running_loop()
-        pub = search_publisher(event)
-        if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-            task = loop.create_task(
-                dispatch(
-                    sp.iter_subscribers(pub),
-                    event,
-                    pub.supplier if pub else None,
-                    inherit_ctx=inherit_ctx,
-                )
-            )
-            self._ref_tasks.add(task)
-            task.add_done_callback(self._ref_tasks.discard)
-            return task
-        if isinstance(scope, Scope) and scope.available:
-            task = loop.create_task(
-                dispatch(
-                    scope.iter_subscribers(pub),
-                    event,
-                    pub.supplier if pub else None,
-                    inherit_ctx=inherit_ctx,
-                )
-            )
-            self._ref_tasks.add(task)
-            task.add_done_callback(self._ref_tasks.discard)
-            return task
-        scopes = [sp for sp in _scopes.values() if sp.available]
-        task = loop.create_task(
-            dispatch(
-                chain.from_iterable(sp.iter_subscribers(pub) for sp in scopes),
-                event,
-                pub.supplier if pub else None,
-                inherit_ctx=inherit_ctx,
-            )
+    providers = [
+        provide(
+            BaseException,
+            "exception",
+            validate=lambda p: (p.annotation and issubclass(p.annotation, BaseException)) or p.name == "exception"
         )
-        self._ref_tasks.add(task)
-        task.add_done_callback(self._ref_tasks.discard)
-        return task
+    ]
 
-    @overload
-    def post(self, event: Resultable[T], scope: str | Scope | None = None) -> asyncio.Task[Result[T] | None]: ...
 
-    @overload
-    def post(self, event: Any, scope: str | Scope | None = None) -> asyncio.Task[Result[Any] | None]: ...
+exc_pub = define(ExceptionEvent, name="internal/exception")
 
-    def post(self, event: Any, scope: str | Scope | None = None):
-        """发布事件并返回第一个响应结果"""
-        loop = self.loop or asyncio.get_running_loop()
-        pub = search_publisher(event)
-        if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-            task = loop.create_task(
-                dispatch(
-                    sp.iter_subscribers(pub),
-                    event,
-                    pub.supplier if pub else None,
-                    return_result=True,
-                )
-            )
-            self._ref_tasks.add(task)
-            task.add_done_callback(self._ref_tasks.discard)
-            return task
-        if isinstance(scope, Scope) and scope.available:
-            task = loop.create_task(
-                dispatch(
-                    scope.iter_subscribers(pub),
-                    event,
-                    pub.supplier if pub else None,
-                    return_result=True,
-                )
-            )
-            self._ref_tasks.add(task)
-            task.add_done_callback(self._ref_tasks.discard)
-            return task
-        task = loop.create_task(
-            dispatch(
-                chain.from_iterable(sp.iter_subscribers(pub) for sp in _scopes.values() if sp.available),
-                event,
-                pub.supplier if pub else None,
-                return_result=True,
-            )
-        )
-        self._ref_tasks.add(task)
-        task.add_done_callback(self._ref_tasks.discard)
+
+@gather
+async def _(event: ExceptionEvent, context: Contexts):
+    return context.update(exception=event.exception, origin=event.origin, subscriber=event.subscriber)
+
+
+async def publish_exc_event(event: ExceptionEvent):
+    scopes = [sp for sp in _scopes.values() if sp.available]
+    subs = chain.from_iterable(sp.iter_subs(exc_pub, pass_backend=False) for sp in scopes)
+    await dispatch(subs, await generate_contexts(event, exc_pub.supplier))
+
+
+@overload
+async def dispatch(subscribers: Iterable[Subscriber], contexts: Contexts) -> None: ...
+
+
+@overload
+async def dispatch(subscribers: Iterable[Subscriber], contexts: Contexts, *, return_result: Literal[True]) -> Result | None: ...
+
+
+async def dispatch(subscribers: Iterable[Subscriber], contexts: Contexts, *, return_result: bool = False):
+    if not subscribers:
+        return
+    grouped: dict[int, list[Subscriber]] = {}
+    event = contexts["$event"]
+    for s in subscribers:
+        if (priority := s.priority) not in grouped:
+            grouped[priority] = []
+        grouped[priority].append(s)
+    for priority in sorted(grouped.keys()):
+        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[priority]]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for _i, result in enumerate(results):
+            if result is None:
+                continue
+            if result is BLOCK:
+                return
+            if result is STOP:
+                continue
+            if isinstance(result, BaseException):
+                if isinstance(event, ExceptionEvent):
+                    return
+                await publish_exc_event(ExceptionEvent(event, grouped[priority][_i], result))
+                continue
+            if not return_result:
+                continue
+            if result.__class__ is Force:
+                return result.value  # type: ignore
+            if isinstance(result, Result):
+                return Result.check_result(event, result)
+            return Result.check_result(event, Result(result))
+
+
+async def run_handler(
+    target: Callable,
+    event: Any,
+    external_gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
+):
+    contexts = await generate_contexts(event, external_gather)
+    _target = Subscriber(target, providers=get_providers(event.__class__))
+    return await _target.handle(contexts)
+
+
+class _EventSystem:
+    ref_tasks: set[asyncio.Task] = set()
+    loop: asyncio.AbstractEventLoop | None = None
+
+    @classmethod
+    def add_task(cls, coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
+        loop = cls.loop or asyncio.get_running_loop()
+        task = loop.create_task(coro)
+        cls.ref_tasks.add(task)
+        task.add_done_callback(cls.ref_tasks.discard)
         return task
 
 
-es = EventSystem()
+def set_event_loop(loop: asyncio.AbstractEventLoop):
+    _EventSystem.loop = loop
+
+
+@atexit.register
+def _cleanup():
+    for task in _EventSystem.ref_tasks:
+        if not task.done():
+            task.cancel()
+    _EventSystem.ref_tasks.clear()
+
+
+def setup_fetch():
+    _EventSystem.add_task(_loop_fetch())
+
+
+async def _loop_fetch():
+    while True:
+        for publisher in _publishers.values():
+            if not (event := (await publisher.supply())):
+                continue
+            publish_task(event)
+        await asyncio.sleep(0.05)
+
+
+async def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
+    """发布事件"""
+    pub = search_publisher(event)
+    if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
+        return await dispatch(sp.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx))
+    if isinstance(scope, Scope) and scope.available:
+        return await dispatch(scope.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx))
+    scopes = [sp for sp in _scopes.values() if sp.available]
+    return await dispatch(
+        chain.from_iterable(sp.iter_subs(pub) for sp in scopes),
+        await generate_contexts(event, pub.supplier if pub else None, inherit_ctx)
+    )
+
+
+def publish_task(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
+    return _EventSystem.add_task(publish(event, scope, inherit_ctx))
+
+
+@overload
+async def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> Result[T] | None: ...
+
+
+@overload
+async def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> Result[Any] | None: ...
+
+
+async def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
+    """发布事件并返回第一个响应结果"""
+    pub = search_publisher(event)
+    if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
+        return await dispatch(sp.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx), return_result=True)
+    if isinstance(scope, Scope) and scope.available:
+        return await dispatch(scope.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx), return_result=True)
+    scopes = [sp for sp in _scopes.values() if sp.available]
+    return await dispatch(
+        chain.from_iterable(sp.iter_subs(pub) for sp in scopes),
+        await generate_contexts(event, pub.supplier if pub else None, inherit_ctx),
+        return_result=True
+    )
+
+
+def post_task(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
+    return _EventSystem.add_task(post(event, scope, inherit_ctx))
 
 
 C = TypeVar("C")
@@ -164,7 +214,7 @@ def make_event(cls: type[C] | None = None, *, name: str | None = None):
     return wrapper
 
 
-def scope(self, id_: str | None = None):
+def scope(id_: str | None = None):
     sp = Scope(id_)
     _scopes[sp.id] = sp
     return sp

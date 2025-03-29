@@ -59,6 +59,22 @@ class Contexts(dict[str, Any]):
 
 
 EVENT: CtxItem[Any] = cast(CtxItem, "$event")
+
+
+async def generate_contexts(
+    event: T, supplier:  Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None, inherit_ctx: Contexts | None = None
+) -> Contexts:
+    contexts: Contexts = {EVENT: event}  # type: ignore
+    if supplier:
+        await supplier(event, contexts)
+    elif (_gather := getattr(event, "__context_gather__", getattr(event, "gather", None))) is not None:
+        await _gather(contexts)
+    if inherit_ctx:
+        inherit_ctx.update(contexts)
+        return inherit_ctx
+    return contexts
+
+
 TTarget = Union[Callable[..., Awaitable[T]], Callable[..., T]]
 TCallable = TypeVar("TCallable", bound=TTarget[Any])
 P = ParamSpec("P")

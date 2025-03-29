@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from arclet.letoderea import deref, enter_if, es, on
+from arclet.letoderea import deref, enter_if, on, es
 from arclet.letoderea.breakpoint import StepOut
 from arclet.letoderea.typing import Contexts
 
@@ -63,13 +63,13 @@ async def test_breakpoint():
     for i in range(6):
         if i % 3 == 0:
             print(i + 1, 'event posted with msg: "hello"')
-            es.publish(a)
+            es.publish_task(a)
         elif (i - 1) % 3 == 0:
             print(i + 1, 'event posted with msg: "wait"')
-            es.publish(c)
+            es.publish_task(c)
         else:
             print(i + 1, 'event posted with msg: "continue!"')
-            es.publish(b)
+            es.publish_task(b)
         await asyncio.sleep(0.1)
     print(7, 'event posted with msg: "end."')
     await es.publish(d)

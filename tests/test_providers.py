@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from arclet.letoderea import Contexts, Provider, on
-from arclet.letoderea.handler import generate_contexts
+from arclet.letoderea.typing import generate_contexts
 
 
 class IntProvider(Provider[int]):

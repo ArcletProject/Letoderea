@@ -73,7 +73,7 @@ async def test_inherit():
     async def s(ctx: le.Contexts, foo, bar):
         assert foo == "1"
         assert bar == "res_ster"
-        le.publish(BaseEvent("2"), inherit_ctx=ctx.copy())
+        await le.publish(BaseEvent("2"), inherit_ctx=ctx.copy())
 
     @le.on(BaseEvent)
     async def t(event: BaseEvent, foo, bar):

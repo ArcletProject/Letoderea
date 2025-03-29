@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 from weakref import WeakSet
 from collections import defaultdict
-from collections.abc import Awaitable, Generator, Sequence
+from collections.abc import Awaitable, Generator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload
@@ -21,7 +21,7 @@ from .exceptions import (
     BLOCK,
     ExitState,
 )
-from .provider import Param, Provider, ProviderFactory, provide
+from .provider import TProviders, Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
 from .typing import (
     Contexts,
@@ -172,16 +172,7 @@ class Subscriber(Generic[R]):
 
     _callable_target: Callable[..., Any]
 
-    def __init__(
-        self,
-        callable_target: TTarget[R],
-        *,
-        priority: int = 16,
-        providers: Sequence[Provider | type[Provider] | ProviderFactory | type[ProviderFactory]] | None = None,
-        dispose: Callable[[Self], None] | None = None,
-        temporary: bool = False,
-        skip_req_missing: bool = False,
-    ) -> None:
+    def __init__(self, callable_target: TTarget[R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False) -> None:
         self.id = str(uuid4())
         self.priority = priority
         self.skip_req_missing = skip_req_missing
@@ -197,19 +188,25 @@ class Subscriber(Generic[R]):
         if hasattr(callable_target, "__propagates__"):
             for slot in getattr(callable_target, "__propagates__", []):
                 self.propagates(*slot[0], prepend=slot[1])
-        self.params = _compile(callable_target, self.providers)
         self.callable_target = callable_target  # type: ignore
         self.has_cm = False
         self.is_cm = False
-        if is_gen_callable(callable_target) or is_async_gen_callable(callable_target):
-            if is_gen_callable(callable_target):
-                self._callable_target = asynccontextmanager(run_sync_generator(callable_target))
+        self._recompile()
+
+        self._dispose = dispose
+        self.once = once
+
+    def _recompile(self):  # pragma: no cover
+        self.params = _compile(self.callable_target, self.providers)
+        if is_gen_callable(self.callable_target) or is_async_gen_callable(self.callable_target):
+            if is_gen_callable(self.callable_target):
+                self._callable_target = asynccontextmanager(run_sync_generator(self.callable_target))
             else:
-                self._callable_target = asynccontextmanager(callable_target)  # type: ignore
+                self._callable_target = asynccontextmanager(self.callable_target)  # type: ignore
             self.has_cm = True
             self.is_cm = True
-        elif (wrapped := getattr(callable_target, "__wrapped__", None)) and (
-            is_gen_callable(wrapped) or is_async_gen_callable(wrapped)
+        elif (wrapped := getattr(self.callable_target, "__wrapped__", None)) and (
+                is_gen_callable(wrapped) or is_async_gen_callable(wrapped)
         ):
             if is_gen_callable(wrapped):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
@@ -217,19 +214,17 @@ class Subscriber(Generic[R]):
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
             self.has_cm = True
             self.is_cm = True
-        elif is_async(callable_target):
-            self._callable_target = callable_target  # type: ignore
+        elif is_async(self.callable_target):
+            self._callable_target = self.callable_target  # type: ignore
         else:
-            self._callable_target = run_sync(callable_target)  # type: ignore
-
-        self._dispose = dispose
-        self.temporary = temporary
-
-    def _recompile(self):  # pragma: no cover
-        self.params = _compile(self.callable_target, self.providers)
+            self._callable_target = run_sync(self.callable_target)  # type: ignore
 
     async def __call__(self, *args, **kwargs) -> R:  # pragma: no cover
         return await self.callable_target(*args, **kwargs)
+
+    @property
+    def __name__(self) -> str:
+        return self.callable_target.__name__
 
     def __repr__(self):
         lineno = self.callable_target.__code__.co_firstlineno
@@ -295,7 +290,7 @@ class Subscriber(Generic[R]):
                     await context["$exit_stack"].aclose()
                     context.pop("$exit_stack")
                 context.clear()
-            if self.temporary:
+            if self.once:
                 self.dispose()
         return result
 
@@ -332,44 +327,15 @@ class Subscriber(Generic[R]):
         return context.get(RESULT)
 
     @overload
-    def propagate(
-        self,
-        func: TTarget[Any],
-        *,
-        prepend: bool = False,
-        priority: int = 16,
-        providers: list[Provider | ProviderFactory] | None = None,
-        temporary: bool = False,
-    ) -> Callable[[], None]: ...
+    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> Callable[[], None]: ...
 
     @overload
-    def propagate(
-        self,
-        func: Propagator,
-        *,
-        providers: list[Provider | ProviderFactory] | None = None,
-        temporary: bool = False,
-    ) -> Callable[[], None]: ...
+    def propagate(self, func: Propagator, *, providers: TProviders | None = None, once: bool = False) -> Callable[[], None]: ...
 
     @overload
-    def propagate(
-        self,
-        *,
-        prepend: bool = False,
-        priority: int = 16,
-        providers: list[Provider | ProviderFactory] | None = None,
-        temporary: bool = False,
-    ) -> Callable[[TTarget[Any]], Callable[[], None]]: ...
+    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> Callable[[TTarget[Any]], Callable[[], None]]: ...
 
-    def propagate(
-        self,
-        func: TTarget[Any] | Propagator | None = None,
-        *,
-        prepend: bool = False,
-        priority: int = 16,
-        providers: list[Provider | ProviderFactory] | None = None,
-        temporary: bool = False,
-    ):
+    def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False):
         if isinstance(func, Propagator):
             disposes = []
             for slot in func.compose():
@@ -391,15 +357,14 @@ class Subscriber(Generic[R]):
         def wrapper(callable_target: TTarget[Any], /):
             if isinstance(callable_target, Subscriber):
                 raise ValueError("Subscriber can't be propagated")
-            _providers = providers or []
-            _providers.extend(self.providers)
+            _providers = [*(providers or []), *self.providers]
             if prepend:
                 sub = Subscriber(
                     callable_target,
                     priority=priority,
                     providers=_providers,
                     dispose=_dispose,
-                    temporary=temporary,
+                    once=once,
                 )
                 self._propagates.insert(self._cursor, sub)
                 self._cursor += 1
@@ -410,7 +375,7 @@ class Subscriber(Generic[R]):
                     priority=priority,
                     providers=_providers,
                     dispose=lambda x: self._propagates.remove(x),
-                    temporary=temporary,
+                    once=once,
                 )
                 self._propagates.append(sub)
             if sub.has_cm:
@@ -454,7 +419,7 @@ def defer(ctx: Contexts | TTarget, func: Callable[..., Any]):
         sub = ctx
     else:
         raise TypeError(f"Unsupported type {type(ctx)}")
-    return sub.propagate(func, temporary=True)
+    return sub.propagate(func, once=True)
 
 
 def params(ctx: Contexts):
