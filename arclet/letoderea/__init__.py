@@ -27,7 +27,7 @@ from .ref import deref as deref
 from .scope import Scope as Scope
 from .scope import on as on
 from .scope import use as use
-from .scope import collect as collect
+from .scope import on_global as on_global
 from .subscriber import defer as defer
 from .subscriber import params as params
 from .subscriber import SUBSCRIBER as SUBSCRIBER

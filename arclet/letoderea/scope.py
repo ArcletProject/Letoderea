@@ -144,14 +144,14 @@ def on(event: type | None = None, func: Callable[..., Any] | None = None, priori
 
 
 @overload
-def collect(func: Callable[..., Any], *, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
+def on_global(func: Callable[..., Any], *, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
 
 
 @overload
-def collect(*, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def on_global(*, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
 
-def collect(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None):
+def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:

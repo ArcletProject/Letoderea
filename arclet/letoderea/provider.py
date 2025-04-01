@@ -65,7 +65,11 @@ def provide(
 
     class _Provider(Provider[origin]):
         def validate(self, param: Param):
-            return validate(param) if validate else param.name == target if target else super().validate(param)
+            if validate:
+                return validate(param)
+            if param.annotation:
+                return super().validate(param) and (not target or param.name == target)
+            return param.name == target
 
         async def __call__(self, context: Contexts):
             if not call and target:

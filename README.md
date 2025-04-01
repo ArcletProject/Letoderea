@@ -17,20 +17,25 @@ pip install arclet-letoderea
 ## 样例
 
 ### 基本使用
+
 ```python
 import asyncio
 import arclet.letoderea as le
+
 
 @le.make_event
 class TestEvent:
     name: str = "Letoderea"
 
-@le.collect
+
+@le.on_global
 async def test_subscriber(name: str):
     print(name)
 
+
 async def main():
     await le.publish(TestEvent())
+
 
 asyncio.run(main())
 ```

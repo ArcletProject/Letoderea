@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any, Callable, Union, overload
+from functools import wraps
 
 from .provider import Provider
 from .ref import Deref, generate
@@ -47,27 +48,31 @@ def propagate(*funcs: Union[TTarget[Any], Propagator], prepend: bool = False):
 
 if TYPE_CHECKING:
 
-    def bypass_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]: ...
-    def enter_if(predicate: Union[Callable[[Contexts], bool], bool]) -> Callable[[TTarget], TTarget]: ...
+    def bypass_if(predicate: Union[Callable[..., bool], bool]) -> Callable[[TTarget], TTarget]: ...
+    def enter_if(predicate: Union[Callable[..., bool], bool]) -> Callable[[TTarget], TTarget]: ...
 
 else:
 
     class _Check(Propagator):
-        def __init__(self, predicate: Union[Callable[[Contexts], bool], Deref], result: bool):
+        def __init__(self, predicate: Union[Callable[..., bool], Deref], result: bool):
             self.predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
             self.result = result
 
-        def check(self, ctx: Contexts):
-            if self.predicate(ctx) is not self.result:
-                return STOP
+        def get_checker(self):
+            @wraps(self.predicate)
+            def _(*args, **kwargs):
+                if self.predicate(*args, **kwargs) is not self.result:
+                    return STOP
+
+            return _
 
         def compose(self):
-            yield self.check, True, 0
+            yield self.get_checker(), True, 0
 
-    def bypass_if(predicate: Union[Callable[[Contexts], bool], Deref]):
+    def bypass_if(predicate: Union[Callable[..., bool], Deref]):
         return propagate(_Check(predicate, False))
 
-    def enter_if(predicate: Union[Callable[[Contexts], bool], Deref]):
+    def enter_if(predicate: Union[Callable[..., bool], Deref]):
         return propagate(_Check(predicate, True))
 
 
