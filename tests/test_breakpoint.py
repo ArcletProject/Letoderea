@@ -63,13 +63,13 @@ async def test_breakpoint():
     for i in range(6):
         if i % 3 == 0:
             print(i + 1, 'event posted with msg: "hello"')
-            es.publish_task(a)
+            es.publish(a)
         elif (i - 1) % 3 == 0:
             print(i + 1, 'event posted with msg: "wait"')
-            es.publish_task(c)
+            es.publish(c)
         else:
             print(i + 1, 'event posted with msg: "continue!"')
-            es.publish_task(b)
+            es.publish(b)
         await asyncio.sleep(0.1)
     print(7, 'event posted with msg: "end."')
     await es.publish(d)

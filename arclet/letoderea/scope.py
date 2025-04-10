@@ -99,14 +99,9 @@ class Scope:
             return register_wrapper(func)
         return register_wrapper
 
-    def get_subs(self, publisher: Publisher | None, pass_backend: bool = True) -> list[Subscriber]:
-        pub_id = publisher.id if publisher else None
-        return [slot[0] for slot in self.subscribers.values() if pub_id and (pub_id and slot[1] == pub_id) or (pass_backend and slot[1] == "$backend")]
-
-    def iter_subs(self, publisher: Publisher | None, pass_backend: bool = True):
-        pub_id = publisher.id if publisher else None
+    def iter(self, pub_ids: set[str], pass_backend: bool = True):
         for slot in self.subscribers.values():
-            if (pub_id and slot[1] == pub_id) or (pass_backend and slot[1] == "$backend"):
+            if slot[1] in pub_ids or (pass_backend and slot[1] == "$backend"):
                 yield slot[0]
 
     def dispose(self):

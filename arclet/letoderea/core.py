@@ -8,7 +8,7 @@ from itertools import chain
 from typing import Any, Callable, Coroutine, Literal, TypeVar, overload
 
 from .exceptions import STOP, BLOCK
-from .publisher import Publisher, gather, define, search_publisher, _publishers
+from .publisher import Publisher, gather, define, _publishers
 from .provider import get_providers, provide
 from .scope import Scope, on, use, _scopes  # noqa: F401
 from .subscriber import Subscriber
@@ -43,29 +43,36 @@ async def _(event: ExceptionEvent, context: Contexts):
 
 async def publish_exc_event(event: ExceptionEvent):
     scopes = [sp for sp in _scopes.values() if sp.available]
-    subs = chain.from_iterable(sp.iter_subs(exc_pub, pass_backend=False) for sp in scopes)
-    await dispatch(subs, await generate_contexts(event, exc_pub.supplier))
+    subs = [slot for sp in scopes for slot in sp.subscribers.values() if slot[1] != "$backend"]
+    await dispatch(subs, event)
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], contexts: Contexts) -> None: ...
+async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_ctx: Contexts | None = None) -> None: ...
 
 
 @overload
-async def dispatch(subscribers: Iterable[Subscriber], contexts: Contexts, *, return_result: Literal[True]) -> Result | None: ...
+async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_ctx: Contexts | None = None, *, return_result: Literal[True]) -> Result | None: ...
 
 
-async def dispatch(subscribers: Iterable[Subscriber], contexts: Contexts, *, return_result: bool = False):
-    if not subscribers:
-        return
-    grouped: dict[int, list[Subscriber]] = {}
-    event = contexts["$event"]
-    for s in subscribers:
-        if (priority := s.priority) not in grouped:
-            grouped[priority] = []
-        grouped[priority].append(s)
-    for priority in sorted(grouped.keys()):
-        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[priority]]
+async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_ctx: Contexts | None = None, *, return_result: bool = False):
+    grouped: dict[tuple[int, str], list[Subscriber]] = {}
+    context_map: dict[str, Contexts] = {}
+    if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
+        pubs = {pub.id: pub}
+    else:
+        pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
+    for sub, pub_id in slots:
+        if pub_id != "$backend" and pub_id not in pubs:
+            continue
+        if pub_id not in context_map:
+            context_map[pub_id] = await generate_contexts(event, None if pub_id == "$backend" else pubs[pub_id].supplier, inherit_ctx)
+        if ((priority := sub.priority), pub_id) not in grouped:
+            grouped[(priority, pub_id)] = []
+        grouped[(priority, pub_id)].append(sub)
+    for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
+        contexts = context_map[pub_id]
+        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for _i, result in enumerate(results):
             if result is None:
@@ -77,7 +84,7 @@ async def dispatch(subscribers: Iterable[Subscriber], contexts: Contexts, *, ret
             if isinstance(result, BaseException):
                 if isinstance(event, ExceptionEvent):
                     return
-                await publish_exc_event(ExceptionEvent(event, grouped[priority][_i], result))
+                await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
                 continue
             if not return_result:
                 continue
@@ -132,53 +139,40 @@ async def _loop_fetch():
         for publisher in _publishers.values():
             if not (event := (await publisher.supply())):
                 continue
-            publish_task(event)
+            publish(event)
         await asyncio.sleep(0.05)
 
 
-async def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
+def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
     """发布事件"""
-    pub = search_publisher(event)
     if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-        return await dispatch(sp.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx))
-    if isinstance(scope, Scope) and scope.available:
-        return await dispatch(scope.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx))
-    scopes = [sp for sp in _scopes.values() if sp.available]
-    return await dispatch(
-        chain.from_iterable(sp.iter_subs(pub) for sp in scopes),
-        await generate_contexts(event, pub.supplier if pub else None, inherit_ctx)
-    )
-
-
-def publish_task(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
-    return _EventSystem.add_task(publish(event, scope, inherit_ctx))
+        coro = dispatch(sp.subscribers.values(), event, inherit_ctx)
+    elif isinstance(scope, Scope) and scope.available:
+        coro = dispatch(scope.subscribers.values(), event, inherit_ctx)
+    else:
+        scopes = [sp for sp in _scopes.values() if sp.available]
+        coro = dispatch(chain.from_iterable(sp.subscribers.values() for sp in scopes), event, inherit_ctx)
+    return _EventSystem.add_task(coro)
 
 
 @overload
-async def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> Result[T] | None: ...
+def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[Result[T] | None]: ...
 
 
 @overload
-async def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> Result[Any] | None: ...
+def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[Result[Any] | None]: ...
 
 
-async def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
+def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
     """发布事件并返回第一个响应结果"""
-    pub = search_publisher(event)
     if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-        return await dispatch(sp.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx), return_result=True)
-    if isinstance(scope, Scope) and scope.available:
-        return await dispatch(scope.iter_subs(pub), await generate_contexts(event, pub.supplier if pub else None, inherit_ctx), return_result=True)
-    scopes = [sp for sp in _scopes.values() if sp.available]
-    return await dispatch(
-        chain.from_iterable(sp.iter_subs(pub) for sp in scopes),
-        await generate_contexts(event, pub.supplier if pub else None, inherit_ctx),
-        return_result=True
-    )
-
-
-def post_task(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
-    return _EventSystem.add_task(post(event, scope, inherit_ctx))
+        coro = dispatch(sp.subscribers.values(), event, inherit_ctx, return_result=True)
+    elif isinstance(scope, Scope) and scope.available:
+        coro = dispatch(scope.subscribers.values(), event, inherit_ctx, return_result=True)
+    else:
+        scopes = [sp for sp in _scopes.values() if sp.available]
+        coro = dispatch(chain.from_iterable(sp.subscribers.values() for sp in scopes), event, inherit_ctx, return_result=True)
+    return _EventSystem.add_task(coro)
 
 
 C = TypeVar("C")
