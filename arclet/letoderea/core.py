@@ -101,7 +101,7 @@ async def run_handler(
     external_gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
 ):
     contexts = await generate_contexts(event, external_gather)
-    _target = Subscriber(target, providers=get_providers(event.__class__))
+    _target = target if isinstance(target, Subscriber) else  Subscriber(target, providers=get_providers(event.__class__))
     return await _target.handle(contexts)
 
 
@@ -118,12 +118,12 @@ class _EventSystem:
         return task
 
 
-def set_event_loop(loop: asyncio.AbstractEventLoop):
+def set_event_loop(loop: asyncio.AbstractEventLoop):  # pragma: no cover
     _EventSystem.loop = loop
 
 
 @atexit.register
-def _cleanup():
+def _cleanup():  # pragma: no cover
     for task in _EventSystem.ref_tasks:
         if not task.done():
             task.cancel()

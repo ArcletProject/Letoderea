@@ -30,7 +30,7 @@ class CollectedPublisher(Publisher[T]):
         self.id = id_
         _publishers[self.id] = self
         self._params = {name: (anno, de) for name, anno, de in params}
-        self._requires_len = sum(1 for _, _, de in params if de is not Empty)
+        self._required_keys = {name for name, _, de in params if de is not Empty}
         self.providers = []
 
     async def _supplier(self, event, context: Contexts):
@@ -45,20 +45,24 @@ class CollectedPublisher(Publisher[T]):
 
     def validate(self, x):
         if isinstance(x, (tuple, list)):
-            if len(x) < self._requires_len:
-                return False
             data = {name: x[i] for i, (name, *_) in enumerate(self._params) if i < len(x)}
         elif isinstance(x, dict):
             data = x
         else:
             data = {key: val for key, val in vars(x).items()}
+        if not self._required_keys.issubset(data.keys()):
+            return False
         for key, val in data.items():
-            if key not in self._params or not generic_isinstance(val, self._params[key][0]):
+            if key in self._params and not generic_isinstance(val, self._params[key][0]):
                 return False
         return True
 
     def dispose(self):
         _publishers.pop(self.id, None)
+        annos = [[(name, ann) for ann in get_args(anno)] if origin_is_union(get_origin(anno)) else [(name, anno)] for name, anno, _ in self._params]
+        for args in itertools.product(*annos):
+            if args in _collectors and _collectors[args] is self:
+                del _collectors[args]
 
 
 @overload
@@ -79,11 +83,10 @@ def collect(func: Callable[..., Any] | None = None, priority: int = 16, provider
         params = signatures(target)
         annos = [[(name, ann) for ann in get_args(anno)] if origin_is_union(get_origin(anno)) else [(name, anno)] for name, anno, _ in params]
         matrix = list(itertools.product(*annos))
-        pub = CollectedPublisher(f"collect_{target.__qualname__}", params)
         if any(args in _collectors for args in matrix):
-            pub.dispose()
             pub = _collectors[matrix[0]]
         else:
+            pub = CollectedPublisher(f"collect_{target.__qualname__}", params)
             for args in matrix:
                 _collectors[args] = pub
             pub.providers = [provide(ann, target=name, call=f"${pub.id}_{name}_{ann}") for slot in annos for name, ann in slot]

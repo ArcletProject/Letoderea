@@ -55,6 +55,34 @@ async def test_propagate():
 
 
 @pytest.mark.asyncio
+async def test_context_manager():
+    executed = []
+
+    @le.on(PropagateEvent)
+    async def s(foo: str, bar: int):
+        assert foo == "1"
+        assert bar == 1
+        executed.append(2)
+
+    @s.propagate(prepend=True)
+    async def _(foo: str):
+        assert foo == "1"
+        executed.append(1)
+        yield {"bar": 1}
+        executed.append(3)
+
+    @s.propagate(prepend=True)
+    def _(foo: str):
+        assert foo == "1"
+        executed.append(1)
+        yield
+        executed.append(4)
+
+    await le.publish(PropagateEvent("1"))
+    assert executed == [1, 1, 2, 4, 3]
+
+
+@pytest.mark.asyncio
 async def test_prepend_propagate():
 
     executed = []

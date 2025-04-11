@@ -79,12 +79,6 @@ def filter_publisher(target: type[T]) -> Publisher[T] | None:
     return next((pub for pub in _publishers.values() if pub.target == target), None)
 
 
-# def search_publishers(event: T) -> list[Publisher[T]]:
-#     if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
-#         return [pub]
-#     return [pub for pub in _publishers.values() if pub.validate(event)]
-
-
 def define(
     target: type[T],
     supplier: Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None,

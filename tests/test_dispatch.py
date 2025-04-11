@@ -37,12 +37,23 @@ async def test_param_solve():
 
 @pytest.mark.asyncio
 async def test_unresolve():
+    from arclet.letoderea.core import run_handler
     from arclet.letoderea.exceptions import UnresolvedRequirement
     from arclet.letoderea.subscriber import CompileParam, Empty
 
     p = CompileParam("p", None, Empty, [], None, None)
     with pytest.raises(UnresolvedRequirement):
         await p.solve({})
+
+    @le.on(TestEvent, skip_req_missing=False)
+    @le.bind(le.provide(int, "age", "a", _id="foo"))
+    @le.bind(le.provide(int, "age", "b", _id="bar"))
+    @le.bind(le.provide(int, "age", "c", _id="baz"))
+    async def s0(foo: str, age: int):
+        print(foo, age)
+
+    with pytest.raises(UnresolvedRequirement):
+        await run_handler(s0, TestEvent("1", "2"))
 
 
 @pytest.mark.asyncio
