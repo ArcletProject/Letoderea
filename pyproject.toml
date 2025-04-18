@@ -73,7 +73,7 @@ asyncio_default_fixture_loop_scope = "session"
 [tool.coverage.run]
 branch = true
 source = ["."]
-omit = ["./examples/*.py", "exam*.py", "./arclet/letoderea/ref.py", "./arclet/letoderea/collect.py", "benchmark.py"]
+omit = ["./examples/*.py", "exam*.py", "./arclet/letoderea/ref.py", "benchmark.py"]
 
 [tool.coverage.report]
 

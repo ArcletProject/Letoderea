@@ -1,5 +1,7 @@
 from datetime import datetime
 import asyncio
+from typing import Any
+
 import pytest
 
 from dataclasses import dataclass
@@ -219,3 +221,51 @@ async def test_propagator():
 
     assert executed == [1, "1", 1, 1, "3"]
     assert s.get_propagator(Interval).success
+
+
+@pytest.mark.asyncio
+async def test_dependency_condition2():
+    from arclet.letoderea.typing import generate_contexts
+    from arclet.letoderea.exceptions import UnresolvedRequirement, ProviderUnsatisfied
+    executed = []
+    ctx = await generate_contexts(PropagateEvent("123 456"))
+
+    class ProgProvider(le.Provider[Any]):
+        def __init__(self, type_: str):
+            self.type_ = type_
+            super().__init__()
+
+        async def __call__(self, context: le.Contexts):
+            if "info" not in context:
+                raise ProviderUnsatisfied("info")
+            if self.type_ == "len":
+                return context["info"]["len"]
+            else:
+                return context["info"]["parts"]
+
+    class ProgFactory(le.ProviderFactory):
+        def validate(self, param: le.Param):
+            if param.annotation is int:
+                return ProgProvider("len")
+            elif param.annotation is list:
+                return ProgProvider("parts")
+
+    @le.on(PropagateEvent, providers=[ProgFactory()])
+    async def s1(bar: int, parts: list):
+        assert bar == 7
+        assert parts == ["123", "456"]
+        executed.append(1)
+
+    @s1.propagate(prepend=True)
+    async def p2(bar: int):
+        executed.append(bar)
+
+    @s1.propagate(prepend=True)
+    async def p1(foo: str):
+        executed.append(2)
+        return {"info": {"len": len(foo), "parts": foo.split()}}
+
+
+
+    await s1.handle(ctx.copy())
+    assert executed == [2, 7, 1]

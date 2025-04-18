@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from arclet.letoderea import Contexts, Provider, on
+from arclet.letoderea import Contexts, Provider, ProviderFactory, on, Param
 from arclet.letoderea.typing import generate_contexts
 
 
@@ -36,11 +36,20 @@ class ProviderEvent1(ProviderEvent):
             return context["is_true"]
 
 
+class MyFactory(ProviderFactory):
+
+    def validate(self, param: Param) -> Provider | None:
+        if param.name.startswith("age"):
+            return IntProvider()
+        if param.name.startswith("num"):
+            return FloatProvider()
+
+
 @pytest.mark.asyncio
 async def test_providers():
 
     @on(ProviderEvent1, providers=[IntProvider(), FloatProvider()])
-    async def test_subscriber(
+    async def s0(
         name0: str,
         age0: int,
         is_true0: bool,
@@ -72,5 +81,24 @@ async def test_providers():
         assert num0 == num1 == num2 == num3 == num4 == num5 == 1.23
 
     ctx = await generate_contexts(ProviderEvent1())
-    await test_subscriber.handle(ctx)
+    await s0.handle(ctx)
 
+
+@pytest.mark.asyncio
+async def test_providers_factory():
+
+    @on(ProviderEvent, providers=[MyFactory])
+    async def s1(
+        name0: str,
+        age0: int,
+        num0: float,
+        name1: str,
+        age1: int,
+        num1: float,
+    ):
+        assert name0 == name1 == "Letoderea"
+        assert age0 == age1 == 123
+        assert num0 == num1 == 1.23
+
+    ctx = await generate_contexts(ProviderEvent())
+    await s1.handle(ctx)

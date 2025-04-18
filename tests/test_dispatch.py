@@ -49,7 +49,7 @@ async def test_unresolve():
     @le.bind(le.provide(int, "age", "a", _id="foo"))
     @le.bind(le.provide(int, "age", "b", _id="bar"))
     @le.bind(le.provide(int, "age", "c", _id="baz"))
-    async def s0(foo: str, age: int):
+    async def s0(foo: str, age: int):  # pragma: no cover
         print(foo, age)
 
     with pytest.raises(UnresolvedRequirement):

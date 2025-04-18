@@ -30,34 +30,40 @@ class CollectedPublisher(Publisher[T]):
         self.id = id_
         _publishers[self.id] = self
         self._params = {name: (anno, de) for name, anno, de in params}
-        self._required_keys = {name for name, _, de in params if de is not Empty}
+        self._required_keys = {name for name, _, de in params if de is Empty and name != "event"}
         self.providers = []
 
     async def _supplier(self, event, context: Contexts):
         if isinstance(event, (tuple, list)):
-            data = {name: event[i] for i, (name, *_) in enumerate(self._params) if i < len(event)}
+            data = {name: event[i] for i, name in enumerate(self._params) if i < len(event)}
         elif isinstance(event, dict):
             data = event
         else:
-            data = {key: val for key, val in vars(event).items()}
+            try:  # pragma: no cover
+                data = {key: val for key, val in vars(event).items()}
+            except TypeError:  # pragma: no cover
+                data = {}
         for key, val in data.items():
             context[f"${self.id}_{key}_{type(val)}"] = val
 
     def validate(self, x):
         if isinstance(x, (tuple, list)):
-            data = {name: x[i] for i, (name, *_) in enumerate(self._params) if i < len(x)}
+            data = {name: x[i] for i, name in enumerate(self._params) if i < len(x)}
         elif isinstance(x, dict):
             data = x
         else:
-            data = {key: val for key, val in vars(x).items()}
+            try:
+                data = {key: val for key, val in vars(x).items()}
+            except TypeError:
+                data = {}
         if not self._required_keys.issubset(data.keys()):
             return False
         for key, val in data.items():
-            if key in self._params and not generic_isinstance(val, self._params[key][0]):
+            if key in self._params and self._params[key][0] and not generic_isinstance(val, self._params[key][0]):
                 return False
         return True
 
-    def dispose(self):
+    def dispose(self):  # pragma: no cover
         _publishers.pop(self.id, None)
         annos = [[(name, ann) for ann in get_args(anno)] if origin_is_union(get_origin(anno)) else [(name, anno)] for name, anno, _ in self._params]
         for args in itertools.product(*annos):

@@ -237,7 +237,7 @@ class Subscriber(Generic[R]):
             return other == self.callable_target.__name__
         return False
 
-    def dispose(self):
+    def dispose(self):  # pragma: no cover
         if self._dispose:
             self._dispose(self)
         self._dispose = None

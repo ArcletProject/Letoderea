@@ -22,6 +22,12 @@ scope_ctx: ContextModel["Scope"] = ContextModel("scope_ctx")
 class Scope:
     global_skip_req_missing: ClassVar[bool] = False
 
+    @staticmethod
+    def of(id_: str | None = None):
+        sp = Scope(id_)
+        _scopes[sp.id] = sp
+        return sp
+
     def __init__(self, id_: str | None = None):
         self.id = id_ or token_urlsafe(16)
         self.subscribers: dict[str, tuple[Subscriber, str]] = {}

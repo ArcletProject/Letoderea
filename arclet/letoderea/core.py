@@ -101,7 +101,7 @@ async def run_handler(
     external_gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
 ):
     contexts = await generate_contexts(event, external_gather)
-    _target = target if isinstance(target, Subscriber) else  Subscriber(target, providers=get_providers(event.__class__))
+    _target = target if isinstance(target, Subscriber) else Subscriber(target, providers=get_providers(event.__class__))
     return await _target.handle(contexts)
 
 
@@ -109,13 +109,13 @@ class _EventSystem:
     ref_tasks: set[asyncio.Task] = set()
     loop: asyncio.AbstractEventLoop | None = None
 
-    @classmethod
-    def add_task(cls, coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
-        loop = cls.loop or asyncio.get_running_loop()
-        task = loop.create_task(coro)
-        cls.ref_tasks.add(task)
-        task.add_done_callback(cls.ref_tasks.discard)
-        return task
+
+def add_task(coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
+    loop = _EventSystem.loop or asyncio.get_running_loop()
+    task = loop.create_task(coro)
+    _EventSystem.ref_tasks.add(task)
+    task.add_done_callback(_EventSystem.ref_tasks.discard)
+    return task
 
 
 def set_event_loop(loop: asyncio.AbstractEventLoop):  # pragma: no cover
@@ -125,21 +125,22 @@ def set_event_loop(loop: asyncio.AbstractEventLoop):  # pragma: no cover
 @atexit.register
 def _cleanup():  # pragma: no cover
     for task in _EventSystem.ref_tasks:
-        if not task.done():
+        if not task.done() and not task.get_loop().is_closed():
             task.cancel()
     _EventSystem.ref_tasks.clear()
 
 
 def setup_fetch():
-    _EventSystem.add_task(_loop_fetch())
+    for pub in _publishers.values():
+        add_task(_loop_fetch(pub))
 
 
-async def _loop_fetch():
+async def _loop_fetch(publisher: Publisher):
     while True:
-        for publisher in _publishers.values():
-            if not (event := (await publisher.supply())):
-                continue
-            publish(event)
+        if not (event := (await publisher.supply())):  # pragma: no cover
+            await asyncio.sleep(0.05)
+            continue
+        await publish(event)
         await asyncio.sleep(0.05)
 
 
@@ -152,7 +153,7 @@ def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts 
     else:
         scopes = [sp for sp in _scopes.values() if sp.available]
         coro = dispatch(chain.from_iterable(sp.subscribers.values() for sp in scopes), event, inherit_ctx)
-    return _EventSystem.add_task(coro)
+    return add_task(coro)
 
 
 @overload
@@ -172,7 +173,7 @@ def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | N
     else:
         scopes = [sp for sp in _scopes.values() if sp.available]
         coro = dispatch(chain.from_iterable(sp.subscribers.values() for sp in scopes), event, inherit_ctx, return_result=True)
-    return _EventSystem.add_task(coro)
+    return add_task(coro)
 
 
 C = TypeVar("C")
@@ -207,8 +208,4 @@ def make_event(cls: type[C] | None = None, *, name: str | None = None):
         return wrapper(cls)
     return wrapper
 
-
-def scope(id_: str | None = None):
-    sp = Scope(id_)
-    _scopes[sp.id] = sp
-    return sp
+scope = Scope.of
