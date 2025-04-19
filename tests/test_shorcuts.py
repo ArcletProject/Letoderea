@@ -1,7 +1,7 @@
 import pytest
 from typing import Annotated
 
-from arclet.letoderea import bypass_if, enter_if, es, on
+from arclet.letoderea import bypass_if, enter_if, es, on, on_global
 from arclet.letoderea.ref import deref
 
 
@@ -41,14 +41,14 @@ async def test_annotated():
 async def test_deref():
     executed = []
 
-    @on()
+    @on_global
     @enter_if(deref(ShortcutEvent).flag)
     async def s(flag: Annotated[bool, "flag"], a: Annotated[str, deref(ShortcutEvent).msg]):
         assert flag is True
         assert a == "hello"
         executed.append(1)
 
-    @on()
+    @on_global
     @bypass_if(deref(ShortcutEvent).flag)
     async def s1(
         flag: Annotated[bool, deref(ShortcutEvent).flag],

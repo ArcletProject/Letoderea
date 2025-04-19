@@ -100,7 +100,7 @@ asyncio.run(main())
 
 ### 事件
 
-- 事件可以是任何对象，只要实现了 `gather` 异步方法, 或使用 `EventSystem.define` 并传入 `supplier` 参数
+- 事件可以是任何对象，只要实现了 `gather` 异步方法, 或使用 `define` 并传入 `supplier` 参数，或使用 `@gather` 装饰器注册了 supplier 方法
 - `gather` 方法的参数为 `Contexts` 类型，用于传递上下文信息
 - 事件可以通过 `gather` 方法将自身想要传递的信息整合进 `Contexts` 中
 - 事件可以携带 `Provider`，它们会在事件被订阅时注入到订阅者中
@@ -109,7 +109,7 @@ asyncio.run(main())
 
 ### 订阅
 
-- 通过 `Scope.register`, `EventSystem.on`, `EventSystem.use` 装饰器可以将一个函数注册为事件的订阅者
+- 通过 `Scope.register`, `on`, `use` 或 `on_global` 装饰器可以将一个函数注册为事件的订阅者
 - 上述方法会返回 `Subscriber` 类型对象，可以通过其 `.dispose` 方法取消订阅
 - 订阅者的参数可以是任何类型，事件系统会尝试从 `Contexts` 中查找对应的值并注入
 - 默认情况下 `event` 为名字的参数会被注入为事件的实例
@@ -143,19 +143,18 @@ asyncio.run(main())
 
 ### 事件发布
 
-- 一般情况下通过 `EventSystem.publish` 或 `EventSystem.post` 方法可以发布一个事件让事件系统进行处理
+- 一般情况下通过 `publish` 或 `post` 方法可以发布一个事件让事件系统进行处理
 - `publish` 会处理所有合适的订阅者，而 `post` 会在某一个订阅者返回了有效值后停止处理，并返回该值
 - `Publisher.validate` 方法用于验证该事件是否为该发布者的订阅者所关注的事件
 - `Publisher.supply` 方法用于让事件系统主动获取事件并分发给所有订阅者
-- `EventSystem.use`, `Scope.register` 可以指定 `Publisher`
-- 通过 `EventSystem.define` 可以便捷的定义发布者，并在 `.use` 等处通过定义的名字引用
+- `use`, `Scope.register` 可以指定 `Publisher`
+- 通过 `define` 可以便捷的定义发布者，并在 `.use` 等处通过定义的名字引用
 
 ### 层次
 
 - `Scope` 类负责管理订阅者与事件的交互
 - 所有的订阅者都会存储在 `Scope` 中
-- `Scope.emit` 和 `Scope.bail` 方法用于将事件直接分发给属于自身的订阅者，`emit` 与 `bail` 的区别类似于 `publish` 与 `post`
-- `EventSystem.publish` 与 `EventSystem.post` 可以指定 `Scope`
+- `publish` 与 `post` 可以指定 `Scope`
 
 ### 传播
 

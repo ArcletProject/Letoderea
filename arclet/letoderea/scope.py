@@ -132,11 +132,7 @@ def on(event: type, func: Callable[..., Any], *, priority: int = 16, providers: 
 def on(event: type, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
 
 
-@overload
-def on(*, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
-
-
-def on(event: type | None = None, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
+def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
