@@ -5,7 +5,6 @@ from arclet.letoderea import es, make_event, define
 
 
 @make_event
-@dataclass
 class TestEvent:
     index: int
 

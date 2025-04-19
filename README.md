@@ -25,7 +25,7 @@ import arclet.letoderea as le
 
 @le.make_event
 class TestEvent:
-    name: str = "Letoderea"
+    name: str
 
 
 @le.on_global
@@ -34,7 +34,7 @@ async def test_subscriber(name: str):
 
 
 async def main():
-    await le.publish(TestEvent())
+    await le.publish(TestEvent("Letoderea"))
 
 
 asyncio.run(main())
@@ -47,7 +47,7 @@ import arclet.letoderea as le
 
 @le.make_event
 class TestEvent:
-    name: str = "Letoderea"
+    name: str
 
 @le.depends()
 async def get_msg(event):
@@ -58,7 +58,7 @@ async def test_subscriber(msg: str = get_msg):
     print(msg)
 
 async def main():
-    await le.publish(TestEvent())
+    await le.publish(TestEvent("Letoderea"))
 
 asyncio.run(main())
 ```
@@ -67,16 +67,13 @@ asyncio.run(main())
 ```python
 import asyncio
 import random
-from dataclasses import dataclass
 import arclet.letoderea as le
 
 @le.make_event
-@dataclass
 class Event:
     name: str
 
 @le.make_event(name="rand")
-@dataclass
 class RandomData:
     seed: int
     

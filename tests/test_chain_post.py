@@ -1,10 +1,8 @@
 import pytest
-from dataclasses import dataclass
 import arclet.letoderea as le
 
 
 @le.make_event
-@dataclass
 class BaseEvent:
     foo: str
 
@@ -12,9 +10,10 @@ class BaseEvent:
 
 
 @le.make_event
-@dataclass
 class DeriveEvent(BaseEvent):
     bar: str
+
+    __publisher__ = "derive"
 
 
 @pytest.mark.asyncio

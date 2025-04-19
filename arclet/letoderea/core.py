@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from itertools import chain
 from typing import Any, Callable, Coroutine, Literal, TypeVar, overload
+from typing_extensions import dataclass_transform
 
 from .exceptions import STOP, BLOCK
 from .publisher import Publisher, gather, define, _publishers
@@ -180,16 +181,25 @@ C = TypeVar("C")
 
 
 @overload
-def make_event(cls: type[C]) -> type[C]: ...
+@dataclass_transform()
+def make_event(cls: None, /) -> Callable[[type[C]], type[C]]: ...
 
 
 @overload
-def make_event(*, name: str) -> Callable[[type[C]], type[C]]: ...
+@dataclass_transform()
+def make_event(cls: type[C], /) -> type[C]: ...
 
 
-def make_event(cls: type[C] | None = None, *, name: str | None = None):
+@overload
+@dataclass_transform()
+def make_event(*, name: str | None = None, init: bool = True, repr: bool = True, eq: bool = True, order: bool = False, unsafe_hash: bool = False, frozen: bool = False) -> Callable[[type[C]], type[C]]: ...
+
+
+@dataclass_transform()
+def make_event(cls: type[C] | None = None, *, name: str | None = None, **kwargs) -> Callable[[type[C]], type[C]] | type[C]:
 
     def wrapper(_cls: type[C], /):
+        _cls = dataclass(**kwargs)(_cls)
         annotation = {k: v for c in reversed(_cls.__mro__[:-1]) for k, v in getattr(c, "__annotations__", {}).items()}
 
         async def _gather(self: C, ctx: Contexts):
@@ -204,8 +214,9 @@ def make_event(cls: type[C] | None = None, *, name: str | None = None):
         _cls.__context_gather__ = pub.supplier  # type: ignore
         return _cls  # type: ignore
 
-    if cls:
-        return wrapper(cls)
-    return wrapper
+    if cls is None:
+        return wrapper
+    return wrapper(cls)
+
 
 scope = Scope.of

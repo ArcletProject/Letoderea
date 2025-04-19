@@ -1,5 +1,4 @@
 import pytest
-from dataclasses import dataclass
 import arclet.letoderea as le
 from arclet.letoderea import Contexts
 
@@ -17,7 +16,6 @@ class RandomProvider(le.Provider[str]):
 
 
 @le.make_event(name="test")
-@dataclass
 class TestEvent:
     foo: str
     bar: str

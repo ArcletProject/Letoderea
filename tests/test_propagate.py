@@ -4,12 +4,10 @@ from typing import Any
 
 import pytest
 
-from dataclasses import dataclass
 import arclet.letoderea as le
 
 
 @le.make_event
-@dataclass
 class PropagateEvent:
     foo: str
 
