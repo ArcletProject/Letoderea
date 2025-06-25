@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast, Union
 
 from .typing import Contexts, EVENT
 
@@ -16,11 +16,15 @@ class Deref:
         self.__last_key = item
         return self
 
+    def _isinstance(self, item: type):
+        self.__items[self.__last_key] = (True, lambda x: isinstance(x, item))
+        return self
+
     def __call__(self, *args, **kwargs):
         self.__items[self.__last_key] = (False, lambda x: x(*args, **kwargs))
         return self
 
-    def _not(self):
+    def __bool__(self):
         self.__items[self.__last_key] = (True, lambda x: bool(x))
         return self
 
@@ -94,6 +98,8 @@ if TYPE_CHECKING:
 
     def not_(ref: Any) -> bool: ...
 
+    def isinstance_(ref: Any, value: Union[type, tuple[type, ...]]) -> bool: ...
+
 else:
 
     def generate(ref: Deref) -> Callable[[Contexts], Any]:
@@ -121,7 +127,10 @@ else:
         return ref.__ne__(value, _is=True)
 
     def not_(ref: Deref):
-        return ref._not()
+        return ref.__bool__()
+
+    def isinstance_(ref: Deref, value: Any):
+        return ref._isinstance(value)
 
 
 def deref(proxy_type: type[T]) -> T:

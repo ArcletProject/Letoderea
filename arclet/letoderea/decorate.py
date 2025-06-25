@@ -1,10 +1,11 @@
 from typing import TYPE_CHECKING, Any, Callable, Union, overload
+from typing_extensions import Self
 from functools import wraps
 
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import STOP, Propagator, Subscriber, _compile
-from .typing import EVENT, Contexts, TTarget
+from .typing import EVENT, Contexts, TTarget, TCallable
 
 
 def bind(*args: Union[Provider, type[Provider]]):
@@ -25,60 +26,87 @@ def bind(*args: Union[Provider, type[Provider]]):
 
 
 @overload
-def propagate(*funcs: TTarget[Any], prepend: bool = False) -> Callable[[TTarget], TTarget]: ...
+def propagate(*funcs: TTarget[Any], prepend: bool = False) -> Callable[[TCallable], TCallable]: ...
 
 
 @overload
-def propagate(*funcs: Union[TTarget[Any], Propagator]) -> Callable[[TTarget], TTarget]: ...
+def propagate(*funcs: Union[TTarget[Any], Propagator]) -> Callable[[TCallable], TCallable]: ...
 
 
 def propagate(*funcs: Union[TTarget[Any], Propagator], prepend: bool = False):
-    def wrapper(target: TTarget, /) -> TTarget:
+    def wrapper(target: TCallable, /) -> TCallable:
         if isinstance(target, Subscriber):
-            target.propagates(*funcs, prepend=prepend)  # type: ignore
+            target.propagates(*funcs, prepend=prepend)
         else:
             if not hasattr(target, "__propagates__"):
                 setattr(target, "__propagates__", [(funcs, prepend)])
             else:
                 getattr(target, "__propagates__").append((funcs, prepend))
-        return target
+        return target  # type: ignore
 
     return wrapper
 
 
-if TYPE_CHECKING:
+class _Check(Propagator):
+    def __init__(self, result: bool):
+        self.predicates = []
+        self.result = result
 
-    def bypass_if(predicate: Union[Callable[..., bool], bool]) -> Callable[[TTarget], TTarget]: ...
-    def enter_if(predicate: Union[Callable[..., bool], bool]) -> Callable[[TTarget], TTarget]: ...
+    if TYPE_CHECKING:
+        def append(self, predicate: Union[Callable[..., bool], bool]) -> Self: ...
+    else:
+        def append(self, predicate: Union[Callable[..., bool], Deref]) -> Self:
+            self.predicates.append(generate(predicate) if isinstance(predicate, Deref) else predicate)
+            return self
 
-else:
+    __and__ = append
 
-    class _Check(Propagator):
-        def __init__(self, predicate: Union[Callable[..., bool], Deref], result: bool):
-            self.predicate = generate(predicate) if isinstance(predicate, Deref) else predicate
-            self.result = result
+    def checkers(self):
+        for predicate in self.predicates:
 
-        def get_checker(self):
-            @wraps(self.predicate)
-            def _(*args, **kwargs):
-                if self.predicate(*args, **kwargs) is not self.result:
+            @wraps(predicate)
+            async def _(*args, _func=predicate, **kwargs):
+                if _func(*args, **kwargs) is not self.result:
                     return STOP
 
-            return _
+            yield _
 
-        def compose(self):
-            yield self.get_checker(), True, 0
+    def compose(self):
+        for checker in self.checkers():
+            yield checker, True, 0
 
-    def bypass_if(predicate: Union[Callable[..., bool], Deref]):
-        return propagate(_Check(predicate, False))
-
-    def enter_if(predicate: Union[Callable[..., bool], Deref]):
-        return propagate(_Check(predicate, True))
+    def __call__(self, func: TCallable) -> TCallable:
+        return propagate(self)(func)
 
 
-def allow_event(*events: type):
-    return bypass_if(lambda ctx: not isinstance(ctx[EVENT], events))
+class _CheckBuilder:
+    def __init__(self, result: bool):
+        self.value = result
+
+    if TYPE_CHECKING:
+        def __call__(self, predicate: Union[Callable[..., bool], bool]) -> _Check: ...
+        def __and__(self, other: Union[Callable[..., bool], bool]) -> _Check: ...
+    else:
+        def __call__(self, predicate: Union[Callable[..., bool], Deref]) -> _Check:
+            return _Check(self.value).append(generate(predicate) if isinstance(predicate, Deref) else predicate)
+
+        def __and__(self, other: Union[Callable[..., bool], Deref]) -> _Check:
+            return _Check(self.value).append(other)
 
 
-def refuse_event(*events: type):
-    return bypass_if(lambda ctx: isinstance(ctx[EVENT], events))
+bypass_if = _CheckBuilder(False)
+enter_if = _CheckBuilder(True)
+
+
+def allow_event(*events: type):  # pragma: no cover
+    def _(ctx: Contexts) -> bool:
+        return isinstance(ctx[EVENT], events)
+
+    return enter_if(_)
+
+
+def refuse_event(*events: type):  # pragma: no cover
+    def _(ctx: Contexts) -> bool:
+        return isinstance(ctx[EVENT], events)
+
+    return bypass_if(_)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 from weakref import WeakSet
 from collections import defaultdict
-from collections.abc import Awaitable, Generator
+from collections.abc import Generator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload
@@ -148,6 +148,7 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
 
 
 R = TypeVar("R")
+T = TypeVar("T")
 SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 
@@ -165,7 +166,7 @@ _TPG = TypeVar("_TPG", bound=Propagator)
 @final
 class Subscriber(Generic[R]):
     id: str
-    callable_target: Callable[..., Awaitable[R]]
+    callable_target: Callable[..., Any]
     priority: int
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
@@ -219,8 +220,8 @@ class Subscriber(Generic[R]):
         else:
             self._callable_target = run_sync(self.callable_target)  # type: ignore
 
-    async def __call__(self, *args, **kwargs) -> R:  # pragma: no cover
-        return await self.callable_target(*args, **kwargs)
+    def __call__(self, *args, **kwargs) -> R:  # pragma: no cover
+        return self.callable_target(*args, **kwargs)
 
     @property
     def __name__(self) -> str:

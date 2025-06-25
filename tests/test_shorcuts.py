@@ -43,9 +43,8 @@ async def test_deref():
 
     @on_global
     @enter_if(deref(ShortcutEvent).flag)
-    async def s(flag: Annotated[bool, "flag"], a: Annotated[str, deref(ShortcutEvent).msg]):
+    async def s(flag: Annotated[bool, "flag"]):
         assert flag is True
-        assert a == "hello"
         executed.append(1)
 
     @on_global
@@ -60,9 +59,20 @@ async def test_deref():
         assert a == "hello"
         executed.append(1)
 
+    @on_global
+    @enter_if & deref(ShortcutEvent).flag & (deref(ShortcutEvent).msg == "world")
+    async def s2(flag: Annotated[bool, deref(ShortcutEvent).flag], a: Annotated[str, deref(ShortcutEvent).msg]):
+        assert flag is True
+        assert a == "world"
+        executed.append(1)
+
     e1 = ShortcutEvent()
     e1.flag = True
     await es.publish(e1)
     e2 = ShortcutEvent()
     await es.publish(e2)
-    assert len(executed) == 2
+    e3 = ShortcutEvent()
+    e3.flag = True
+    e3.msg = "world"
+    await es.publish(e3)
+    assert len(executed) == 4
