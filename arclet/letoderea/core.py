@@ -97,12 +97,12 @@ async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_
 
 
 async def run_handler(
-    target: Callable,
+    target: Callable[..., T],
     event: Any,
     external_gather: Callable[[Any, Contexts], Awaitable[Contexts | None]] | None = None,
 ):
     contexts = await generate_contexts(event, external_gather)
-    _target = target if isinstance(target, Subscriber) else Subscriber(target, providers=get_providers(event.__class__))
+    _target: Subscriber[T] = target if isinstance(target, Subscriber) else Subscriber(target, providers=get_providers(event.__class__))
     return await _target.handle(contexts)
 
 

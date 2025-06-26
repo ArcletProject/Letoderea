@@ -6,8 +6,9 @@ from collections import defaultdict
 from collections.abc import Generator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload
+from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload, Awaitable
 from typing_extensions import Self, get_args, get_origin
+from types import CoroutineType
 from uuid import uuid4
 
 from tarina import Empty, is_async, signatures
@@ -166,14 +167,14 @@ _TPG = TypeVar("_TPG", bound=Propagator)
 @final
 class Subscriber(Generic[R]):
     id: str
-    callable_target: Callable[..., Any]
+    callable_target: Callable[..., R]
     priority: int
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
 
     _callable_target: Callable[..., Any]
 
-    def __init__(self, callable_target: TTarget[R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False) -> None:
+    def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False) -> None:
         self.id = str(uuid4())
         self.priority = priority
         self.skip_req_missing = skip_req_missing
@@ -245,7 +246,7 @@ class Subscriber(Generic[R]):
         while self._propagates:
             self._propagates[0].dispose()
 
-    async def handle(self, context: Contexts, inner=False) -> R | ExitState:
+    async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]] | Subscriber[T], context: Contexts, inner=False) -> T | ExitState:
         if not inner:
             context["$subscriber"] = self
             if self.has_cm and "$exit_stack" not in context:
@@ -394,12 +395,12 @@ class Subscriber(Generic[R]):
         return self
 
     @overload
-    def get_propagator(self, func: type[_TPG]) -> _TPG: ...
+    def get_propagator(self, func: type[_TPG]) -> _TPG: ...  # type: ignore
 
     @overload
-    def get_propagator(self, func: TTarget[R]) -> Subscriber[R]: ...
+    def get_propagator(self, func: TTarget[T]) -> Subscriber[T]: ...
 
-    def get_propagator(self, func: TTarget[R] | type[_TPG]):
+    def get_propagator(self, func: TTarget[Any] | type[_TPG]):
         if isinstance(func, type):
             for pro in self._propagator_cache:
                 if isinstance(pro, func):

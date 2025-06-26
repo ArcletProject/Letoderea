@@ -76,7 +76,7 @@ async def generate_contexts(
 
 
 TTarget = Union[Callable[..., Awaitable[T]], Callable[..., T]]
-TCallable = TypeVar("TCallable", bound=TTarget[Any])
+TCallable = TypeVar("TCallable", bound=Callable[..., Any])
 P = ParamSpec("P")
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from contextlib import contextmanager
 from secrets import token_urlsafe
 from typing import Any, Callable, ClassVar, TypeVar, overload
@@ -64,10 +63,10 @@ class Scope:
         self.subscribers.pop(subscriber.id, None)
 
     @overload
-    def register(self, func: Callable[..., Any], event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
+    def register(self, func: Callable[..., T], event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
 
     @overload
-    def register(self, *, event: type | None = None, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
+    def register(self, *, event: type | None = None, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
 
     def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
         """注册一个订阅者"""
@@ -125,11 +124,11 @@ def configure(skip_req_missing: bool = False):
 
 
 @overload
-def on(event: type, func: Callable[..., Any], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
+def on(event: type, func: Callable[..., T], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
 
 
 @overload
-def on(event: type, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def on(event: type, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
 
 
 def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
@@ -141,11 +140,11 @@ def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, 
 
 
 @overload
-def on_global(func: Callable[..., Any], *, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
+def on_global(func: Callable[..., T], *, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
 
 
 @overload
-def on_global(*, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def on_global(*, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
 
 
 def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None):
@@ -157,11 +156,11 @@ def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: 
 
 
 @overload
-def use(pub: str | Publisher, func: Callable[..., Any], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber: ...
+def use(pub: str | Publisher, func: Callable[..., T], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
 
 
 @overload
-def use(pub: str | Publisher, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., Any]], Subscriber]: ...
+def use(pub: str | Publisher, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
 
 
 def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):

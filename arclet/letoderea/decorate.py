@@ -5,13 +5,13 @@ from functools import wraps
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import STOP, Propagator, Subscriber, _compile
-from .typing import EVENT, Contexts, TTarget, TCallable
+from .typing import EVENT, Contexts, TCallable
 
 
 def bind(*args: Union[Provider, type[Provider]]):
     providers = [p() if isinstance(p, type) else p for p in args]
 
-    def wrapper(target: TTarget) -> TTarget:
+    def wrapper(target: TCallable) -> TCallable:
         if isinstance(target, Subscriber):
             target.providers.extend(providers)
             target.params = _compile(target.callable_target, target.providers)
@@ -20,20 +20,20 @@ def bind(*args: Union[Provider, type[Provider]]):
                 setattr(target, "__providers__", providers)
             else:
                 getattr(target, "__providers__").extend(providers)
-        return target
+        return target  # type: ignore
 
     return wrapper
 
 
 @overload
-def propagate(*funcs: TTarget[Any], prepend: bool = False) -> Callable[[TCallable], TCallable]: ...
+def propagate(*funcs: Callable[..., Any], prepend: bool = False) -> Callable[[TCallable], TCallable]: ...
 
 
 @overload
-def propagate(*funcs: Union[TTarget[Any], Propagator]) -> Callable[[TCallable], TCallable]: ...
+def propagate(*funcs: Union[Callable[..., Any], Propagator]) -> Callable[[TCallable], TCallable]: ...
 
 
-def propagate(*funcs: Union[TTarget[Any], Propagator], prepend: bool = False):
+def propagate(*funcs: Union[Callable[..., Any], Propagator], prepend: bool = False):
     def wrapper(target: TCallable, /) -> TCallable:
         if isinstance(target, Subscriber):
             target.propagates(*funcs, prepend=prepend)
@@ -60,6 +60,7 @@ class _Check(Propagator):
             return self
 
     __and__ = append
+    __or__ = append
 
     def checkers(self):
         for predicate in self.predicates:
@@ -81,17 +82,16 @@ class _Check(Propagator):
 
 class _CheckBuilder:
     def __init__(self, result: bool):
-        self.value = result
+        self.result = result
 
     if TYPE_CHECKING:
         def __call__(self, predicate: Union[Callable[..., bool], bool]) -> _Check: ...
-        def __and__(self, other: Union[Callable[..., bool], bool]) -> _Check: ...
     else:
         def __call__(self, predicate: Union[Callable[..., bool], Deref]) -> _Check:
-            return _Check(self.value).append(generate(predicate) if isinstance(predicate, Deref) else predicate)
+            return _Check(self.result).append(generate(predicate) if isinstance(predicate, Deref) else predicate)
 
-        def __and__(self, other: Union[Callable[..., bool], Deref]) -> _Check:
-            return _Check(self.value).append(other)
+    __and__ = __call__
+    __or__ = __call__
 
 
 bypass_if = _CheckBuilder(False)

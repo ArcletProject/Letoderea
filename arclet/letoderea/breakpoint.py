@@ -15,7 +15,7 @@ D = TypeVar("D")
 D1 = TypeVar("D1")
 
 
-def new_target(event_t: type, condition: "StepOut", fut: Future):
+def new_target(event_t: type, condition: "StepOut[R1]", fut: Future):
     sub = Subscriber(
         condition.handler,
         providers=[
@@ -61,13 +61,13 @@ class _step_iter(Generic[R, D]):
 class StepOut(Generic[R]):
     target: set[type]
     providers: list[Union[Provider, type[Provider]]]
-    handler: TTarget[R]
+    handler: Callable[..., R]
     priority: int
 
     def __init__(
         self,
         events: list[type],
-        handler: Optional[Union[Callable[..., Awaitable[Optional[R]]], Callable[..., Optional[R]]]] = None,
+        handler: Optional[Callable[..., Optional[R]]] = None,
         providers: Optional[list[Union[Provider, type[Provider]]]] = None,
         priority: int = 15,
         block: bool = False,

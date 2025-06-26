@@ -96,6 +96,37 @@ async def main():
 asyncio.run(main())
 ```
 
+### 过滤
+```python
+import asyncio
+import arclet.letoderea as le
+
+
+@le.make_event
+class Event:
+    name: str
+    flag: bool = False
+
+
+@le.on_global
+@le.enter_if(le.deref(Event).name == "Letoderea")
+async def sub_if_letoderea():
+    ...
+
+@le.on_global
+@le.enter_if & le.deref(Event).flag & (le.deref(Event).name != "Letoderea")
+async def sub_if_not_letoderea():
+    ...
+
+
+async def main():
+    await le.publish(Event("Letoderea"))
+    await le.publish(Event("OtherEvent", True))
+
+asyncio.run(main())
+```
+
+
 ## 说明
 
 ### 事件

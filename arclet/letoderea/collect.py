@@ -45,6 +45,7 @@ class CollectedPublisher(Publisher[T]):
                 data = {}
         for key, val in data.items():
             context[f"${self.id}_{key}_{type(val)}"] = val
+        return context
 
     def validate(self, x):
         if isinstance(x, (tuple, list)):
