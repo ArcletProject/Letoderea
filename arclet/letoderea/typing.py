@@ -64,7 +64,7 @@ EVENT: CtxItem[Any] = cast(CtxItem, "$event")
 async def generate_contexts(
     event: T, supplier:  Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None, inherit_ctx: Contexts | None = None
 ) -> Contexts:
-    contexts: Contexts = {EVENT: event}  # type: ignore
+    contexts: Contexts = {EVENT: event, "$depend_cache": {}}  # type: ignore
     if supplier:
         await supplier(event, contexts)
     elif (_gather := getattr(event, "__context_gather__", getattr(event, "gather", None))) is not None:

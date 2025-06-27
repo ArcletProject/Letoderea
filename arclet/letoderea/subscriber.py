@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import asyncio
 from weakref import WeakSet
 from collections import defaultdict
 from collections.abc import Generator
@@ -58,21 +59,32 @@ class Depend:
         self.target = callable_func
         self.cache = cache
 
-    def init_subscriber(self, provider: list[Provider | ProviderFactory]):
-        self.sub = Subscriber(self.target, providers=provider)
-        return self
+    def fork(self, provider: list[Provider | ProviderFactory]):
+        new = Depend(self.target, self.cache)
+        new.sub = Subscriber(self.target, providers=provider)
+        return new
 
     async def __call__(self, context: Contexts):
-        if not self.cache:
-            return await self.sub.handle(context.copy(), inner=True)
         if "$depend_cache" not in context:
             context["$depend_cache"] = {}
-        if self.target in context["$depend_cache"]:
-            return context["$depend_cache"][self.target]
-        dep_res = await self.sub.handle(context.copy(), inner=True)
-        if dep_res is not STOP and dep_res is not BLOCK:
-            context["$depend_cache"][self.target] = dep_res
-        return dep_res
+        cache = context["$depend_cache"]
+        if self.cache and self.target in cache:
+            fut = cache[self.target]
+            await fut
+            return fut.result()
+        cache[self.target] = fut = asyncio.Future()
+        try:
+            res = await self.sub.handle(context.copy(), inner=True)
+        except Exception as e:  # pragma: no cover
+            fut.set_exception(e)
+            raise
+        except BaseException as e:  # pragma: no cover
+            fut.set_exception(e)
+            cache.pop(self.target, None)
+            raise
+        else:
+            fut.set_result(res)
+            return res
 
 
 def Depends(target: TTarget[Any], cache: bool = False) -> Any:
@@ -131,6 +143,9 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
         if get_origin(anno) is Annotated:
             org, *meta = get_args(anno)
             for m in reversed(meta):
+                if isinstance(m, Depend):
+                    param.depend = m.fork(providers)
+                    break
                 if isinstance(m, Provider):
                     param.providers.insert(0, m)
                 elif isinstance(m, str):
@@ -142,8 +157,7 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
         if isinstance(default, Provider):
             param.providers.insert(0, default)
         if isinstance(default, Depend):
-            default.init_subscriber(providers)
-            param.depend = default
+            param.depend = default.fork(providers)
         res.append(param)
     return res
 
@@ -251,6 +265,7 @@ class Subscriber(Generic[R]):
             context["$subscriber"] = self
             if self.has_cm and "$exit_stack" not in context:
                 context["$exit_stack"] = AsyncExitStack()
+                context["$exit_stack_once"] = ...
         try:
             if self._cursor:
                 _res = await self._run_propagate(context, self._propagates[: self._cursor])
@@ -288,7 +303,7 @@ class Subscriber(Generic[R]):
             raise ExceptionHandler.call(e, self.callable_target, context, inner) from e
         finally:
             if not inner:
-                if self.has_cm and "$exit_stack" in context:
+                if self.has_cm and "$exit_stack_once" in context:
                     await context["$exit_stack"].aclose()
                     context.pop("$exit_stack")
                 context.clear()
