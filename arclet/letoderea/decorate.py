@@ -1,11 +1,14 @@
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Union, overload
+
+from tarina import is_coroutinefunction
 from typing_extensions import Self
 from functools import wraps
 
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import STOP, Propagator, Subscriber, _compile
-from .typing import EVENT, Contexts, TCallable
+from .typing import EVENT, Contexts, TCallable, run_sync
 
 
 def bind(*args: Union[Provider, type[Provider]]):
@@ -53,10 +56,13 @@ class _Check(Propagator):
         self.result = result
 
     if TYPE_CHECKING:
-        def append(self, predicate: Union[Callable[..., bool], bool]) -> Self: ...
+        def append(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], bool]) -> Self: ...
     else:
-        def append(self, predicate: Union[Callable[..., bool], Deref]) -> Self:
-            self.predicates.append(generate(predicate) if isinstance(predicate, Deref) else predicate)
+        def append(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> Self:
+            if isinstance(predicate, _Check):
+                self.predicates.extend(predicate.predicates)
+            else:
+                self.predicates.append(generate(predicate) if isinstance(predicate, Deref) else predicate)
             return self
 
     __and__ = append
@@ -64,10 +70,11 @@ class _Check(Propagator):
 
     def checkers(self):
         for predicate in self.predicates:
+            func = predicate if is_coroutinefunction(predicate) else run_sync(predicate)
 
             @wraps(predicate)
-            async def _(*args, _func=predicate, **kwargs):
-                if _func(*args, **kwargs) is not self.result:
+            async def _(*args, _func=func, **kwargs):
+                if await _func(*args, **kwargs) is not self.result:
                     return STOP
 
             yield _
@@ -85,9 +92,9 @@ class _CheckBuilder:
         self.result = result
 
     if TYPE_CHECKING:
-        def __call__(self, predicate: Union[Callable[..., bool], bool]) -> _Check: ...
+        def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], bool]) -> _Check: ...
     else:
-        def __call__(self, predicate: Union[Callable[..., bool], Deref]) -> _Check:
+        def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> _Check:
             return _Check(self.result).append(generate(predicate) if isinstance(predicate, Deref) else predicate)
 
     __and__ = __call__

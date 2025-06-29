@@ -1,13 +1,14 @@
 import asyncio
 from asyncio import Future
 from collections.abc import Awaitable
-from typing import Callable, Generic, Optional, TypeVar, Union, overload
+from typing import Callable, Generic, Optional, TypeVar, Union, overload, Any
+from types import CoroutineType
 
 from .exceptions import BLOCK
 from .provider import Provider, get_providers, global_providers
 from .subscriber import Subscriber
 from .scope import on
-from .typing import TCallable, TTarget, generate_contexts
+from .typing import TCallable, generate_contexts
 
 R = TypeVar("R")
 R1 = TypeVar("R1")
@@ -49,13 +50,13 @@ class _step_iter(Generic[R, D]):
         return self
 
     @overload
-    def __anext__(self: "_step_iter[R1, None]") -> Awaitable[Optional[R1]]: ...
+    def __anext__(self: "_step_iter[CoroutineType[Any, Any, Optional[R1]], None] | _step_iter[Awaitable[Optional[R1]], None] | _step_iter[Optional[R1], None]") -> Awaitable[Optional[R1]]: ...
 
     @overload
-    def __anext__(self: "_step_iter[R1, D1]") -> Awaitable[Union[R1, D1]]: ...
+    def __anext__(self: "_step_iter[CoroutineType[Any, Any, Optional[R1]], D1] | _step_iter[Awaitable[Optional[R1]], D1] | _step_iter[Optional[R1], D1]") -> Awaitable[Union[R1, D1]]: ...
 
-    def __anext__(self):  # type: ignore
-        return self.step.wait(default=self.default, timeout=self.timeout)
+    def __anext__(self):
+        return self.step.wait(default=self.default, timeout=self.timeout) # type: ignore
 
 
 class StepOut(Generic[R]):
@@ -67,7 +68,7 @@ class StepOut(Generic[R]):
     def __init__(
         self,
         events: list[type],
-        handler: Optional[Callable[..., Optional[R]]] = None,
+        handler: Optional[Callable[...,  R]] = None,
         providers: Optional[list[Union[Provider, type[Provider]]]] = None,
         priority: int = 15,
         block: bool = False,
@@ -100,17 +101,17 @@ class StepOut(Generic[R]):
         return _step_iter(self, default, timeout)  # type: ignore
 
     @overload
-    async def wait(self, *, timeout: float = 120) -> Optional[R]: ...
+    async def wait(self: "StepOut[CoroutineType[Any, Any, Optional[R1]]] | StepOut[Awaitable[Optional[R1]]] | StepOut[Optional[R1]]", *, timeout: float = 120) -> Optional[R1]: ...
 
     @overload
-    async def wait(self, *, default: Union[R, D], timeout: float = 120) -> Union[R, D]: ...
+    async def wait(self: "StepOut[CoroutineType[Any, Any, Optional[R1]]] | StepOut[Awaitable[Optional[R1]]] | StepOut[Optional[R1]]", *, default: Union[R1, D], timeout: float = 120) -> Union[R1, D]: ...
 
     async def wait(
         self,
         *,
         timeout: float = 0.0,
-        default: Union[R, D, None] = None,
-    ) -> Union[R, D, None]:
+        default: Any = None,
+    ):
         fut = asyncio.get_running_loop().create_future()
         subscribers = []
 
