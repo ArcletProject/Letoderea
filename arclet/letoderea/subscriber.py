@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Generator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generic, TypeVar, cast, final, overload, Awaitable
+from typing import Annotated, Any, Callable, Generator, AsyncGenerator, Generic, TypeVar, cast, final, overload, Awaitable
 from typing_extensions import Self, get_args, get_origin
 from types import CoroutineType
 from uuid import uuid4
@@ -207,31 +207,31 @@ class Subscriber(Generic[R]):
         self.callable_target = callable_target  # type: ignore
         self.has_cm = False
         self.is_cm = False
+        self.is_agen = False
         self._recompile()
 
         self._dispose = dispose
         self.once = once
 
     def _recompile(self):  # pragma: no cover
+        self.has_cm = False
+        self.is_cm = False
+        self.is_agen = False
         self.params = _compile(self.callable_target, self.providers)
-        if is_gen_callable(self.callable_target) or is_async_gen_callable(self.callable_target):
-            if is_gen_callable(self.callable_target):
-                self._callable_target = asynccontextmanager(run_sync_generator(self.callable_target))
-            else:
-                self._callable_target = asynccontextmanager(self.callable_target)  # type: ignore
-            self.has_cm = True
+        if hasattr(self.callable_target, "__code__") and self.callable_target.__code__.co_name == "helper" and self.callable_target.__code__.co_filename.endswith("contextlib.py"):
             self.is_cm = True
-        elif (wrapped := getattr(self.callable_target, "__wrapped__", None)) and (
-                is_gen_callable(wrapped) or is_async_gen_callable(wrapped)
-        ):
+            self.has_cm = True
+            wrapped = getattr(self.callable_target, "__wrapped__")
             if is_gen_callable(wrapped):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
             else:
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
-            self.has_cm = True
-            self.is_cm = True
-        elif is_async(self.callable_target):
+        elif is_async_gen_callable(self.callable_target) or is_async(self.callable_target):
             self._callable_target = self.callable_target  # type: ignore
+            self.is_agen = True
+        elif is_gen_callable(self.callable_target):
+            self._callable_target = run_sync_generator(self.callable_target)
+            self.is_agen = True
         else:
             self._callable_target = run_sync(self.callable_target)  # type: ignore
 
@@ -260,7 +260,13 @@ class Subscriber(Generic[R]):
         while self._propagates:
             self._propagates[0].dispose()
 
-    async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]] | Subscriber[T], context: Contexts, inner=False) -> T | ExitState:
+    @overload
+    async def handle(self: Subscriber[Generator[T]] | Subscriber[AsyncGenerator[T]], context: Contexts, inner: bool = False) -> list[T] | ExitState: ...
+
+    @overload
+    async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]] | Subscriber[T], context: Contexts, inner: bool = False) -> T | ExitState: ...
+
+    async def handle(self, context: Contexts, inner=False):
         if not inner:
             context["$subscriber"] = self
             if self.has_cm and "$exit_stack" not in context:
@@ -283,6 +289,8 @@ class Subscriber(Generic[R]):
             if self.is_cm:
                 stack: AsyncExitStack = context["$exit_stack"]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
+            elif self.is_agen:
+                result = [x async for x in self._callable_target(**arguments)]
             else:
                 result = await self._callable_target(**arguments)
             if self._propagates:

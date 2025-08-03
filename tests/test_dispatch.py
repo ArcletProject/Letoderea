@@ -164,3 +164,39 @@ async def test_exit_state():
 
     await le.publish(TestEvent("f", "b"))
     assert executed == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_generator():
+    executed = []
+
+    @le.on(TestEvent)
+    def s_1(event: TestEvent):
+        executed.append(1)
+        yield event.foo
+        executed.append(2)
+        yield event.bar
+        executed.append(3)
+
+    ans = await le.post(TestEvent("f", "b"))
+    assert executed == [1, 2, 3]
+    assert ans
+    assert ans.value == ["f", "b"]
+
+
+@pytest.mark.asyncio
+async def test_async_generator():
+    executed = []
+
+    @le.on(TestEvent)
+    async def s_2(event: TestEvent):
+        executed.append(1)
+        yield event.foo
+        executed.append(2)
+        yield event.bar
+        executed.append(3)
+
+    ans = await le.post(TestEvent("f", "b"))
+    assert executed == [1, 2, 3]
+    assert ans
+    assert ans.value == ["f", "b"]

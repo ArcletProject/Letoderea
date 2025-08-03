@@ -1,9 +1,9 @@
-from datetime import datetime
 import asyncio
+from contextlib import contextmanager, asynccontextmanager
+from datetime import datetime
 from typing import Any
 
 import pytest
-
 import arclet.letoderea as le
 
 
@@ -65,6 +65,7 @@ async def test_context_manager():
         executed.append(2)
 
     @s.propagate(prepend=True)
+    @asynccontextmanager
     async def _(foo: str):
         assert foo == "1"
         executed.append(1)
@@ -72,6 +73,7 @@ async def test_context_manager():
         executed.append(3)
 
     @s.propagate(prepend=True)
+    @contextmanager
     def _(foo: str):
         assert foo == "1"
         executed.append(1)
