@@ -5,6 +5,7 @@ import atexit
 from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from itertools import chain
+from types import AsyncGeneratorType
 from typing import Any, Callable, Coroutine, Literal, TypeVar, overload
 from typing_extensions import dataclass_transform
 
@@ -87,6 +88,25 @@ async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_
                     return
                 await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
                 continue
+            if isinstance(result, AsyncGeneratorType):
+                ans = []
+                async for res in result:
+                    if res in (None, STOP):
+                        continue
+                    if res is BLOCK:
+                        return
+                    if isinstance(res, BaseException):
+                        await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], res))
+                        continue
+                    if res.__class__ is Force:
+                        ans.append(Result(res.value))  # type: ignore
+                    elif isinstance(res, Result):
+                        ans.append(Result.check_result(event, res))
+                    else:
+                        ans.append(Result.check_result(event, Result(res)))
+                if not return_result:
+                    continue
+                return Result([r.value for r in ans if r is not None])
             if not return_result:
                 continue
             if result.__class__ is Force:

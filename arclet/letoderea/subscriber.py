@@ -260,7 +260,7 @@ class Subscriber(Generic[R]):
             self._propagates[0].dispose()
 
     @overload
-    async def handle(self: Subscriber[AsyncGenerator[T]] | Subscriber[Generator[T]], context: Contexts, inner: bool = False) -> list[T] | ExitState: ...
+    async def handle(self: Subscriber[Generator[T, None, None]], context: Contexts, inner: bool = False) -> AsyncGenerator[T] | ExitState: ...
 
     @overload
     async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]] | Subscriber[T], context: Contexts, inner: bool = False) -> T | ExitState: ...
@@ -289,7 +289,7 @@ class Subscriber(Generic[R]):
                 stack: AsyncExitStack = context["$exit_stack"]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
             elif self.is_agen:
-                result = [x async for x in self._callable_target(**arguments)]
+                result = self._callable_target(**arguments)
             else:
                 result = await self._callable_target(**arguments)
             if self._propagates:
