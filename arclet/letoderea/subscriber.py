@@ -4,7 +4,6 @@ import abc
 import asyncio
 from weakref import WeakSet
 from collections import defaultdict
-from collections.abc import Generator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Generator, AsyncGenerator, Generic, TypeVar, cast, final, overload, Awaitable
@@ -226,14 +225,14 @@ class Subscriber(Generic[R]):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
             else:
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
-        elif is_async_gen_callable(self.callable_target) or is_async(self.callable_target):
+        elif is_async_gen_callable(self.callable_target):
             self._callable_target = self.callable_target  # type: ignore
             self.is_agen = True
         elif is_gen_callable(self.callable_target):
             self._callable_target = run_sync_generator(self.callable_target)
             self.is_agen = True
         else:
-            self._callable_target = run_sync(self.callable_target)  # type: ignore
+            self._callable_target = self.callable_target if is_async(self.callable_target) else run_sync(self.callable_target)  # noqa: E501 # type: ignore
 
     def __call__(self, *args, **kwargs) -> R:  # pragma: no cover
         return self.callable_target(*args, **kwargs)
@@ -261,7 +260,7 @@ class Subscriber(Generic[R]):
             self._propagates[0].dispose()
 
     @overload
-    async def handle(self: Subscriber[Generator[T]] | Subscriber[AsyncGenerator[T]], context: Contexts, inner: bool = False) -> list[T] | ExitState: ...
+    async def handle(self: Subscriber[AsyncGenerator[T]] | Subscriber[Generator[T]], context: Contexts, inner: bool = False) -> list[T] | ExitState: ...
 
     @overload
     async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]] | Subscriber[T], context: Contexts, inner: bool = False) -> T | ExitState: ...
