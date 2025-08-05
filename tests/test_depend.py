@@ -1,6 +1,7 @@
 import pytest
 import random
 import arclet.letoderea as le
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 
@@ -49,3 +50,32 @@ async def test_depend():
 
     await le.publish(TestDependEvent("1"))
     assert len(executed) == 4
+
+
+@pytest.mark.asyncio
+async def test_context_depend():
+
+    executed = []
+
+    @asynccontextmanager
+    async def _mgr():
+        executed.append(1)
+        try:
+            yield 2
+        finally:
+            executed.append(3)
+
+    async def dep2(foo: str, ctx: le.Contexts):
+        stack = ctx[le.STACK]
+        ans = await stack.enter_async_context(_mgr())
+        assert ans == 2
+        return f"{foo}+{ans}"
+
+    @le.on(TestDependEvent)
+    async def s4(a=le.Depends(dep2)):
+        assert a == "1+2"
+        executed.append(2)
+
+    await le.publish(TestDependEvent("1"))
+    assert len(executed) == 3
+    assert executed == [1, 2, 3]

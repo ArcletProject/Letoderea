@@ -32,6 +32,8 @@ from .scope import on_global as on_global
 from .subscriber import defer as defer
 from .subscriber import params as params
 from .subscriber import SUBSCRIBER as SUBSCRIBER
+from .subscriber import RESULT as RESULT
+from .subscriber import STACK as STACK
 from .subscriber import Depend as Depend
 from .subscriber import Depends as Depends
 from .subscriber import Propagator as Propagator

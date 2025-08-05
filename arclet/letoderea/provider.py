@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from abc import ABCMeta, abstractmethod
+from contextlib import AsyncExitStack
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -124,5 +125,13 @@ class ContextProvider(Provider[Contexts]):
         return context
 
 
-global_providers.extend([EventProvider(), ContextProvider()])
+class AsyncExitStackProvider(Provider[AsyncExitStack]):
+    def validate(self, param: Param):
+        return param.annotation is AsyncExitStack
+
+    async def __call__(self, context: Contexts):
+        return context.get("$exit_stack")
+
+
+global_providers.extend([EventProvider(), ContextProvider(), AsyncExitStackProvider()])
 TProviders: TypeAlias = "Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]]"

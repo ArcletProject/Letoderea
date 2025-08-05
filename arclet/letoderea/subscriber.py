@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import sys
 from weakref import WeakSet
 from collections import defaultdict
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -38,6 +39,8 @@ from .typing import (
 
 
 RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
+STACK: CtxItem[AsyncExitStack] = cast(CtxItem, "$exit_stack")
+SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 
 class ResultProvider(Provider[Any]):
@@ -163,7 +166,6 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
 
 R = TypeVar("R")
 T = TypeVar("T")
-SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 
 
 class Propagator(metaclass=abc.ABCMeta):
@@ -204,7 +206,6 @@ class Subscriber(Generic[R]):
             for slot in getattr(callable_target, "__propagates__", []):
                 self.propagates(*slot[0], prepend=slot[1])
         self.callable_target = callable_target  # type: ignore
-        self.has_cm = False
         self.is_cm = False
         self.is_agen = False
         self._recompile()
@@ -213,13 +214,11 @@ class Subscriber(Generic[R]):
         self.once = once
 
     def _recompile(self):  # pragma: no cover
-        self.has_cm = False
         self.is_cm = False
         self.is_agen = False
         self.params = _compile(self.callable_target, self.providers)
         if hasattr(self.callable_target, "__code__") and self.callable_target.__code__.co_name == "helper" and self.callable_target.__code__.co_filename.endswith("contextlib.py"):
             self.is_cm = True
-            self.has_cm = True
             wrapped = getattr(self.callable_target, "__wrapped__")
             if is_gen_callable(wrapped):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
@@ -268,9 +267,7 @@ class Subscriber(Generic[R]):
     async def handle(self, context: Contexts, inner=False):
         if not inner:
             context["$subscriber"] = self
-            if self.has_cm and "$exit_stack" not in context:
-                context["$exit_stack"] = AsyncExitStack()
-                context["$exit_stack_once"] = ...
+            context["$exit_stack"] = AsyncExitStack()
         try:
             if self._cursor:
                 _res = await self._run_propagate(context, self._propagates[: self._cursor])
@@ -310,9 +307,8 @@ class Subscriber(Generic[R]):
             raise ExceptionHandler.call(e, self.callable_target, context, inner) from e
         finally:
             if not inner:
-                if self.has_cm and "$exit_stack_once" in context:
-                    await context["$exit_stack"].aclose()
-                    context.pop("$exit_stack")
+                if "$exit_stack" in context:
+                    await context[STACK].__aexit__(*sys.exc_info())
                 context.clear()
             if self.once:
                 self.dispose()
@@ -402,8 +398,6 @@ class Subscriber(Generic[R]):
                     once=once,
                 )
                 self._propagates.append(sub)
-            if sub.has_cm:
-                self.has_cm = True
             return sub.dispose
 
         if func:
