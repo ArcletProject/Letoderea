@@ -45,15 +45,6 @@ SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
 current_subscriber: ContextVar["Subscriber"] = ContextVar("_current_subscriber")
 
 
-@contextmanager
-def cvar(ctx: ContextVar[T], val: T):
-    token = ctx.set(val)
-    try:
-        yield val
-    finally:
-        ctx.reset(token)
-
-
 class ResultProvider(Provider[Any]):
     def validate(self, param: Param):
         return param.name == "result"
@@ -274,6 +265,7 @@ class Subscriber(Generic[R]):
 
     async def handle(self, context: Contexts, inner=False):
         if not inner:
+            token = current_subscriber.set(self)
             context["$subscriber"] = self
             context["$exit_stack"] = AsyncExitStack()
         try:
@@ -290,14 +282,13 @@ class Subscriber(Generic[R]):
                     arguments[param.name] = dep_res
                 else:
                     arguments[param.name] = await param.solve(context)
-            with cvar(current_subscriber, context["$subscriber"]):
-                if self.is_cm:
-                    stack: AsyncExitStack = context["$exit_stack"]
-                    result = await stack.enter_async_context(self._callable_target(**arguments))
-                elif self.is_agen:
-                    result = self._callable_target(**arguments)
-                else:
-                    result = await self._callable_target(**arguments)
+            if self.is_cm:
+                stack: AsyncExitStack = context["$exit_stack"]
+                result = await stack.enter_async_context(self._callable_target(**arguments))
+            elif self.is_agen:
+                result = self._callable_target(**arguments)
+            else:
+                result = await self._callable_target(**arguments)
             if self._propagates:
                 context["$result"] = result
                 result = (await self._run_propagate(context, self._propagates[self._cursor :])) or result
@@ -316,6 +307,7 @@ class Subscriber(Generic[R]):
             raise ExceptionHandler.call(e, self.callable_target, context, inner) from e
         finally:
             if not inner:
+                current_subscriber.reset(token)  # type: ignore
                 if "$exit_stack" in context:
                     await context[STACK].__aexit__(*sys.exc_info())
                 context.clear()

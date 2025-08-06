@@ -10,7 +10,7 @@ from typing import Any, Callable, ClassVar, Generic, NamedTuple, Sequence, TypeV
 from typing_extensions import TypeAlias
 
 from tarina import generic_issubclass, run_always_await
-from tarina.generic import get_origin
+from tarina.generic import get_origin, is_optional, origin_is_union
 
 from .typing import Contexts, EVENT
 
@@ -38,10 +38,12 @@ class Provider(Generic[T], metaclass=ABCMeta):
 
     def validate(self, param: Param):
         anno = get_origin(param.annotation)
-        return (
-            self.origin == param.annotation
-            or (isinstance(anno, type) and anno is not bool and generic_issubclass(anno, self.origin))
-            or (not (self.origin is bool and generic_issubclass(anno, int)) and generic_issubclass(self.origin, param.annotation))
+        if self.origin is bool:
+            return generic_issubclass(anno, bool)
+        return self.origin == param.annotation or (
+            generic_issubclass(param.annotation, self.origin)
+            or is_optional(param.annotation, self.origin)
+            or (origin_is_union(anno) and generic_issubclass(self.origin, param.annotation))
         )
 
     @abstractmethod
@@ -110,7 +112,7 @@ class EventProvider(Provider[Any]):
         if param.name == "event":
             return True
         if self.EVENT_CLASS:
-            return isinstance(param.annotation, type) and issubclass(param.annotation, self.EVENT_CLASS)
+            return generic_issubclass(param.annotation, self.EVENT_CLASS) or is_optional(param.annotation, self.EVENT_CLASS)
         return False
 
     async def __call__(self, context: Contexts):
@@ -119,7 +121,7 @@ class EventProvider(Provider[Any]):
 
 class ContextProvider(Provider[Contexts]):
     def validate(self, param: Param):
-        return param.annotation is Contexts
+        return param.annotation is Contexts or is_optional(param.annotation, Contexts)
 
     async def __call__(self, context: Contexts) -> Contexts:
         return context
@@ -127,7 +129,7 @@ class ContextProvider(Provider[Contexts]):
 
 class AsyncExitStackProvider(Provider[AsyncExitStack]):
     def validate(self, param: Param):
-        return param.annotation is AsyncExitStack
+        return param.annotation is AsyncExitStack or is_optional(param.annotation, AsyncExitStack)
 
     async def __call__(self, context: Contexts):
         return context.get("$exit_stack")
