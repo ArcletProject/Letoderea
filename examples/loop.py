@@ -12,11 +12,11 @@ class TestEvent:
 
 
 @es.on(TestEvent)
-async def test_subscriber1(name: str):
+async def subscriber1(name: str):
     print(name)
 
 
-es.loop = asyncio.new_event_loop()
+es.set_event_loop(loop := asyncio.new_event_loop())
 es.publish(TestEvent("hello world"))
 es.publish(TestEvent("world hello"))
 
@@ -25,4 +25,4 @@ async def main():
     await asyncio.sleep(1)
 
 
-es.loop.run_until_complete(main())
+loop.run_until_complete(main())

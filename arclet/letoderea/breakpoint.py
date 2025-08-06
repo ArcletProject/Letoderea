@@ -38,7 +38,7 @@ class StepOut(Generic[R]):
 
     def __init__(
         self,
-        handler: Subscriber[R] | Callable[[], Subscriber[R]],
+        handler: Union[Subscriber[R], Callable[[], Subscriber[R]]],
         priority: int = 15,
         block: bool = False,
     ):
@@ -128,7 +128,7 @@ def step_out(event: type, *, providers: Optional[TProviders] = None, priority: i
 def step_out(*, priority: int = 15, block: bool = False) -> Callable[[Subscriber[R]], StepOut[R]]: ...
 
 
-def step_out(event: type | None = None, handler: Optional[Callable[...,  R]] = None, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False):
+def step_out(event: Union[type, None] = None, handler: Optional[Callable[...,  R]] = None, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False):
 
     if event is None:
         def decorator1(func: Subscriber[R], /) -> StepOut[R]:
