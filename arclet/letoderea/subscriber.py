@@ -187,7 +187,7 @@ class Subscriber(Generic[R]):
 
     _callable_target: Callable[..., Any]
 
-    def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False) -> None:
+    def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False, _listen: Any = None) -> None:
         self.id = str(uuid4())
         self.priority = priority
         self.skip_req_missing = skip_req_missing
@@ -197,6 +197,7 @@ class Subscriber(Generic[R]):
         self._propagates: list[Subscriber] = []
         self._propagator_cache: WeakSet[Propagator] = WeakSet()
         self._cursor = 0
+        self._listen = _listen
 
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
@@ -383,6 +384,7 @@ class Subscriber(Generic[R]):
                     providers=_providers,
                     dispose=_dispose,
                     once=once,
+                    _listen=self._listen,
                 )
                 self._propagates.insert(self._cursor, sub)
                 self._cursor += 1
@@ -394,6 +396,7 @@ class Subscriber(Generic[R]):
                     providers=_providers,
                     dispose=lambda x: self._propagates.remove(x),
                     once=once,
+                    _listen=self._listen,
                 )
                 self._propagates.append(sub)
             return sub.dispose

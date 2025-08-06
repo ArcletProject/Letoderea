@@ -1,43 +1,18 @@
 import asyncio
-from asyncio import Future
 from collections.abc import Awaitable
 from typing import Callable, Generic, Optional, TypeVar, Union, overload, Any
 from types import CoroutineType
 
 from .exceptions import BLOCK
-from .provider import Provider, get_providers, global_providers
-from .subscriber import Subscriber
+from .provider import TProviders
+from .subscriber import Subscriber, RESULT
 from .scope import on
-from .typing import TCallable, generate_contexts
+from .typing import Contexts
 
 R = TypeVar("R")
 R1 = TypeVar("R1")
 D = TypeVar("D")
 D1 = TypeVar("D1")
-
-
-def new_target(event_t: type, condition: "StepOut[R1]", fut: Future):
-    sub = Subscriber(
-        condition.handler,
-        providers=[
-            *global_providers,
-            *get_providers(event_t),  # type: ignore
-            *condition.providers,
-        ],
-        priority=condition.priority,
-    )
-
-    async def inner(event: event_t):  # type: ignore
-        if fut.done():
-            return False
-        ctx = await generate_contexts(event)
-        result = await sub.handle(ctx)
-        if result is not None and not fut.done():
-            fut.set_result(result)
-            if condition.block:
-                return BLOCK
-
-    return inner
 
 
 class _step_iter(Generic[R, D]):
@@ -50,38 +25,34 @@ class _step_iter(Generic[R, D]):
         return self
 
     @overload
-    def __anext__(self: "_step_iter[CoroutineType[Any, Any, Optional[R1]], None] | _step_iter[Awaitable[Optional[R1]], None] | _step_iter[Optional[R1], None]") -> Awaitable[Optional[R1]]: ...
+    def __anext__(self: "_step_iter[CoroutineType[Any, Any, R1], None] | _step_iter[Awaitable[R1], None] | _step_iter[R1, None]") -> Awaitable[Optional[R1]]: ...
 
     @overload
-    def __anext__(self: "_step_iter[CoroutineType[Any, Any, Optional[R1]], D1] | _step_iter[Awaitable[Optional[R1]], D1] | _step_iter[Optional[R1], D1]") -> Awaitable[Union[R1, D1]]: ...
+    def __anext__(self: "_step_iter[CoroutineType[Any, Any, R1], D1] | _step_iter[Awaitable[R1], D1] | _step_iter[R1, D1]") -> Awaitable[Union[R1, D1]]: ...
 
-    def __anext__(self):
-        return self.step.wait(default=self.default, timeout=self.timeout) # type: ignore
+    def __anext__(self):  # type: ignore
+        return self.step.wait(default=self.default, timeout=self.timeout)
 
 
 class StepOut(Generic[R]):
-    target: set[type]
-    providers: list[Union[Provider, type[Provider]]]
-    handler: Callable[..., R]
-    priority: int
 
     def __init__(
         self,
-        events: list[type],
-        handler: Optional[Callable[...,  R]] = None,
-        providers: Optional[list[Union[Provider, type[Provider]]]] = None,
+        handler: Subscriber[R] | Callable[[], Subscriber[R]],
         priority: int = 15,
         block: bool = False,
     ):
-        self.target = set(events)
-        self.providers = providers or []
+        self.handler = handler
         self.priority = priority
-        self.handler = handler or (lambda: None)  # type: ignore
         self.block = block
+        self.waiting = False
+        self._dispose = False
 
-    def use(self, func: TCallable) -> TCallable:
-        self.handler = func
-        return func
+    def dispose(self):  # pragma: no cover
+        if not self._dispose:
+            if isinstance(self.handler, Subscriber):
+                self.handler.dispose()
+            self._dispose = True
 
     @overload
     def __call__(self, *, default: D, timeout: float = 120) -> _step_iter[R, D]: ...
@@ -101,10 +72,10 @@ class StepOut(Generic[R]):
         return _step_iter(self, default, timeout)  # type: ignore
 
     @overload
-    async def wait(self: "StepOut[CoroutineType[Any, Any, Optional[R1]]] | StepOut[Awaitable[Optional[R1]]] | StepOut[Optional[R1]]", *, timeout: float = 120) -> Optional[R1]: ...
+    async def wait(self: "StepOut[CoroutineType[Any, Any, R1]] | StepOut[Awaitable[R1]] | StepOut[R1]", *, timeout: float = 120) -> Optional[R1]: ...
 
     @overload
-    async def wait(self: "StepOut[CoroutineType[Any, Any, Optional[R1]]] | StepOut[Awaitable[Optional[R1]]] | StepOut[Optional[R1]]", *, default: Union[R1, D], timeout: float = 120) -> Union[R1, D]: ...
+    async def wait(self: "StepOut[CoroutineType[Any, Any, R1]] | StepOut[Awaitable[R1]] | StepOut[R1]", *, default: Union[R1, D], timeout: float = 120) -> Union[R1, D]: ...
 
     async def wait(
         self,
@@ -112,13 +83,25 @@ class StepOut(Generic[R]):
         timeout: float = 0.0,
         default: Any = None,
     ):
+        if self._dispose:
+            raise RuntimeError("This StepOut instance has been disposed and cannot be used anymore.")
+        self.waiting = True
+        handler = self.handler if isinstance(self.handler, Subscriber) else self.handler()
         fut = asyncio.get_running_loop().create_future()
-        subscribers = []
 
-        for et in self.target:
-            callable_target = new_target(et, self, fut)  # type: ignore
-            # aux = auxilia("step_out", lambda interface: isinstance(interface.event, et))
-            subscribers.append(on(et, callable_target, priority=self.priority))
+        async def _after(ctx: Contexts):
+            if fut.done():
+                return False
+            res = ctx[RESULT]
+            if res is not None and not fut.done():
+                fut.set_result(res)
+                if self.block:
+                    return BLOCK
+
+        dispose = handler.propagate(_after)
+        old_priority = handler.priority
+        handler.priority = self.priority
+
         try:
             return await asyncio.wait_for(fut, timeout) if timeout else await fut
         except asyncio.TimeoutError:
@@ -126,6 +109,35 @@ class StepOut(Generic[R]):
         finally:
             if not fut.done():
                 fut.cancel()
-            for sub in subscribers:
-                sub.dispose()
-            subscribers.clear()
+            dispose()
+            handler.priority = old_priority
+            if not isinstance(self.handler, Subscriber):
+                handler.dispose()
+            self.waiting = False
+
+
+@overload
+def step_out(event: type, handler: Callable[..., R], *, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False) -> StepOut[R]: ...
+
+
+@overload
+def step_out(event: type, *, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False) -> Callable[[Callable[..., R]], StepOut[R]]: ...
+
+
+@overload
+def step_out(*, priority: int = 15, block: bool = False) -> Callable[[Subscriber[R]], StepOut[R]]: ...
+
+
+def step_out(event: type | None = None, handler: Optional[Callable[...,  R]] = None, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False):
+
+    if event is None:
+        def decorator1(func: Subscriber[R], /) -> StepOut[R]:
+            return StepOut(func, priority, block)
+        return decorator1
+
+    def decorator(func: Callable[..., R], /) -> StepOut[R]:
+        return StepOut(lambda: on(event, func, priority=priority, providers=providers), priority, block)
+
+    if handler is not None:
+        return decorator(handler)
+    return decorator

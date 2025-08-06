@@ -1,7 +1,7 @@
 import asyncio
 
 from arclet.letoderea import es
-from arclet.letoderea.breakpoint import StepOut
+from arclet.letoderea.breakpoint import step_out
 from arclet.letoderea.typing import Contexts
 
 
@@ -19,10 +19,10 @@ class ExampleEvent:
 
 
 @es.on(ExampleEvent)
-async def test(msg: str):
+async def sub(msg: str):
     if msg == "hello":
         print('[subscriber] >>> wait for msg: "continue!" ')
-        out = StepOut([ExampleEvent], handler)
+        out = step_out(ExampleEvent, handler)
         print("[subscriber] >>> current out:", out)
         res = await out.wait(default="default")
         print("[subscriber] >>> wait result:", f'"{res}"')

@@ -75,16 +75,20 @@ class Scope:
         if isinstance(publisher, Publisher):
             pub_id = publisher.id
             event_providers = publisher.providers
+            _listen = publisher.target
         elif isinstance(publisher, str) and publisher in _publishers:
             pub_id = publisher
             event_providers = _publishers[publisher].providers
+            _listen = _publishers[publisher].target
         elif not event:
             pub_id = "$backend"
             event_providers = []
+            _listen = None
         else:
             pub = (filter_publisher(event) or Publisher(event))
             pub_id = pub.id
             event_providers = pub.providers
+            _listen = event
 
         def register_wrapper(exec_target: Callable, /) -> Subscriber:
             _providers = [*global_providers, *event_providers, *self.providers, *providers]
@@ -95,6 +99,7 @@ class Scope:
                 dispose=self.remove_subscriber,
                 once=once,
                 skip_req_missing=_skip_req_missing,
+                _listen=_listen,
             )
             res.propagates(*self.propagators)
             self.subscribers[res.id] = (res, pub_id)

@@ -1,4 +1,4 @@
-from .breakpoint import StepOut as StepOut
+from .breakpoint import step_out as step_out
 from .core import publish as publish
 from .core import post as post
 from .core import make_event as make_event

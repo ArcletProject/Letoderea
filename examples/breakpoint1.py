@@ -1,7 +1,7 @@
 import asyncio
 
 from arclet.letoderea import deref, enter_if, es
-from arclet.letoderea.breakpoint import StepOut
+from arclet.letoderea.breakpoint import step_out
 from arclet.letoderea.typing import Contexts
 
 event = asyncio.Event()
@@ -26,13 +26,13 @@ class ExampleEvent:
 
 @es.on(ExampleEvent)
 @enter_if(deref(ExampleEvent).msg == "hello")
-async def test():
+async def sub():
     if event.is_set():
         print("[subscriber] >>> program already running")
         return
     event.set()
     print('[subscriber] >>> wait for msg: "continue!" ')
-    out = StepOut([ExampleEvent], handler, block=True)
+    out = step_out(ExampleEvent, handler, block=True)
     print("[subscriber] >>> current out:", out)
     async for res in out():
         if res is None:
