@@ -124,17 +124,18 @@ async def test_prepend_condition():
 async def test_defer():
     executed = []
 
-    async def deferred(foo: str):
-        assert foo == "1"
-        executed.append(1)
-
     @le.on(PropagateEvent)
     async def s():
-        le.defer(s, deferred)
+
+        @le.defer
+        async def deferred(foo: str):
+            assert foo == "1"
+            executed.append(2)
+
         executed.append(1)
 
     await le.publish(PropagateEvent("1"))
-    assert len(executed) == 2
+    assert executed == [1, 2]
 
 
 @pytest.mark.asyncio

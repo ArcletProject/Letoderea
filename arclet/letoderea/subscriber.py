@@ -3,16 +3,17 @@ from __future__ import annotations
 import abc
 import asyncio
 import sys
+from contextvars import ContextVar
 from weakref import WeakSet
 from collections import defaultdict
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Generator, AsyncGenerator, Generic, TypeVar, cast, final, overload, Awaitable
 from typing_extensions import Self, get_args, get_origin
 from types import CoroutineType
 from uuid import uuid4
 
-from tarina import Empty, is_async, signatures
+from tarina import Empty, ContextModel, is_async, signatures
 from tarina.guard import is_async_gen_callable, is_gen_callable
 from tarina.tools import run_sync, run_sync_generator
 
@@ -36,9 +37,21 @@ from .typing import (
 )
 
 
+R = TypeVar("R")
+T = TypeVar("T")
 RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
 STACK: CtxItem[AsyncExitStack] = cast(CtxItem, "$exit_stack")
 SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
+current_subscriber: ContextVar["Subscriber"] = ContextVar("_current_subscriber")
+
+
+@contextmanager
+def cvar(ctx: ContextVar[T], val: T):
+    token = ctx.set(val)
+    try:
+        yield val
+    finally:
+        ctx.reset(token)
 
 
 class ResultProvider(Provider[Any]):
@@ -162,10 +175,6 @@ def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> l
     return res
 
 
-R = TypeVar("R")
-T = TypeVar("T")
-
-
 class Propagator(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def compose(self) -> Generator[TTarget | Propagator | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]: ...
@@ -281,13 +290,14 @@ class Subscriber(Generic[R]):
                     arguments[param.name] = dep_res
                 else:
                     arguments[param.name] = await param.solve(context)
-            if self.is_cm:
-                stack: AsyncExitStack = context["$exit_stack"]
-                result = await stack.enter_async_context(self._callable_target(**arguments))
-            elif self.is_agen:
-                result = self._callable_target(**arguments)
-            else:
-                result = await self._callable_target(**arguments)
+            with cvar(current_subscriber, context["$subscriber"]):
+                if self.is_cm:
+                    stack: AsyncExitStack = context["$exit_stack"]
+                    result = await stack.enter_async_context(self._callable_target(**arguments))
+                elif self.is_agen:
+                    result = self._callable_target(**arguments)
+                else:
+                    result = await self._callable_target(**arguments)
             if self._propagates:
                 context["$result"] = result
                 result = (await self._run_propagate(context, self._propagates[self._cursor :])) or result
@@ -431,13 +441,16 @@ class Subscriber(Generic[R]):
         raise ValueError(f"Propagator {func} not found")  # pragma: no cover
 
 
-def defer(ctx: Contexts | TTarget, func: Callable[..., Any]):
+def defer(func: Callable[..., Any], ctx: Contexts | TTarget | None = None):
     if isinstance(ctx, dict):
         sub = ctx[SUBSCRIBER]
     elif isinstance(ctx, Subscriber):
         sub = ctx
     else:
-        raise TypeError(f"Unsupported type {type(ctx)}")
+        try:
+            sub = current_subscriber.get()
+        except LookupError:
+            raise TypeError(f"Unsupported type {type(ctx)}") from None
     return sub.propagate(func, once=True)
 
 

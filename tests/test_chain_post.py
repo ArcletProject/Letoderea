@@ -73,6 +73,7 @@ async def test_inherit():
         assert foo == "1"
         assert bar == "res_ster"
         await le.publish(BaseEvent("2"), inherit_ctx=ctx.copy())
+        finish.append(2)
 
     @le.on(BaseEvent)
     async def t(event: BaseEvent, foo, bar):
@@ -83,4 +84,4 @@ async def test_inherit():
 
     await le.publish(event)
 
-    assert finish
+    assert finish == [1, 2]

@@ -16,6 +16,7 @@ _scopes: dict[str, Scope] = {}
 
 
 scope_ctx: ContextModel["Scope"] = ContextModel("scope_ctx")
+global_propagators: list[Propagator] = []
 
 
 class Scope:
@@ -101,7 +102,7 @@ class Scope:
                 skip_req_missing=_skip_req_missing,
                 _listen=_listen,
             )
-            res.propagates(*self.propagators)
+            res.propagates(*global_propagators, *self.propagators)
             self.subscribers[res.id] = (res, pub_id)
             return res
 
