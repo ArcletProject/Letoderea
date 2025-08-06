@@ -2,13 +2,14 @@ from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Union, overload
 
 from tarina import is_coroutinefunction
+from tarina.tools import run_sync
 from typing_extensions import Self
 from functools import wraps
 
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import STOP, Propagator, Subscriber, _compile
-from .typing import EVENT, Contexts, TCallable, run_sync
+from .typing import EVENT, Contexts, TCallable
 
 
 def bind(*args: Union[Provider, type[Provider]]):

@@ -1,21 +1,11 @@
 from __future__ import annotations
 
-import asyncio
-import inspect
-from collections.abc import AsyncGenerator, Awaitable, Coroutine, Generator
+from collections.abc import Awaitable
 from dataclasses import dataclass
-from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, TypedDict, Union, overload, cast
-from typing_extensions import ParamSpec, Self, TypeGuard
+from typing import TYPE_CHECKING, Any, Callable, Generic, Protocol, TypeVar, Union, overload, cast
+from typing_extensions import ParamSpec, Self
 
 from tarina import generic_isinstance
-
-
-_TypedDictMeta = type(TypedDict.__mro_entries__(...)[0])  # type: ignore
-
-
-def is_typed_dict(cls: Any) -> bool:
-    return cls.__class__ is _TypedDictMeta
 
 
 T = TypeVar("T")
@@ -104,57 +94,3 @@ class Result(Generic[T]):
 
 class Resultable(Protocol[T]):
     __result_type__: type[T]
-
-
-def run_sync(call: Callable[P, T]) -> Callable[P, Coroutine[None, None, T]]:
-    """一个用于包装 sync function 为 async function 的装饰器
-
-    参数:
-        call: 被装饰的同步函数
-    """
-
-    @wraps(call)
-    async def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        result = await asyncio.to_thread(call, *args, **kwargs)
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
-    return _wrapper
-
-
-def run_sync_generator(call: Callable[P, Generator[T]]) -> Callable[P, AsyncGenerator[T]]:
-    """一个用于包装 sync generator function 为 async generator function 的装饰器"""
-
-    def _next(it):
-        try:
-            return next(it)
-        except StopIteration:
-            raise StopAsyncIteration from None
-
-    @wraps(call)
-    async def _wrapper(*args: P.args, **kwargs: P.kwargs) -> AsyncGenerator[T, None]:
-        gen = call(*args, **kwargs)
-        try:
-            while True:
-                yield await run_sync(_next)(gen)
-        except StopAsyncIteration:
-            return
-
-    return _wrapper
-
-
-def is_gen_callable(call: Callable[..., Any]) -> TypeGuard[Callable[..., Generator]]:
-    """检查 call 是否是一个生成器函数"""
-    if inspect.isgeneratorfunction(call):
-        return True
-    func_ = getattr(call, "__call__", None)
-    return inspect.isgeneratorfunction(func_)
-
-
-def is_async_gen_callable(call: Callable[..., Any]) -> TypeGuard[Callable[..., AsyncGenerator]]:
-    """检查 call 是否是一个异步生成器函数"""
-    if inspect.isasyncgenfunction(call):
-        return True
-    func_ = getattr(call, "__call__", None)
-    return inspect.isasyncgenfunction(func_)

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from asyncio import Queue
 from typing import Any, Callable, Generic, Awaitable, TypeVar, get_type_hints
-from tarina import generic_isinstance
+from tarina.generic import is_typed_dict, generic_isinstance
 
 from .provider import Provider, ProviderFactory, get_providers
-from .typing import Contexts, is_typed_dict
+from .typing import Contexts
 
 T = TypeVar("T")
 _publishers: dict[str, "Publisher"] = {}
