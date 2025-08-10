@@ -66,7 +66,7 @@ class Publisher(Generic[T]):
     def unbind(
         self,
         arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
-    ) -> None:
+    ) -> None:  # pragma: no cover
         """移除间接 Provider"""
         idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
         for i in reversed(idx):

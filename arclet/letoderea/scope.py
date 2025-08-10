@@ -45,7 +45,7 @@ class Scope:
     def unbind(
         self,
         arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
-    ) -> None:
+    ) -> None:  # pragma: no cover
         """移除间接 Provider"""
         idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
         for i in reversed(idx):
@@ -115,8 +115,18 @@ class Scope:
             if slot[1] in pub_ids or (pass_backend and slot[1] == "$backend"):
                 yield slot[0]
 
-    def dispose(self):
+    def disable(self):
         self.available = False
+        for subscriber in self.subscribers.values():
+            subscriber[0].available = False
+
+    def enable(self):
+        self.available = True
+        for subscriber in self.subscribers.values():
+            subscriber[0].available = True
+
+    def dispose(self):
+        self.disable()
         self.subscribers.clear()
         _scopes.pop(self.id, None)
 

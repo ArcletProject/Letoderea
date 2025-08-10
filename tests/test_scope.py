@@ -27,6 +27,17 @@ async def test_event_dispatch():
     await le.post(ScopeEvent("f"), scope=scope1)
     assert executed == [1, 1]
     executed.clear()
+
     await le.publish(ScopeEvent("f"), scope="scope2")
     await le.post(ScopeEvent("f"), scope="scope2")
     assert executed == [2, 2]
+    executed.clear()
+
+    scope2.disable()
+    await le.publish(ScopeEvent("f"), scope="scope2")
+    assert executed == [1]
+    executed.clear()
+
+    scope2.enable()
+    await le.publish(ScopeEvent("f"), scope="scope2")
+    assert executed == [2]

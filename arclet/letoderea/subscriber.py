@@ -209,7 +209,8 @@ class Subscriber(Generic[R]):
         self.is_agen = False
         self._recompile()
 
-        self._dispose = dispose
+        self._disposes = [dispose] if dispose else []
+        self.available = True
         self.once = once
 
     def _recompile(self):  # pragma: no cover
@@ -250,10 +251,13 @@ class Subscriber(Generic[R]):
             return other == self.callable_target.__name__
         return False
 
+    def _attach_disposes(self, dispose: Callable[[Subscriber], None]) -> None:
+        self._disposes.append(dispose)
+
     def dispose(self):  # pragma: no cover
-        if self._dispose:
-            self._dispose(self)
-        self._dispose = None
+        for dispose in self._disposes:
+            dispose(self)
+        self._disposes.clear()
         while self._propagates:
             self._propagates[0].dispose()
 
@@ -369,7 +373,7 @@ class Subscriber(Generic[R]):
                         else self.propagate(slot, priority=16)
                     )
             self._propagator_cache.add(func)
-            return lambda: [dispose() for dispose in disposes] or self._propagator_cache.discard(func)
+            return lambda: ([dispose() for dispose in disposes] or self._propagator_cache.discard(func))
 
         def _dispose(x: Subscriber):
             self._propagates.remove(x)
@@ -419,12 +423,12 @@ class Subscriber(Generic[R]):
     @overload
     def get_propagator(self, func: TTarget[T]) -> Subscriber[T]: ...
 
-    def get_propagator(self, func: TTarget[Any] | type[_TPG]):
+    def get_propagator(self, func: TTarget[Any] | type[_TPG]):  # pragma: no cover
         if isinstance(func, type):
             for pro in self._propagator_cache:
                 if isinstance(pro, func):
                     return pro
-            raise ValueError(f"Propagator {func} not found")  # pragma: no cover
+            raise ValueError(f"Propagator {func} not found")
         for sub in self._propagates:
             if sub.callable_target == func:
                 return sub

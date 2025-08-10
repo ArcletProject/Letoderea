@@ -46,6 +46,9 @@ async def test_breakpoint():
                 print("[subscriber] >>> finish!")
                 break
             print("[subscriber] >>> wait result:", f'"{res}"')
+        else:  # pragma: no cover
+            print("[subscriber] >>> no result received, continue waiting")
+            return
         executed.append(5)
 
     a = ExampleEvent()
