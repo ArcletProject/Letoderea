@@ -57,17 +57,18 @@ class _Check(Propagator):
         self.result = result
 
     if TYPE_CHECKING:
-        def append(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], bool]) -> Self: ...
+        def derive(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], bool]) -> Self: ...
     else:
-        def append(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> Self:
+        def derive(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> Self:
             if isinstance(predicate, _Check):
                 self.predicates.extend(predicate.predicates)
             else:
                 self.predicates.append(generate(predicate) if isinstance(predicate, Deref) else predicate)
             return self
 
-    __and__ = append
-    __or__ = append
+    append = derive
+    __and__ = derive
+    __or__ = derive
 
     def checkers(self):
         for predicate in self.predicates:
@@ -96,7 +97,7 @@ class _CheckBuilder:
         def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], bool]) -> _Check: ...
     else:
         def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> _Check:
-            return _Check(self.result).append(generate(predicate) if isinstance(predicate, Deref) else predicate)
+            return _Check(self.result).derive(generate(predicate) if isinstance(predicate, Deref) else predicate)
 
     __and__ = __call__
     __or__ = __call__

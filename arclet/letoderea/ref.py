@@ -1,3 +1,4 @@
+from collections.abc import Container
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast, Union
 
 from .typing import Contexts, EVENT
@@ -58,8 +59,18 @@ class Deref:
         self.__items[self.__last_key] = (True, lambda x: x >= other)
         return self
 
-    def __contains__(self, item):
-        self.__items[self.__last_key] = (True, lambda x: item in x)
+    def __contains__(self, item, *, _left: bool = False):
+        if _left:
+            self.__items[self.__last_key] = (True, lambda x: x in item)
+        else:
+            self.__items[self.__last_key] = (True, lambda x: item in x)
+        return self
+
+    def _not_contains(self, item, *, _left: bool = False):
+        if _left:
+            self.__items[self.__last_key] = (True, lambda x: x not in item)
+        else:
+            self.__items[self.__last_key] = (True, lambda x: item not in x)
         return self
 
     def __getitem__(self, item):
@@ -92,6 +103,10 @@ if TYPE_CHECKING:
 
     def generate(ref: Any) -> Callable[[Contexts], Any]: ...
 
+    def in_(left: Any, right: Container[Any]) -> bool: ...
+
+    def not_in(left: Any, right: Container[Any]) -> bool: ...
+
     def is_(ref: Any, value: Any) -> bool: ...
 
     def is_not(ref: Any, value: Any) -> bool: ...
@@ -119,6 +134,16 @@ else:
             return item
 
         return _get
+
+    def in_(left, right):
+        if isinstance(left, Deref):
+            return left.__contains__(right, _left=True)
+        return right.__contains__(left)
+
+    def not_in(left, right):
+        if isinstance(left, Deref):
+            return left._not_contains(right, _left=True)
+        return right._not_contains(left)
 
     def is_(ref: Deref, value: Any):
         return ref.__eq__(value, _is=True)
