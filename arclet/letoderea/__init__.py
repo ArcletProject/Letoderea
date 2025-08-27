@@ -1,6 +1,7 @@
 from .breakpoint import step_out as step_out
 from .core import publish as publish
 from .core import post as post
+from .core import waterfall as waterfall
 from .core import make_event as make_event
 from .core import ExceptionEvent as ExceptionEvent
 from .collect import collect as collect

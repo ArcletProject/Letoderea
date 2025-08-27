@@ -77,18 +77,20 @@ class Scope:
             pub_id = publisher.id
             event_providers = publisher.providers
             _listen = publisher.target
+            _pub = publisher
         elif isinstance(publisher, str) and publisher in _publishers:
             pub_id = publisher
-            event_providers = _publishers[publisher].providers
-            _listen = _publishers[publisher].target
+            _pub = _publishers[publisher]
+            event_providers = _pub.providers
+            _listen = _pub.target
         elif not event:
             pub_id = "$backend"
             event_providers = []
-            _listen = None
+            _listen = _pub = None
         else:
-            pub = (filter_publisher(event) or Publisher(event))
-            pub_id = pub.id
-            event_providers = pub.providers
+            _pub = (filter_publisher(event) or Publisher(event))
+            pub_id = _pub.id
+            event_providers = _pub.providers
             _listen = event
 
         def register_wrapper(exec_target: Callable, /) -> Subscriber:
@@ -103,7 +105,8 @@ class Scope:
                 _listen=_listen,
             )
             res.propagates(*global_propagators, *self.propagators)
-            self.subscribers[res.id] = (res, pub_id)
+            if not _pub or (_pub and _pub.check_subscriber(res)):
+                self.subscribers[res.id] = (res, pub_id)
             return res
 
         if func:

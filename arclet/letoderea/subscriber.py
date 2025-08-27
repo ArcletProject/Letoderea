@@ -240,6 +240,10 @@ class Subscriber(Generic[R]):
     def __name__(self) -> str:
         return self.callable_target.__name__
 
+    @property
+    def __doc__(self) -> str | None:  # type: ignore
+        return self.callable_target.__doc__
+
     def __repr__(self):
         lineno = self.callable_target.__code__.co_firstlineno
         return f"<Subscriber: {self.callable_target.__qualname__} at {self.callable_target.__module__}:{lineno}>"

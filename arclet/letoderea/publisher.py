@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from asyncio import Queue
-from typing import Any, Callable, Generic, Awaitable, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Generic, Awaitable, TypeVar, get_type_hints
+from typing_extensions import Self
 from tarina.generic import is_typed_dict, generic_isinstance
 
 from .provider import Provider, ProviderFactory, get_providers
 from .typing import Contexts
+
+if TYPE_CHECKING:
+    from .subscriber import Subscriber
 
 T = TypeVar("T")
 _publishers: dict[str, "Publisher"] = {}
@@ -71,6 +75,17 @@ class Publisher(Generic[T]):
         idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
         for i in reversed(idx):
             self.providers.pop(i)
+
+    def check(self: Self, func: Callable[[Self, Subscriber], bool]):
+        self.check_subscriber = func.__get__(self)  # type: ignore
+        return func
+
+    def check_subscriber(self, sub: Subscriber) -> bool:
+        """检查 Subscriber 是否可以订阅该 Publisher
+
+        默认总是返回 True, 可重写该方法以实现更复杂的逻辑
+        """
+        return True
 
 
 def filter_publisher(target: type[T]) -> Publisher[T] | None:
