@@ -197,6 +197,67 @@ def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | N
     return add_task(coro)
 
 
+async def waterfall(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
+    """发布事件并返回所有响应结果的异步生成器"""
+    if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
+        slots = sp.subscribers.values()
+    elif isinstance(scope, Scope) and scope.available:
+        slots = scope.subscribers.values()
+    else:
+        scopes = [sp for sp in _scopes.values() if sp.available]
+        slots = chain.from_iterable(sp.subscribers.values() for sp in scopes)
+    grouped: dict[tuple[int, str], list[Subscriber]] = {}
+    context_map: dict[str, Contexts] = {}
+    if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
+        pubs = {pub.id: pub}
+    else:
+        pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
+    for sub, pub_id in slots:
+        if pub_id != "$backend" and pub_id not in pubs:
+            continue
+        if pub_id not in context_map:
+            context_map[pub_id] = await generate_contexts(event, None if pub_id == "$backend" else pubs[pub_id].supplier, inherit_ctx)
+        if ((priority := sub.priority), pub_id) not in grouped:
+            grouped[(priority, pub_id)] = []
+        grouped[(priority, pub_id)].append(sub)
+    for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
+        contexts = context_map[pub_id]
+        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for _i, result in enumerate(results):
+            if result is None:
+                continue
+            if result is BLOCK:
+                return
+            if result is STOP:
+                continue
+            if isinstance(result, BaseException):
+                if isinstance(event, ExceptionEvent):
+                    return
+                await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
+                continue
+            if isinstance(result, AsyncGeneratorType):
+                async for res in result:
+                    if res in (None, STOP):
+                        continue
+                    if res is BLOCK:
+                        return
+                    if isinstance(res, BaseException):
+                        await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], res))
+                        continue
+                    if res.__class__ is Force:
+                        yield Result(res.value)  # type: ignore
+                    elif isinstance(res, Result):
+                        yield Result.check_result(event, res)
+                    else:
+                        yield Result.check_result(event, Result(res))
+            elif result.__class__ is Force:
+                yield Result(result.value)  # type: ignore
+            elif isinstance(result, Result):
+                yield Result.check_result(event, result)
+            else:
+                yield Result.check_result(event, Result(result))
+
 C = TypeVar("C")
 
 
