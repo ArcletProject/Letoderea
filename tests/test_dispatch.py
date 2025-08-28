@@ -159,11 +159,24 @@ async def test_exit_state():
 
     @le.on(TestEvent, priority=11)
     async def s_6():
-        executed.append(1)
+        executed.append(4)
         raise ExitState.block
 
     await le.publish(TestEvent("f", "b"))
-    assert executed == [0, 1]
+    assert executed == [0, 4]
+
+    s_6.dispose()
+    executed.clear()
+
+    @le.on(TestEvent, priority=11)
+    async def s_7():
+        executed.append(4)
+        return ExitState.block("my_result")
+
+    res = await le.post(TestEvent("f", "b"))
+    assert executed == [0, 4]
+    assert res
+    assert res.value == "my_result"
 
 
 @pytest.mark.asyncio

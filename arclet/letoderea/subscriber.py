@@ -272,8 +272,8 @@ class Subscriber(Generic[R]):
     async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]] | Subscriber[T], context: Contexts, inner: bool = False) -> T | ExitState: ...
 
     async def handle(self, context: Contexts, inner=False):
+        token = current_subscriber.set(self)
         if not inner:
-            token = current_subscriber.set(self)
             context["$subscriber"] = self
             context["$exit_stack"] = AsyncExitStack()
         try:
@@ -314,8 +314,8 @@ class Subscriber(Generic[R]):
                 return STOP
             raise ExceptionHandler.call(e, self.callable_target, context, inner) from e
         finally:
+            current_subscriber.reset(token)  # type: ignore
             if not inner:
-                current_subscriber.reset(token)  # type: ignore
                 if "$exit_stack" in context:
                     await context[STACK].__aexit__(*sys.exc_info())
                 context.clear()

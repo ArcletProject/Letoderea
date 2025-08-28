@@ -18,12 +18,30 @@ class ProviderUnsatisfied(Exception):
         self.source_key = source_key
 
 
-class ExitState(Exception, Enum):
-    stop = "Handle stopped"
-    block = "Propagation blocked"
+class _ExitException(Exception):
+    def __call__(self, result):  # pragma: no cover
+        self._result = result
+        return self
+
+    @property
+    def result(self) -> Any:  # pragma: no cover
+        return getattr(self, "_result", None)
+
+
+class ExitState(_ExitException, Enum):
+    stop = _ExitException("Handle stopped")
+    block = _ExitException("Propagation blocked")
+
+    def __call__(self, result):
+        self._result = result
+        return self
 
     def __str__(self):
         return super(Exception, self).__str__()
+
+    @property
+    def result(self) -> Any:
+        return getattr(self, "_result", None)
 
 
 class InnerHandlerException(Exception):

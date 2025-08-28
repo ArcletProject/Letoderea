@@ -94,6 +94,8 @@ class Scope:
             _listen = event
 
         def register_wrapper(exec_target: Callable, /) -> Subscriber:
+            if isinstance(exec_target, Subscriber):
+                exec_target = exec_target.callable_target
             _providers = [*global_providers, *event_providers, *self.providers, *providers]
             res = Subscriber(
                 exec_target,

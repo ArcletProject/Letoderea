@@ -6,10 +6,10 @@ from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from itertools import chain
 from types import AsyncGeneratorType
-from typing import Any, Callable, Coroutine, Literal, TypeVar, overload
+from typing import Any, Callable, Coroutine, Literal, TypeVar, overload, cast
 from typing_extensions import dataclass_transform
 
-from .exceptions import STOP, BLOCK
+from .exceptions import ExitState, STOP, BLOCK
 from .publisher import Publisher, gather, define, _publishers
 from .provider import get_providers, provide
 from .scope import Scope, on, use, _scopes  # noqa: F401
@@ -80,6 +80,10 @@ async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_
             if result is None:
                 continue
             if result is BLOCK:
+                if (_res := cast(ExitState, result).result) is not None and return_result:
+                    if isinstance(_res, Result):
+                        return Result.check_result(event, _res)
+                    return Result.check_result(event, Result(_res))
                 return
             if result is STOP:
                 continue
@@ -94,6 +98,10 @@ async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_
                     if res in (None, STOP):
                         continue
                     if res is BLOCK:
+                        if (_res := cast(ExitState, result).result) is not None and return_result:
+                            if isinstance(_res, Result):
+                                return Result.check_result(event, _res)
+                            return Result.check_result(event, Result(_res))
                         return
                     if isinstance(res, BaseException):
                         await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], res))
