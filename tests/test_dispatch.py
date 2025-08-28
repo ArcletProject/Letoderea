@@ -1,3 +1,5 @@
+from typing import Union
+
 import pytest
 import arclet.letoderea as le
 from arclet.letoderea import Contexts
@@ -17,6 +19,12 @@ class RandomProvider(le.Provider[str]):
 
 @le.make_event(name="test")
 class TestEvent:
+    foo: str
+    bar: str
+
+
+@le.make_event(name="test1")
+class TestEvent1:
     foo: str
     bar: str
 
@@ -76,6 +84,22 @@ async def test_event_dispatch():
     await le.publish(TestEvent("f", "b"))
 
     assert len(executed) == 1
+    executed.clear()
+
+    @le.on(TestEvent)
+    @le.on(TestEvent1)
+    async def _2(foo, bar, event: Union[TestEvent, TestEvent1]):
+        if isinstance(event, TestEvent):
+            assert foo == "f"
+            assert bar == "b"
+            executed.append(2)
+        else:
+            assert foo == "f1"
+            assert bar == "b1"
+            executed.append(3)
+    await le.publish(TestEvent("f", "b"))
+    await le.publish(TestEvent1("f1", "b1"))
+    assert executed == [1, 2, 3]
 
 
 @pytest.mark.asyncio

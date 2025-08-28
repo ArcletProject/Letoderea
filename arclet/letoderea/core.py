@@ -46,18 +46,11 @@ async def _(event: ExceptionEvent, context: Contexts):
 async def publish_exc_event(event: ExceptionEvent):
     scopes = [sp for sp in _scopes.values() if sp.available]
     subs = [slot for sp in scopes for slot in sp.subscribers.values() if slot[1] != "$backend"]
-    await dispatch(subs, event)
+    async for _ in broadcast(subs, event):
+        pass
 
 
-@overload
-async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_ctx: Contexts | None = None) -> None: ...
-
-
-@overload
-async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_ctx: Contexts | None = None, *, return_result: Literal[True]) -> Result | None: ...
-
-
-async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_ctx: Contexts | None = None, *, return_result: bool = False):
+async def broadcast(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_ctx: Contexts | None = None):
     grouped: dict[tuple[int, str], list[Subscriber]] = {}
     context_map: dict[str, Contexts] = {}
     if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
@@ -80,28 +73,24 @@ async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_
             if result is None:
                 continue
             if result is BLOCK:
-                if (_res := cast(ExitState, result).result) is not None and return_result:
-                    if isinstance(_res, Result):
-                        return Result.check_result(event, _res)
-                    return Result.check_result(event, Result(_res))
+                if (_res := cast(ExitState, result).result) is not None:
+                    yield Result.check_result(event, _res if isinstance(_res, Result) else Result(_res))
                 return
             if result is STOP:
                 continue
             if isinstance(result, BaseException):
-                if isinstance(event, ExceptionEvent):
+                if isinstance(event, ExceptionEvent):  # pragma: no cover
                     return
                 await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
                 continue
-            if isinstance(result, AsyncGeneratorType):
+            if isinstance(result, AsyncGeneratorType):  # pragma: no cover
                 ans = []
                 async for res in result:
                     if res in (None, STOP):
                         continue
                     if res is BLOCK:
-                        if (_res := cast(ExitState, result).result) is not None and return_result:
-                            if isinstance(_res, Result):
-                                return Result.check_result(event, _res)
-                            return Result.check_result(event, Result(_res))
+                        if (_res := cast(ExitState, res).result) is not None:
+                            yield Result.check_result(event, _res if isinstance(_res, Result) else Result(_res))
                         return
                     if isinstance(res, BaseException):
                         await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], res))
@@ -112,16 +101,49 @@ async def dispatch(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit_
                         ans.append(Result.check_result(event, res))
                     else:
                         ans.append(Result.check_result(event, Result(res)))
-                if not return_result:
-                    continue
-                return Result([r.value for r in ans if r is not None])
-            if not return_result:
-                continue
-            if result.__class__ is Force:
-                return result.value  # type: ignore
-            if isinstance(result, Result):
-                return Result.check_result(event, result)
-            return Result.check_result(event, Result(result))
+                yield Result([r.value for r in ans])
+            elif result.__class__ is Force:  # pragma: no cover
+                yield Result(result.value)  # type: ignore
+            else:
+                yield Result.check_result(event, result if isinstance(result, Result) else Result(result))
+
+
+@overload
+async def dispatch(event: Resultable[T], scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None, *, return_result: Literal[True],) -> Result[T] | None: ...
+
+
+@overload
+async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None, *, return_result: Literal[True],) -> Result[Any] | None: ...
+
+
+@overload
+async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None) -> None: ...
+
+
+async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None, *, return_result: bool = False):
+    if slots:
+        pass
+    elif isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
+        slots = sp.subscribers.values()
+    elif isinstance(scope, Scope) and scope.available:
+        slots = scope.subscribers.values()
+    else:
+        scopes = [sp for sp in _scopes.values() if sp.available]
+        slots = chain.from_iterable(sp.subscribers.values() for sp in scopes)
+    async for res in broadcast(slots, event, inherit_ctx):
+        if return_result:
+            return res
+
+
+def waterfall(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
+    if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
+        slots = sp.subscribers.values()
+    elif isinstance(scope, Scope) and scope.available:
+        slots = scope.subscribers.values()
+    else:
+        scopes = [sp for sp in _scopes.values() if sp.available]
+        slots = chain.from_iterable(sp.subscribers.values() for sp in scopes)
+    return broadcast(slots, event, inherit_ctx)
 
 
 async def run_handler(
@@ -175,14 +197,7 @@ async def _loop_fetch(publisher: Publisher):
 
 def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
     """发布事件"""
-    if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-        coro = dispatch(sp.subscribers.values(), event, inherit_ctx)
-    elif isinstance(scope, Scope) and scope.available:
-        coro = dispatch(scope.subscribers.values(), event, inherit_ctx)
-    else:
-        scopes = [sp for sp in _scopes.values() if sp.available]
-        coro = dispatch(chain.from_iterable(sp.subscribers.values() for sp in scopes), event, inherit_ctx)
-    return add_task(coro)
+    return add_task(dispatch(event, scope, inherit_ctx=inherit_ctx))
 
 
 @overload
@@ -195,76 +210,8 @@ def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | N
 
 def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):
     """发布事件并返回第一个响应结果"""
-    if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-        coro = dispatch(sp.subscribers.values(), event, inherit_ctx, return_result=True)
-    elif isinstance(scope, Scope) and scope.available:
-        coro = dispatch(scope.subscribers.values(), event, inherit_ctx, return_result=True)
-    else:
-        scopes = [sp for sp in _scopes.values() if sp.available]
-        coro = dispatch(chain.from_iterable(sp.subscribers.values() for sp in scopes), event, inherit_ctx, return_result=True)
-    return add_task(coro)
+    return add_task(dispatch(event, scope, inherit_ctx=inherit_ctx, return_result=True))
 
-
-async def waterfall(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
-    """发布事件并返回所有响应结果的异步生成器"""
-    if isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-        slots = sp.subscribers.values()
-    elif isinstance(scope, Scope) and scope.available:
-        slots = scope.subscribers.values()
-    else:
-        scopes = [sp for sp in _scopes.values() if sp.available]
-        slots = chain.from_iterable(sp.subscribers.values() for sp in scopes)
-    grouped: dict[tuple[int, str], list[Subscriber]] = {}
-    context_map: dict[str, Contexts] = {}
-    if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
-        pubs = {pub.id: pub}
-    else:
-        pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
-    for sub, pub_id in slots:
-        if pub_id != "$backend" and pub_id not in pubs:
-            continue
-        if pub_id not in context_map:
-            context_map[pub_id] = await generate_contexts(event, None if pub_id == "$backend" else pubs[pub_id].supplier, inherit_ctx)
-        if ((priority := sub.priority), pub_id) not in grouped:
-            grouped[(priority, pub_id)] = []
-        grouped[(priority, pub_id)].append(sub)
-    for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
-        contexts = context_map[pub_id]
-        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for _i, result in enumerate(results):
-            if result is None:
-                continue
-            if result is BLOCK:
-                return
-            if result is STOP:
-                continue
-            if isinstance(result, BaseException):
-                if isinstance(event, ExceptionEvent):
-                    return
-                await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
-                continue
-            if isinstance(result, AsyncGeneratorType):
-                async for res in result:
-                    if res in (None, STOP):
-                        continue
-                    if res is BLOCK:
-                        return
-                    if isinstance(res, BaseException):
-                        await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], res))
-                        continue
-                    if res.__class__ is Force:
-                        yield Result(res.value)  # type: ignore
-                    elif isinstance(res, Result):
-                        yield Result.check_result(event, res)
-                    else:
-                        yield Result.check_result(event, Result(res))
-            elif result.__class__ is Force:
-                yield Result(result.value)  # type: ignore
-            elif isinstance(result, Result):
-                yield Result.check_result(event, result)
-            else:
-                yield Result.check_result(event, Result(result))
 
 C = TypeVar("C")
 
