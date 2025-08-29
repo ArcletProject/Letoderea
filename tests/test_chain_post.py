@@ -26,6 +26,7 @@ async def test_communicate():
         assert bar == "res_ster"
         res = await le.post(BaseEvent("2"))
         results.append(res)
+        return "res_ster"
 
     @le.on(BaseEvent)
     async def s2(foo):
@@ -47,10 +48,11 @@ async def test_result_validate():
     async def s1(foo, bar):
         assert foo in ("1", "2")
         assert bar == "res_ster"
-        res = await le.post(BaseEvent(foo))
+        res = await le.post(BaseEvent(foo), validate=True)
         results.append(res)
+        return "res_ster"
 
-    @le.on(BaseEvent)
+    @le.on(BaseEvent)  # type: ignore
     async def s2(foo):
         if foo == "2":
             return 12345
@@ -74,6 +76,7 @@ async def test_inherit():
         assert bar == "res_ster"
         await le.publish(BaseEvent("2"), inherit_ctx=ctx.copy())
         finish.append(2)
+        return "res_ster"
 
     @le.on(BaseEvent)
     async def t(event: BaseEvent, foo, bar):
@@ -81,6 +84,7 @@ async def test_inherit():
         assert foo == "2"
         assert bar == "res_ster"
         finish.append(1)
+        return f"res_{foo}"
 
     await le.publish(event)
 
