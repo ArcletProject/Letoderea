@@ -41,7 +41,9 @@ class ExitState(_ExitException, Enum):
 
     @property
     def result(self) -> Any:
-        return getattr(self, "_result", None)
+        ans = getattr(self, "_result", None)
+        self._result = None
+        return ans
 
 
 class InnerHandlerException(Exception):

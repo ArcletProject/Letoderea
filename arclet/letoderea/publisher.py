@@ -11,7 +11,8 @@ from .typing import Contexts
 if TYPE_CHECKING:
     from .subscriber import Subscriber
 
-T = TypeVar("T")
+T = TypeVar("T", covariant=True)
+T1 = TypeVar("T1")
 _publishers: dict[str, "Publisher"] = {}
 
 
@@ -48,11 +49,11 @@ class Publisher(Generic[T]):
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
-    def unsafe_push(self, event: T) -> None:
+    def unsafe_push(self: "Publisher[T1]", event: T1) -> None:
         """将事件放入队列，等待被 event system 主动轮询; 该方法可能引发 QueueFull 异常"""
         self.event_queue.put_nowait(event)
 
-    async def push(self, event: T):
+    async def push(self: "Publisher[T1]", event: T1):
         """将事件放入队列，等待被 event system 主动轮询"""
         await self.event_queue.put(event)
 

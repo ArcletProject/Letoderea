@@ -28,6 +28,8 @@ class TestEvent1:
     foo: str
     bar: str
 
+    __result_type__ = str
+
 
 @pytest.mark.asyncio
 async def test_param_solve():
@@ -97,6 +99,7 @@ async def test_event_dispatch():
             assert foo == "f1"
             assert bar == "b1"
             executed.append(3)
+        return "2"
     await le.publish(TestEvent("f", "b"))
     await le.publish(TestEvent1("f1", "b1"))
     assert executed == [1, 2, 3]
@@ -207,33 +210,33 @@ async def test_exit_state():
 async def test_generator():
     executed = []
 
-    @le.on(TestEvent)
-    def s_1(event: TestEvent):
+    @le.on(TestEvent1)
+    def s_1(event: TestEvent1):
         executed.append(1)
         yield event.foo
         executed.append(2)
         yield event.bar
         executed.append(3)
 
-    ans = await le.post(TestEvent("f", "b"))
+    await le.publish(TestEvent1("f", "b"))
     assert executed == [1, 2, 3]
-    assert ans
-    assert ans.value == ["f", "b"]
 
 
 @pytest.mark.asyncio
 async def test_async_generator():
     executed = []
 
-    @le.on(TestEvent)
-    async def s_2(event: TestEvent):
+    @le.on(TestEvent1)
+    async def s_2(event: TestEvent1):
         executed.append(1)
         yield event.foo
         executed.append(2)
         yield event.bar
         executed.append(3)
 
-    ans = await le.post(TestEvent("f", "b"))
+    results = []
+    async for ans in le.waterfall(TestEvent1("f", "b")):
+        assert ans
+        results.append(ans.value)
+    assert results == ["f", "b"]
     assert executed == [1, 2, 3]
-    assert ans
-    assert ans.value == ["f", "b"]

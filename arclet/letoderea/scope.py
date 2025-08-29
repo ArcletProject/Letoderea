@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from secrets import token_urlsafe
-from typing import Any, Callable, ClassVar, TypeVar, overload
+from typing import Any, Callable, TypeVar
 
 from tarina import ContextModel
 
@@ -20,7 +20,7 @@ global_propagators: list[Propagator] = []
 
 
 class Scope:
-    global_skip_req_missing: ClassVar[bool] = False
+    global_skip_req_missing = False
 
     @staticmethod
     def of(id_: str | None = None):
@@ -30,10 +30,10 @@ class Scope:
 
     def __init__(self, id_: str | None = None):
         self.id = id_ or token_urlsafe(16)
-        self.subscribers: dict[str, tuple[Subscriber, str]] = {}
+        self.subscribers = {}
         self.available = True
-        self.providers: list[Provider[Any] | ProviderFactory] = []
-        self.propagators: list[Propagator] = []
+        self.providers = []
+        self.propagators = []
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
@@ -42,10 +42,7 @@ class Scope:
         """增加间接 Provider"""
         self.providers.extend(p() if isinstance(p, type) else p for p in args)
 
-    def unbind(
-        self,
-        arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
-    ) -> None:  # pragma: no cover
+    def unbind(self, arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:  # pragma: no cover
         """移除间接 Provider"""
         idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
         for i in reversed(idx):
@@ -62,12 +59,6 @@ class Scope:
     def remove_subscriber(self, subscriber: Subscriber) -> None:
         """移除订阅者"""
         self.subscribers.pop(subscriber.id, None)
-
-    @overload
-    def register(self, func: Callable[..., T], event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
-
-    @overload
-    def register(self, *, event: type | None = None, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
 
     def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
         """注册一个订阅者"""
@@ -144,14 +135,6 @@ def configure(skip_req_missing: bool = False):
     global_skip_req_missing = skip_req_missing
 
 
-@overload
-def on(event: type, func: Callable[..., T], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
-
-
-@overload
-def on(event: type, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
-
-
 def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
@@ -160,28 +143,12 @@ def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, 
     return scope.register(func, event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, once=once)
 
 
-@overload
-def on_global(func: Callable[..., T], *, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
-
-
-@overload
-def on_global(*, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
-
-
 def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
         return scope.register(event=None, priority=priority, skip_req_missing=skip_req_missing, once=once)
     return scope.register(func, event=None, priority=priority, skip_req_missing=skip_req_missing, once=once)
-
-
-@overload
-def use(pub: str | Publisher, func: Callable[..., T], *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Subscriber[T]: ...
-
-
-@overload
-def use(pub: str | Publisher, *, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None) -> Callable[[Callable[..., T]], Subscriber[T]]: ...
 
 
 def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):

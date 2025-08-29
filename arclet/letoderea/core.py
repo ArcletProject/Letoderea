@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-from collections.abc import Awaitable, Iterable
+from collections.abc import Awaitable, AsyncGenerator, Iterable
 from dataclasses import dataclass
 from itertools import chain
 from types import AsyncGeneratorType
@@ -77,6 +77,8 @@ async def broadcast(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit
                     yield Result.check_result(event, _res if isinstance(_res, Result) else Result(_res))
                 return
             if result is STOP:
+                if (_res := cast(ExitState, result).result) is not None:  # pragma: no cover
+                    yield Result.check_result(event, _res if isinstance(_res, Result) else Result(_res))
                 continue
             if isinstance(result, BaseException):
                 if isinstance(event, ExceptionEvent):  # pragma: no cover
@@ -84,24 +86,26 @@ async def broadcast(slots: Iterable[tuple[Subscriber, str]], event: Any, inherit
                 await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
                 continue
             if isinstance(result, AsyncGeneratorType):  # pragma: no cover
-                ans = []
                 async for res in result:
-                    if res in (None, STOP):
+                    if res is None:
                         continue
                     if res is BLOCK:
                         if (_res := cast(ExitState, res).result) is not None:
                             yield Result.check_result(event, _res if isinstance(_res, Result) else Result(_res))
                         return
+                    if res is STOP:
+                        if (_res := cast(ExitState, res).result) is not None:
+                            yield Result.check_result(event, _res if isinstance(_res, Result) else Result(_res))
+                        continue
                     if isinstance(res, BaseException):
                         await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], res))
                         continue
                     if res.__class__ is Force:
-                        ans.append(Result(res.value))  # type: ignore
+                        yield Result(res.value)  # type: ignore
                     elif isinstance(res, Result):
-                        ans.append(Result.check_result(event, res))
+                        yield Result.check_result(event, res)
                     else:
-                        ans.append(Result.check_result(event, Result(res)))
-                yield Result([r.value for r in ans])
+                        yield Result.check_result(event, Result(res))
             elif result.__class__ is Force:  # pragma: no cover
                 yield Result(result.value)  # type: ignore
             else:
@@ -133,6 +137,14 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
     async for res in broadcast(slots, event, inherit_ctx):
         if return_result:
             return res
+
+
+@overload
+def waterfall(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> AsyncGenerator[Result[T] | None]: ...
+
+
+@overload
+def waterfall(event: Any, scope: str | Scope | None = None,  inherit_ctx: Contexts | None = None) -> AsyncGenerator[Result[T] | None]: ...
 
 
 def waterfall(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover

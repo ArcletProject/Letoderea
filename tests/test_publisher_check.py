@@ -14,6 +14,8 @@ class CallEvent:
     content: str
     params: dict
 
+    __result_type__ = str
+
 
 pub = le.define(CallEvent, name="called_event")
 
