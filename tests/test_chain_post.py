@@ -6,7 +6,9 @@ import arclet.letoderea as le
 class BaseEvent:
     foo: str
 
-    __result_type__ = str
+    def check_result(self, value) -> le.Result[str] | None:
+        if isinstance(value, str):
+            return le.Result(value)
 
 
 @le.make_event

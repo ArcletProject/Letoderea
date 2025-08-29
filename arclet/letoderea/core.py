@@ -8,7 +8,6 @@ from itertools import chain
 from types import AsyncGeneratorType
 from typing import Any, Callable, Coroutine, Literal, TypeVar, overload, cast
 
-from tarina import generic_isinstance
 from typing_extensions import dataclass_transform
 
 from .exceptions import ExitState, STOP, BLOCK
@@ -120,10 +119,8 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
 async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None, *, return_result: bool = False, validate: bool = False):
     async for res in broadcast(event, scope, slots, inherit_ctx):
         if return_result:
-            if validate and hasattr(event, "__result_type__"):
-                value = res.value if isinstance(res, Result) else res
-                if not generic_isinstance(value, event.__result_type__):  # type: ignore
-                    continue
+            if validate and hasattr(event, "check_result"):
+                return cast(Resultable, event).check_result(res.value if isinstance(res, Result) else res)
             return res if isinstance(res, Result) else Result(res)
 
 

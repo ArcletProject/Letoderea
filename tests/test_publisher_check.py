@@ -14,7 +14,7 @@ class CallEvent:
     content: str
     params: dict
 
-    __result_type__ = str
+    def check_result(self, value) -> le.Result[str] | None: ...
 
 
 pub = le.define(CallEvent, name="called_event")

@@ -43,5 +43,6 @@ from .subscriber import depends as depends
 from .typing import EVENT as EVENT
 from .typing import Contexts as Contexts
 from .typing import Force as Force
+from .typing import Result as Result
 
 from . import core as es  # noqa: F401

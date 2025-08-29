@@ -28,7 +28,7 @@ class TestEvent1:
     foo: str
     bar: str
 
-    __result_type__ = str
+    def check_result(self, value) -> le.Result[str] | None: ...
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
-from arclet.letoderea import es, make_event, define
+from arclet.letoderea import Result, es, make_event, define
 
 
 @make_event
@@ -13,7 +13,8 @@ class TestEvent:
 class Data:
     query: str
 
-    __result_type__ = str
+    def check_result(self, value) -> Result[str] | None:
+        ...
 
 
 define(Data, name="pluginA")

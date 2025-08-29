@@ -83,4 +83,4 @@ class Result(Generic[T]):
 
 
 class Resultable(Protocol[T]):
-    __result_type__: type[T]
+    def check_result(self, value: Any) -> Result[T] | None: ...
