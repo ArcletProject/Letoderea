@@ -4,7 +4,7 @@ import sys
 import traceback
 from enum import Enum
 from types import CodeType
-from typing import Any, Callable, Final
+from typing import Any, Callable, Final, cast
 
 from .typing import Contexts
 
@@ -19,31 +19,18 @@ class ProviderUnsatisfied(Exception):
 
 
 class _ExitException(Exception):
-    def __call__(self, result):  # pragma: no cover
-        self._result = result
-        return self
-
-    @property
-    def result(self) -> Any:  # pragma: no cover
-        return getattr(self, "_result", None)
+    pass
 
 
 class ExitState(_ExitException, Enum):
     stop = _ExitException("Handle stopped")
     block = _ExitException("Propagation blocked")
 
-    def __call__(self, result):
-        self._result = result
-        return self
+    def finish(self, value):
+        return cast(ExitState, _ExitException(value, self is self.block))
 
     def __str__(self):
         return super(Exception, self).__str__()
-
-    @property
-    def result(self) -> Any:
-        ans = getattr(self, "_result", None)
-        self._result = None
-        return ans
 
 
 class InnerHandlerException(Exception):
@@ -91,7 +78,7 @@ class ExceptionHandler:
             return exc
         if inner:
             return InnerHandlerException(e)
-        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied, ExitState)):
+        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied, _ExitException)):
             return e
         if ExceptionHandler.print_traceback:  # pragma: no cover
             traceback.print_exception(e.__class__, e, e.__traceback__)

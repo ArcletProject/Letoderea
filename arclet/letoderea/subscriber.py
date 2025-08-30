@@ -6,14 +6,14 @@ import sys
 from contextvars import ContextVar
 from weakref import WeakSet
 from collections import defaultdict
-from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Generator, AsyncGenerator, Generic, TypeVar, cast, final, overload, Awaitable
 from typing_extensions import Self, get_args, get_origin
 from types import CoroutineType
 from uuid import uuid4
 
-from tarina import Empty, ContextModel, is_async, signatures
+from tarina import Empty, is_async, signatures
 from tarina.guard import is_async_gen_callable, is_gen_callable
 from tarina.tools import run_sync, run_sync_generator
 
@@ -25,6 +25,7 @@ from .exceptions import (
     STOP,
     BLOCK,
     ExitState,
+    _ExitException,
 )
 from .provider import TProviders, Param, Provider, ProviderFactory, provide
 from .ref import Deref, generate
@@ -313,6 +314,8 @@ class Subscriber(Generic[R]):
                 return STOP
             raise ExceptionHandler.call(e1, self.callable_target, context, inner) from e
         except Exception as e:
+            if isinstance(e, _ExitException):  # pragma: no cover
+                return e
             if isinstance(e, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
                 return STOP
             raise ExceptionHandler.call(e, self.callable_target, context, inner) from e
@@ -344,6 +347,8 @@ class Subscriber(Generic[R]):
             else:
                 if isinstance(result, ExitState):
                     return result
+                if isinstance(result, _ExitException):  # pragma: no cover
+                    raise result
                 if isinstance(result, dict):
                     context.update(result)
                 elif isinstance(result, Result):

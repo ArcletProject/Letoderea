@@ -16,7 +16,7 @@ def bind(*args: Union[Provider, type[Provider]]):
     providers = [p() if isinstance(p, type) else p for p in args]
 
     def wrapper(target: TCallable) -> TCallable:
-        if isinstance(target, Subscriber):
+        if isinstance(target, Subscriber):  # pragma: no cover
             target.providers.extend(providers)
             target.params = _compile(target.callable_target, target.providers)
         else:

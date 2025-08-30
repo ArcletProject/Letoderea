@@ -10,7 +10,7 @@ from typing import Any, Callable, Coroutine, Literal, TypeVar, overload, cast
 
 from typing_extensions import dataclass_transform
 
-from .exceptions import ExitState, STOP, BLOCK
+from .exceptions import _ExitException, STOP, BLOCK
 from .publisher import Publisher, gather, define, _publishers
 from .provider import get_providers, provide
 from .scope import Scope, on, use, _scopes  # noqa: F401
@@ -81,30 +81,30 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
         for _i, result in enumerate(results):
             if result is None:
                 continue
-            if result is BLOCK:
-                if (_res := cast(ExitState, result).result) is not None:
-                    yield _res
-                return
             if result is STOP:
-                if (_res := cast(ExitState, result).result) is not None:  # pragma: no cover
-                    yield _res
                 continue
+            if result is BLOCK:
+                return
             if isinstance(result, BaseException):
+                if isinstance(result, _ExitException):
+                    yield result.args[0]
+                    if result.args[1]:
+                        return
+                    continue  # pragma: no cover
                 if isinstance(event, ExceptionEvent):  # pragma: no cover
                     return
                 await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
                 continue
             if isinstance(result, AsyncGeneratorType):  # pragma: no cover
                 async for res in result:
-                    if res is None:
+                    if res in (None, STOP):
                         continue
                     if res is BLOCK:
-                        if (_res := cast(ExitState, res).result) is not None:
-                            yield _res
                         return
-                    if res is STOP:
-                        if (_res := cast(ExitState, res).result) is not None:
-                            yield _res
+                    if isinstance(result, _ExitException):  # type: ignore
+                        yield result.args[0]
+                        if result.args[1]:
+                            return
                         continue
                     if res.__class__ is Force:
                         yield res.value  # type: ignore
