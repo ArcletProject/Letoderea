@@ -76,8 +76,8 @@ class Event:
 @le.make_event(name="rand")
 class RandomData:
     seed: int
-    
-    __result_type__ = float
+
+    def check_result(self, value) -> le.Result[float] | None: ...
 
 @le.on(RandomData)
 def random_subscriber(seed: int):
@@ -87,8 +87,7 @@ def random_subscriber(seed: int):
 async def event_subscriber(event: Event):
     print(f"Event: {event.name}")
     result = await le.post(RandomData(42))
-    if result:
-        print(f"Random: {result.value}")
+    print(f"Random: {result.value}")
 
 async def main():
     await le.publish(Event("Letoderea"))
