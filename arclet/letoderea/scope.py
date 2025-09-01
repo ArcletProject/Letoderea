@@ -123,7 +123,9 @@ class Scope:
 
     def dispose(self):
         self.disable()
-        self.subscribers.clear()
+        while self.subscribers:
+            _, (sub, __) = self.subscribers.popitem()
+            sub.dispose()
         _scopes.pop(self.id, None)
 
 

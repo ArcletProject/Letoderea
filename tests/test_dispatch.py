@@ -22,6 +22,8 @@ class TestEvent:
     foo: str
     bar: str
 
+    def check_result(self, value) -> le.Result[str] | None: ...
+
 
 @le.make_event(name="test1")
 class TestEvent1:

@@ -94,9 +94,8 @@ async def test_breakpoint_with_subscriber():
     async def s_1():
         executed.append(1)
         start = 1111
-        end = await s.wait(default=1234)
-        assert end - start == 123
-        executed.append(3)
+        end = await s.wait(default=5678, timeout=0.2)
+        executed.append(end - start)
 
     a = ExampleEvent()
     a.msg = "hello"
@@ -107,7 +106,11 @@ async def test_breakpoint_with_subscriber():
     await asyncio.sleep(0.1)
     es.publish(b)
     await asyncio.sleep(0.1)
-    assert executed == [1, 2, 3]
+    assert executed == [1, 2, 123]
+
+    executed.clear()
+    await es.publish(a)
+    assert executed == [1, 4567]
 
     res = await es.post(b)
     assert res

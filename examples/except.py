@@ -12,7 +12,7 @@ class TestEvent:
 @bind(provide(int, "age", "a", _id="foo"))
 @bind(provide(int, "age", "b", _id="bar"))
 @bind(provide(int, "age", "c", _id="baz"))
-async def test_subscriber(name: str, age: int):
+async def subscriber(name: str, age: int):
     print(name, age)
 
 

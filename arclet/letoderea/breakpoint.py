@@ -107,7 +107,7 @@ class StepOut(Generic[R]):
         except asyncio.TimeoutError:
             return default
         finally:
-            if not fut.done():
+            if not fut.done():  # pragma: no cover
                 fut.cancel()
             dispose()
             handler.priority = old_priority

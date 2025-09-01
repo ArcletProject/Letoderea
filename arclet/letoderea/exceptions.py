@@ -1,6 +1,5 @@
 import inspect
 import pprint
-import sys
 import traceback
 from enum import Enum
 from types import CodeType
@@ -44,7 +43,7 @@ class ExceptionHandler:
     def call(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):
         if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
             name, *_, pds = e.args
-            param = inspect.signature(callable_target).parameters[name]
+            param = str(inspect.signature(callable_target).parameters[name])
             code: CodeType = callable_target.__code__  # type: ignore
             etype: type[Exception] = type(  # type: ignore
                 "UnresolvedRequirement",
@@ -54,9 +53,17 @@ class ExceptionHandler:
                 ),
                 {},
             )
-            _args = (code.co_filename, code.co_firstlineno, 1, str(param))
-            if sys.version_info >= (3, 10):  # pragma: no cover
-                _args += (code.co_firstlineno, len(name) + 1)
+            lineno = code.co_firstlineno
+            line = ""
+            offset = 1
+            lines = inspect.getsourcelines(callable_target)
+            for i, ln in enumerate(lines[0]):  # pragma: no cover
+                if param in ln:
+                    line = ln
+                    offset += ln.index(param)
+                    lineno += i
+                    break
+            _args = (code.co_filename, lineno, offset, line, lineno, len(param) + offset)
             exc: SyntaxError = etype(
                 f"Unable to parse parameter `{param}`"
                 f"\n> providers on parameter `{param}`: "
