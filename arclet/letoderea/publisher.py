@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from asyncio import Queue
-from typing import TYPE_CHECKING, Any, Callable, Generic, Awaitable, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, get_type_hints
+from collections.abc import Callable, Awaitable
 from typing_extensions import Self
 from tarina.generic import is_typed_dict, generic_isinstance
 
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", covariant=True)
 T1 = TypeVar("T1")
-_publishers: dict[str, "Publisher"] = {}
+_publishers: dict[str, Publisher] = {}
 
 
 async def _supplier(event: Any, context: Contexts):
@@ -49,11 +50,11 @@ class Publisher(Generic[T]):
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
-    def unsafe_push(self: "Publisher[T1]", event: T1) -> None:
+    def unsafe_push(self: Publisher[T1], event: T1) -> None:
         """将事件放入队列，等待被 event system 主动轮询; 该方法可能引发 QueueFull 异常"""
         self.event_queue.put_nowait(event)
 
-    async def push(self: "Publisher[T1]", event: T1):
+    async def push(self: Publisher[T1], event: T1):
         """将事件放入队列，等待被 event system 主动轮询"""
         await self.event_queue.put(event)
 

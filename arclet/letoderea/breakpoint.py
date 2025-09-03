@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Awaitable
-from typing import Callable, Generic, Optional, TypeVar, Union, overload, Any
+from typing import Generic, TypeVar, overload, Any
+from collections.abc import Callable
 from types import CoroutineType
 
 from .exceptions import BLOCK
@@ -25,10 +26,10 @@ class _step_iter(Generic[R, D]):
         return self
 
     @overload
-    def __anext__(self: "_step_iter[CoroutineType[Any, Any, R1], None] | _step_iter[Awaitable[R1], None] | _step_iter[R1, None]") -> Awaitable[Optional[R1]]: ...
+    def __anext__(self: "_step_iter[CoroutineType[Any, Any, R1], None] | _step_iter[Awaitable[R1], None] | _step_iter[R1, None]") -> Awaitable[R1 | None]: ...
 
     @overload
-    def __anext__(self: "_step_iter[CoroutineType[Any, Any, R1], D1] | _step_iter[Awaitable[R1], D1] | _step_iter[R1, D1]") -> Awaitable[Union[R1, D1]]: ...
+    def __anext__(self: "_step_iter[CoroutineType[Any, Any, R1], D1] | _step_iter[Awaitable[R1], D1] | _step_iter[R1, D1]") -> Awaitable[R1 | D1]: ...
 
     def __anext__(self):  # type: ignore
         return self.step.wait(default=self.default, timeout=self.timeout)
@@ -38,7 +39,7 @@ class StepOut(Generic[R]):
 
     def __init__(
         self,
-        handler: Union[Subscriber[R], Callable[[], Subscriber[R]]],
+        handler: Subscriber[R] | Callable[[], Subscriber[R]],
         priority: int = 15,
         block: bool = False,
     ):
@@ -61,8 +62,8 @@ class StepOut(Generic[R]):
     def __call__(self, *, timeout: float = 120) -> _step_iter[R, None]: ...
 
     def __call__(
-        self, *, timeout: float = 120, default: Optional[D] = None
-    ) -> Union[_step_iter[R, D], _step_iter[R, None]]:
+        self, *, timeout: float = 120, default: D | None = None
+    ) -> _step_iter[R, D] | _step_iter[R, None]:
         """等待用户输入并返回结果
 
         参数:
@@ -72,10 +73,10 @@ class StepOut(Generic[R]):
         return _step_iter(self, default, timeout)  # type: ignore
 
     @overload
-    async def wait(self: "StepOut[CoroutineType[Any, Any, R1]] | StepOut[Awaitable[R1]] | StepOut[R1]", *, timeout: float = 120) -> Optional[R1]: ...
+    async def wait(self: "StepOut[CoroutineType[Any, Any, R1]] | StepOut[Awaitable[R1]] | StepOut[R1]", *, timeout: float = 120) -> R1 | None: ...
 
     @overload
-    async def wait(self: "StepOut[CoroutineType[Any, Any, R1]] | StepOut[Awaitable[R1]] | StepOut[R1]", *, default: Union[R1, D], timeout: float = 120) -> Union[R1, D]: ...
+    async def wait(self: "StepOut[CoroutineType[Any, Any, R1]] | StepOut[Awaitable[R1]] | StepOut[R1]", *, default: R1 | D, timeout: float = 120) -> R1 | D: ...
 
     async def wait(
         self,
@@ -117,18 +118,18 @@ class StepOut(Generic[R]):
 
 
 @overload
-def step_out(event: type, handler: Callable[..., R], *, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False) -> StepOut[R]: ...
+def step_out(event: type, handler: Callable[..., R], *, providers: TProviders | None = None, priority: int = 15, block: bool = False) -> StepOut[R]: ...
 
 
 @overload
-def step_out(event: type, *, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False) -> Callable[[Callable[..., R]], StepOut[R]]: ...
+def step_out(event: type, *, providers: TProviders | None = None, priority: int = 15, block: bool = False) -> Callable[[Callable[..., R]], StepOut[R]]: ...
 
 
 @overload
 def step_out(*, priority: int = 15, block: bool = False) -> Callable[[Subscriber[R]], StepOut[R]]: ...
 
 
-def step_out(event: Union[type, None] = None, handler: Optional[Callable[...,  R]] = None, providers: Optional[TProviders] = None, priority: int = 15, block: bool = False):
+def step_out(event: type | None = None, handler: Callable[..., R] | None = None, providers: TProviders | None = None, priority: int = 15, block: bool = False):
 
     if event is None:
         def decorator1(func: Subscriber[R], /) -> StepOut[R]:

@@ -8,8 +8,10 @@ from weakref import WeakSet
 from collections import defaultdict
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Generator, AsyncGenerator, Generic, TypeVar, cast, final, overload, Awaitable
-from typing_extensions import Self, get_args, get_origin
+from typing import Annotated, Any, Generic, TypeVar, cast, final, overload
+from collections.abc import Callable, Generator, AsyncGenerator, Awaitable
+from typing_extensions import Self
+from typing import get_args, get_origin
 from types import CoroutineType
 from uuid import uuid4
 
@@ -40,10 +42,10 @@ from .typing import (
 
 R = TypeVar("R")
 T = TypeVar("T")
-RESULT: CtxItem["Any"] = cast(CtxItem, "$result")
+RESULT: CtxItem[Any] = cast(CtxItem, "$result")
 STACK: CtxItem[AsyncExitStack] = cast(CtxItem, "$exit_stack")
-SUBSCRIBER: CtxItem["Subscriber"] = cast(CtxItem, "$subscriber")
-current_subscriber: ContextVar["Subscriber"] = ContextVar("_current_subscriber")
+SUBSCRIBER: CtxItem[Subscriber] = cast(CtxItem, "$subscriber")
+current_subscriber: ContextVar[Subscriber] = ContextVar("_current_subscriber")
 
 
 class ResultProvider(Provider[Any]):

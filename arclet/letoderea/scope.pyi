@@ -1,5 +1,6 @@
 from contextlib import contextmanager
-from typing import Any, Callable, ClassVar, TypeVar, overload, Awaitable, Generator, AsyncGenerator, Generic
+from typing import Any, ClassVar, TypeVar, overload, Generic
+from collections.abc import Callable, Awaitable, Generator, AsyncGenerator
 
 from tarina import ContextModel
 
@@ -12,7 +13,7 @@ from .typing import Resultable
 T = TypeVar("T")
 T1 = TypeVar("T1")
 _scopes: dict[str, Scope]
-scope_ctx: ContextModel["Scope"]
+scope_ctx: ContextModel[Scope]
 global_propagators: list[Propagator]
 
 

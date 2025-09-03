@@ -3,7 +3,8 @@ import inspect
 from dataclasses import dataclass
 from tarina import Empty
 from tarina.generic import origin_is_union, get_origin
-from typing_extensions import Annotated, Doc, get_args
+from typing_extensions import Doc
+from typing import Annotated, get_args
 import arclet.letoderea as le
 
 

@@ -35,11 +35,11 @@ async def exam1(a: str):
 
 async def main():
     aa = ExampleEvent()
-    ab = ExampleEvent("ab")
+    # ab = ExampleEvent("ab")
     subs = [(sub, pub.id) for _ in range(200)]
     for _ in range(200):
         await dispatch(aa, slots=subs)
-        #await dispatch(ab, slots=subs)
+        # await dispatch(ab, slots=subs)
 
 s = time.perf_counter_ns()
 loop.run_until_complete(main())

@@ -3,7 +3,8 @@ import pprint
 import traceback
 from enum import Enum
 from types import CodeType
-from typing import Any, Callable, Final, cast
+from typing import Any, Final, cast
+from collections.abc import Callable
 
 from .typing import Contexts
 

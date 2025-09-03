@@ -1,5 +1,6 @@
 from collections.abc import Container
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, cast, Union
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+from collections.abc import Callable
 
 from .typing import Contexts, EVENT
 
@@ -9,7 +10,7 @@ T = TypeVar("T")
 class Deref:
     def __init__(self, proxy_type: type):
         self.__proxy_type = proxy_type
-        self.__items: dict[Optional[str], Optional[tuple[bool, Callable[[Any], Any]]]] = {}
+        self.__items: dict[str | None, tuple[bool, Callable[[Any], Any]] | None] = {}
         self.__last_key = None
 
     def __getattr__(self, item):
@@ -113,7 +114,7 @@ if TYPE_CHECKING:
 
     def not_(ref: Any) -> bool: ...
 
-    def isinstance_(ref: Any, value: Union[type, tuple[type, ...]]) -> bool: ...
+    def isinstance_(ref: Any, value: type | tuple[type, ...]) -> bool: ...
 
 else:
 

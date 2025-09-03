@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import itertools
 from asyncio import Queue
-from typing import Callable, TypeVar, Any, overload, get_args
+from typing import TypeVar, Any, overload, get_args
+from collections.abc import Callable
 from typing_extensions import ParamSpec
 
 from tarina import signatures, generic_isinstance, Empty
@@ -40,7 +41,7 @@ class CollectedPublisher(Publisher[T]):
             data = event
         else:
             try:  # pragma: no cover
-                data = {key: val for key, val in vars(event).items()}
+                data = vars(event).copy()
             except TypeError:  # pragma: no cover
                 data = {}
         for key, val in data.items():
@@ -54,7 +55,7 @@ class CollectedPublisher(Publisher[T]):
             data = x
         else:
             try:
-                data = {key: val for key, val in vars(x).items()}
+                data = vars(x).copy()
             except TypeError:
                 data = {}
         if not self._required_keys.issubset(data.keys()):

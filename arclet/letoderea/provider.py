@@ -6,8 +6,9 @@ from contextlib import AsyncExitStack
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Callable, ClassVar, Generic, NamedTuple, Sequence, TypeVar
-from typing_extensions import TypeAlias
+from typing import Any, ClassVar, Generic, NamedTuple, TypeVar
+from collections.abc import Callable, Sequence
+from typing import TypeAlias
 
 from tarina import generic_issubclass, run_always_await
 from tarina.generic import get_origin, is_optional, origin_is_union
@@ -136,4 +137,4 @@ class AsyncExitStackProvider(Provider[AsyncExitStack]):
 
 
 global_providers.extend([EventProvider(), ContextProvider(), AsyncExitStackProvider()])
-TProviders: TypeAlias = "Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]]"
+TProviders: TypeAlias = Sequence[Provider[Any] | type[Provider[Any]] | ProviderFactory | type[ProviderFactory]]

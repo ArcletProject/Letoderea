@@ -1,5 +1,4 @@
 import asyncio
-from typing import Union
 
 from arclet.letoderea import es, provide
 
@@ -14,7 +13,7 @@ class TestEvent:
 
 @es.on(TestEvent, providers=[provide(int, call="index")])
 async def test(
-    index: Union[str, int],
+    index: str | int,
     a: str = "hello",
 ):
     print("test:", index, a)
@@ -23,7 +22,7 @@ async def test(
     # no provide, a: str = "hello"
 
 
-@es.on(TestEvent, providers=[provide(Union[int, str], call="index")])
+@es.on(TestEvent, providers=[provide(int | str, call="index")])
 async def test1(
     index: int,
     a: str = "hello",

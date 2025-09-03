@@ -1,5 +1,4 @@
 import pytest
-from typing import Union
 import arclet.letoderea as le
 
 
@@ -12,7 +11,7 @@ async def test_collect():
         executed.append((0, event))
 
     @le.collect
-    async def s1(a: int, b: Union[int, str]):
+    async def s1(a: int, b: int | str):
         executed.append((1, b * a))
 
     @le.collect

@@ -1,5 +1,6 @@
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any, Callable, Union, overload
+from typing import TYPE_CHECKING, Any, Union, overload
+from collections.abc import Callable
 
 from tarina import is_coroutinefunction
 from tarina.tools import run_sync
@@ -12,7 +13,7 @@ from .subscriber import STOP, Propagator, Subscriber, _compile
 from .typing import EVENT, Contexts, TCallable
 
 
-def bind(*args: Union[Provider, type[Provider]]):
+def bind(*args: Provider | type[Provider]):
     providers = [p() if isinstance(p, type) else p for p in args]
 
     def wrapper(target: TCallable) -> TCallable:
@@ -34,10 +35,10 @@ def propagate(*funcs: Callable[..., Any], prepend: bool = False) -> Callable[[TC
 
 
 @overload
-def propagate(*funcs: Union[Callable[..., Any], Propagator]) -> Callable[[TCallable], TCallable]: ...
+def propagate(*funcs: Callable[..., Any] | Propagator) -> Callable[[TCallable], TCallable]: ...
 
 
-def propagate(*funcs: Union[Callable[..., Any], Propagator], prepend: bool = False):
+def propagate(*funcs: Callable[..., Any] | Propagator, prepend: bool = False):
     def wrapper(target: TCallable, /) -> TCallable:
         if isinstance(target, Subscriber):
             target.propagates(*funcs, prepend=prepend)
@@ -57,7 +58,7 @@ class _Check(Propagator):
         self.result = result
 
     if TYPE_CHECKING:
-        def derive(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], bool]) -> Self: ...
+        def derive(self, predicate: "_Check" | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool) -> Self: ...
     else:
         def derive(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> Self:
             if isinstance(predicate, _Check):
@@ -94,7 +95,7 @@ class _CheckBuilder:
         self.result = result
 
     if TYPE_CHECKING:
-        def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], bool]) -> _Check: ...
+        def __call__(self, predicate: "_Check" | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool) -> _Check: ...
     else:
         def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> _Check:
             return _Check(self.result).derive(generate(predicate) if isinstance(predicate, Deref) else predicate)

@@ -1,5 +1,5 @@
 import asyncio
-from typing_extensions import Annotated
+from typing import Annotated
 
 from arclet.letoderea import es
 from arclet.letoderea.ref import deref

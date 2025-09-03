@@ -15,7 +15,7 @@ pub = le.define(FetchEvent, name="fetch_event")
 
 @pytest.mark.asyncio
 async def test_event_dispatch():
-    from arclet.letoderea.core import setup_fetch, add_task
+    from arclet.letoderea.core import setup_fetch
 
     await pub.push(FetchEvent("f1", "b1"))
     await pub.push(FetchEvent("f2", "b2"))

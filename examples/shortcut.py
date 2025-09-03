@@ -1,5 +1,5 @@
 import asyncio
-from typing_extensions import Annotated
+from typing import Annotated
 
 from arclet.letoderea import bypass_if, enter_if, es, on
 from arclet.letoderea.ref import deref

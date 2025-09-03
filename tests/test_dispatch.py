@@ -1,4 +1,3 @@
-from typing import Union
 
 import pytest
 import arclet.letoderea as le
@@ -92,7 +91,7 @@ async def test_event_dispatch():
 
     @le.on(TestEvent)
     @le.on(TestEvent1)
-    async def _2(foo, bar, event: Union[TestEvent, TestEvent1]):
+    async def _2(foo, bar, event: TestEvent | TestEvent1):
         if isinstance(event, TestEvent):
             assert foo == "f"
             assert bar == "b"

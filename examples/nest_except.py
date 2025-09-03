@@ -12,7 +12,7 @@ class ExampleEvent:
     class ExampleProvider(Provider[str]):
 
         def validate(self, param: Param):
-            return param.name == "a" and param.annotation == str
+            return param.name == "a" and param.annotation is str
 
         async def __call__(self, context: Contexts):
             return context.get("a")

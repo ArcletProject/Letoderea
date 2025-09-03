@@ -227,7 +227,7 @@ async def test_propagator():
 @pytest.mark.asyncio
 async def test_dependency_condition2():
     from arclet.letoderea.typing import generate_contexts
-    from arclet.letoderea.exceptions import UnresolvedRequirement, ProviderUnsatisfied
+    from arclet.letoderea.exceptions import ProviderUnsatisfied
     executed = []
     ctx = await generate_contexts(PropagateEvent("123 456"))
 

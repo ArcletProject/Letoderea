@@ -6,7 +6,8 @@ from collections.abc import Awaitable, AsyncGenerator, Iterable
 from dataclasses import dataclass
 from itertools import chain
 from types import AsyncGeneratorType
-from typing import Any, Callable, Coroutine, Literal, TypeVar, overload, cast
+from typing import Any, Literal, TypeVar, overload, cast
+from collections.abc import Callable, Coroutine
 
 from typing_extensions import dataclass_transform
 
@@ -174,40 +175,29 @@ async def _loop_fetch(publisher: Publisher):
 
 
 def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[None]:
-    """发布事件"""
+    """发布事件，并行处理所有响应"""
     return add_task(dispatch(event, scope, inherit_ctx=inherit_ctx))  # type: ignore
 
 
 @overload
 def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: Literal[True]) -> asyncio.Task[Result[T] | None]: ...
-
-
 @overload
 def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: Literal[True]) -> asyncio.Task[Result[Any] | None]: ...
-
-
 @overload
 def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[Result[T]]: ...
-
-
 @overload
 def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[Result[Any]]: ...
-
-
 def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: bool = False):  # type: ignore
-    """发布事件并返回第一个响应结果"""
+    """发布事件，并行处理所有响应并返回第一个响应结果"""
     return add_task(dispatch(event, scope, inherit_ctx=inherit_ctx, return_result=True, validate=validate))
 
 
 @overload
 def waterfall(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> AsyncGenerator[Result[T], Any]: ...
-
-
 @overload
 def waterfall(event: Any, scope: str | Scope | None = None,  inherit_ctx: Contexts | None = None) -> AsyncGenerator[Result[Any], Any]: ...
-
-
 async def waterfall(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
+    """发布事件，并行处理事件，逐个产出所有响应结果"""
     async for res in broadcast(event, scope, inherit_ctx=inherit_ctx):
         yield res if isinstance(res, Result) else Result(res)
 

@@ -64,7 +64,7 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "UP", "C", "T", "Q"]
-ignore = ["E402", "F403", "F405", "C901", "UP037"]
+ignore = ["E402", "F403", "F405", "C901", "UP038", "T201", "T203"]
 
 [tool.pyright]
 pythonVersion = "3.10"

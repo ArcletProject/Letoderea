@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from secrets import token_urlsafe
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
+from collections.abc import Callable
 
 from tarina import ContextModel
 
@@ -15,7 +16,7 @@ T = TypeVar("T")
 _scopes: dict[str, Scope] = {}
 
 
-scope_ctx: ContextModel["Scope"] = ContextModel("scope_ctx")
+scope_ctx: ContextModel[Scope] = ContextModel("scope_ctx")
 global_propagators: list[Propagator] = []
 
 
