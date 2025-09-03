@@ -76,11 +76,12 @@ class Force:
     value: Any
 
 
-@dataclass
 class Result(Generic[T]):
     """用于标记一个事件响应器的处理结果，通常应用在某个事件响应器的处理结果需要被事件发布者使用的情况"""
+    __slots__ = ("value",)
 
-    value: T
+    def __init__(self, value: T):
+        self.value = value
 
 
 class Resultable(Protocol[T]):

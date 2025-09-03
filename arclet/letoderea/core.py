@@ -6,7 +6,7 @@ from collections.abc import Awaitable, AsyncGenerator, Iterable
 from dataclasses import dataclass
 from itertools import chain
 from types import AsyncGeneratorType
-from typing import Any, Literal, TypeVar, overload, cast
+from typing import Any, TypeVar, overload, cast
 from collections.abc import Callable, Coroutine
 
 from typing_extensions import dataclass_transform
@@ -48,11 +48,11 @@ async def _(event: ExceptionEvent, context: Contexts):
 async def publish_exc_event(event: ExceptionEvent):
     scopes = [sp for sp in _scopes.values() if sp.available]
     subs = [slot for sp in scopes for slot in sp.subscribers.values() if slot[1] != "$backend"]
-    async for _ in broadcast(event, slots=subs):
-        pass
+    await dispatch(event, slots=subs)
 
 
-async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):
+async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):
+    """准备事件处理的公共逻辑"""
     if slots:
         pass
     elif isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
@@ -61,12 +61,16 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
         slots = scope.subscribers.values()
     else:
         slots = chain.from_iterable(sp.subscribers.values() for sp in _scopes.values() if sp.available)
+
     grouped: dict[tuple[int, str], list[Subscriber]] = {}
     context_map: dict[str, Contexts] = {}
-    if pub := _publishers.get(getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
+
+    if pub := _publishers.get(
+            getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
         pubs = {pub.id: pub}
     else:
         pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
+
     for sub, pub_id in slots:
         if pub_id != "$backend" and pub_id not in pubs:
             continue
@@ -75,6 +79,13 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
         if ((priority := sub.priority), pub_id) not in grouped:
             grouped[(priority, pub_id)] = []
         grouped[(priority, pub_id)].append(sub)
+
+    return grouped, context_map
+
+
+async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
+    grouped, context_map = await compute(event, scope, slots, inherit_ctx)
+
     for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
         contexts = context_map[pub_id]
         tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
@@ -91,7 +102,51 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
                     yield result.args[0]
                     if result.args[1]:
                         return
-                    continue  # pragma: no cover
+                    continue
+                if isinstance(event, ExceptionEvent):
+                    return
+                await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
+                continue
+            if isinstance(result, AsyncGeneratorType):
+                async for res in result:
+                    if res in (None, STOP):
+                        continue
+                    if res is BLOCK:
+                        return
+                    if isinstance(result, _ExitException):
+                        yield result.args[0]
+                        if result.args[1]:
+                            return
+                        continue
+                    if res.__class__ is Force:
+                        yield res.value  # type: ignore
+                    else:
+                        yield res
+            elif result.__class__ is Force:
+                yield result.value  # type: ignore
+            else:
+                yield result
+
+
+async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):
+    grouped, context_map = await compute(event, scope, slots, inherit_ctx)
+
+    for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
+        contexts = context_map[pub_id]
+        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for _i, result in enumerate(results):
+            if result is None:
+                continue
+            if result is STOP:
+                continue
+            if result is BLOCK:
+                return
+            if isinstance(result, BaseException):
+                if isinstance(result, _ExitException):  # pragma: no cover
+                    if result.args[1]:
+                        return
+                    continue
                 if isinstance(event, ExceptionEvent):  # pragma: no cover
                     return
                 await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
@@ -103,26 +158,57 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
                     if res is BLOCK:
                         return
                     if isinstance(result, _ExitException):  # type: ignore
-                        yield result.args[0]
                         if result.args[1]:
                             return
                         continue
+
+
+async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):
+    grouped, context_map = await compute(event, scope, slots, inherit_ctx)
+
+    for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
+        contexts = context_map[pub_id]
+        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for _i, result in enumerate(results):
+            if result is None:
+                continue
+            if result is STOP:
+                continue
+            if result is BLOCK:  # pragma: no cover
+                return
+            if isinstance(result, BaseException):  # pragma: no cover
+                if isinstance(result, _ExitException):
+                    return result.args[0]
+                if isinstance(event, ExceptionEvent):
+                    return
+                await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
+                continue
+            if isinstance(result, AsyncGeneratorType):  # pragma: no cover
+                async for res in result:
+                    if res in (None, STOP):
+                        continue
+                    if res is BLOCK:
+                        return
+                    if isinstance(result, _ExitException):  # type: ignore
+                        return result.args[0]
                     if res.__class__ is Force:
-                        yield res.value  # type: ignore
+                        return res.value  # type: ignore
                     else:
-                        yield res
+                        return res
             elif result.__class__ is Force:  # pragma: no cover
-                yield result.value  # type: ignore
+                return result.value  # type: ignore
             else:
-                yield result
+                return result
 
 
-async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None, *, return_result: bool = False, validate: bool = False):
-    async for res in broadcast(event, scope, slots, inherit_ctx):
-        if return_result:
-            if validate and hasattr(event, "check_result"):
-                return cast(Resultable, event).check_result(res.value if isinstance(res, Result) else res)
-            return res if isinstance(res, Result) else Result(res)
+async def _post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: bool = False):
+    res = await serial(event, scope, inherit_ctx=inherit_ctx)
+    if res is None:
+        return
+    if validate and hasattr(event, "check_result"):
+        return cast(Resultable, event).check_result(res.value if isinstance(res, Result) else res)
+    return res if isinstance(res, Result) else Result(res)
 
 
 async def run_handler(
@@ -180,16 +266,12 @@ def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts 
 
 
 @overload
-def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: Literal[True]) -> asyncio.Task[Result[T] | None]: ...
+def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, validate: bool = False) -> asyncio.Task[Result[T] | None]: ...
 @overload
-def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: Literal[True]) -> asyncio.Task[Result[Any] | None]: ...
-@overload
-def post(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[Result[T]]: ...
-@overload
-def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[Result[Any]]: ...
-def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: bool = False):  # type: ignore
+def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, validate: bool = False) -> asyncio.Task[Result[Any] | None]: ...
+def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, validate: bool = False):
     """发布事件，并行处理所有响应并返回第一个响应结果"""
-    return add_task(dispatch(event, scope, inherit_ctx=inherit_ctx, return_result=True, validate=validate))
+    return add_task(_post(event, scope, inherit_ctx=inherit_ctx, validate=validate))
 
 
 @overload
