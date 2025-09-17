@@ -66,7 +66,7 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     context_map: dict[str, Contexts] = {}
 
     if pub := _publishers.get(
-            getattr(event, "__publisher__", f"$event:{type(event).__module__}{type(event).__name__}")):
+            getattr(event, "__publisher__", f"$event:{type(event).__module__}.{type(event).__name__}")):
         pubs = {pub.id: pub}
     else:
         pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}

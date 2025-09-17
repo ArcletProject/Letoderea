@@ -1,12 +1,21 @@
 import inspect
+import itertools
 import pprint
+import re
+import sys
 import traceback
 from enum import Enum
-from types import CodeType
+from types import CodeType, TracebackType
 from typing import Any, Final, cast
 from collections.abc import Callable
 
 from .typing import Contexts
+
+
+pat = re.compile(r"(async\s+)?def\s+(\w+)\s*(\[[\w.\[\], ]+\])?\s*\((?P<params>.*)\)")
+pat1 = re.compile(r"(async\s+)?def\s+(\w+)\s*(\[[\w.\[\], ]+\])?\s*\(")
+pat1_1 = re.compile(r"\)\s*(->\s*[\w.\[\], ]+)?\s*:")
+pat2 = re.compile(r"lambda\s+(?P<params>.*):")
 
 
 class UnresolvedRequirement(Exception):
@@ -37,33 +46,58 @@ class InnerHandlerException(Exception):
     pass
 
 
+class Trace(traceback.TracebackException):
+    def __init__(self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback: TracebackType | None, **kwargs):  # pragma: no cover
+        super().__init__(exc_type, exc_value, exc_traceback, **kwargs)
+        self.exc_value = exc_value
+        self.exc_traceback = exc_traceback
+
+
 class ExceptionHandler:
     print_traceback = True
 
     @staticmethod
-    def call(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):
+    def print_trace(te: Trace):  # pragma: no cover
+        for line in te.format(chain=True):
+            print(line, file=sys.stderr, end="")
+
+    @staticmethod
+    def call(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):  # pragma: no cover
         if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
             name, *_, pds = e.args
             param = str(inspect.signature(callable_target).parameters[name])
             code: CodeType = callable_target.__code__  # type: ignore
-            etype: type[Exception] = type(  # type: ignore
-                "UnresolvedRequirement",
-                (
-                    UnresolvedRequirement,
-                    SyntaxError,
-                ),
-                {},
-            )
+            etype: type[Exception] = type("UnresolvedRequirement", (UnresolvedRequirement, SyntaxError), {})  # type: ignore
             lineno = code.co_firstlineno
             line = ""
             offset = 1
             lines = inspect.getsourcelines(callable_target)
-            for i, ln in enumerate(lines[0]):  # pragma: no cover
-                if param in ln:
-                    line = ln
-                    offset += ln.index(param)
-                    lineno += i
-                    break
+            if code.co_name == "<lambda>":
+                p = pat2
+                def1 = next(itertools.dropwhile(lambda x: not pat2.search(x[1]), enumerate(lines[0])), None)
+            else:
+                p = pat
+                def1 = next(itertools.dropwhile(lambda x: not pat.search(x[1]), enumerate(lines[0])), None)
+            if def1 is not None:
+                lineno += def1[0]
+                line = def1[1]
+                mat = p.search(line)
+                assert mat
+                params = mat.group("params").split(",")
+                params_span = mat.span("params")
+                target = next((slot for slot in params if name == slot.split(":")[0].strip() or name == slot.split("=")[0].strip()))
+                offset += params_span[0] + line[params_span[0]:].index(target) + target.count(" ", 0, target.index(name))
+            elif def2 := next(itertools.dropwhile(lambda x: not pat1.search(x[1]), enumerate(lines[0])), None):
+                lineno += def2[0]
+                for j, params in enumerate(lines[0][def2[0] + 1:]):
+                    target = next((slot for slot in params.split(",") if name == slot.split(":")[0].strip() or name == slot.split("=")[0].strip()), None)
+                    if target:
+                        lineno += j + 1
+                        offset += params.index(target) + target.count(" ", 0, target.index(name))
+                        line = params
+                        break
+                    if pat1_1.search(params):
+                        break
             _args = (code.co_filename, lineno, offset, line, lineno, len(param) + offset)
             exc: SyntaxError = etype(
                 f"Unable to parse parameter `{param}`"
@@ -78,19 +112,36 @@ class ExceptionHandler:
             if inner:
                 return InnerHandlerException(exc)
             if ExceptionHandler.print_traceback:  # pragma: no cover
-                traceback.print_exception(
-                    etype,
-                    exc,
-                    e.__traceback__,
-                )
+                traceback.print_exception(etype, exc, e.__traceback__)
             return exc
         if inner:
             return InnerHandlerException(e)
-        if isinstance(e, (InnerHandlerException, ProviderUnsatisfied, _ExitException)):
+        if isinstance(e, (ProviderUnsatisfied, _ExitException)):
             return e
+        if isinstance(e, InnerHandlerException):
+            _e = e.args[0]
+            end_tb = tb = e.__traceback__
+            while end_tb and end_tb.tb_next:
+                if end_tb.tb_next.tb_next is None:
+                    break
+                end_tb = end_tb.tb_next
+            end_tb.tb_next = e.args[0].__traceback__  # type: ignore
+        else:
+            _e = e
+            tb = e.__traceback__
         if ExceptionHandler.print_traceback:  # pragma: no cover
-            traceback.print_exception(e.__class__, e, e.__traceback__)
-        return e
+            if isinstance(_e, UnresolvedRequirement):
+                traceback.print_exception(SyntaxError, _e, tb)
+            else:
+                code = callable_target.__code__  # type: ignore
+                lineno = code.co_firstlineno
+                lines = inspect.getsourcelines(callable_target)
+                lineno += next(itertools.dropwhile(lambda x: not pat1.search(x[1]), enumerate(lines[0])))[0]
+                summary = traceback.FrameSummary(code.co_filename, lineno, callable_target.__name__, locals={})
+                te = Trace(_e.__class__, _e, tb, compact=True)
+                te.stack.insert(0, summary)
+                ExceptionHandler.print_trace(te)
+        return _e
 
 
 def switch_print_traceback(flag: bool):  # pragma: no cover

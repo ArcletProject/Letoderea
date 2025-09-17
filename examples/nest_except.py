@@ -18,7 +18,7 @@ class ExampleEvent:
             return context.get("a")
 
 
-async def wrapper(data: str):  # sourcery skip: raise-specific-error
+async def wrapper(daa: str):  # sourcery skip: raise-specific-error
     return int(data)
 
 
@@ -26,6 +26,7 @@ async def wrapper1(a: int = Depends(wrapper)):  # sourcery skip: raise-specific-
     return int(a)
 
 
+@es.on(ExampleEvent)
 async def handler(a: int = Depends(wrapper1)):
     print(a)
 
@@ -35,7 +36,7 @@ async def exception_handler(event: ExceptionEvent):
     print(repr(event))
 
 
-es.on(ExampleEvent, handler)
+#es.on(ExampleEvent, handler)
 
 
 async def main():

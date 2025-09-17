@@ -7,6 +7,7 @@ from cProfile import Profile
 from pprint import pprint
 
 from arclet.letoderea import Contexts, Param, Provider, on
+from arclet.letoderea.core import dispatch
 
 loop = asyncio.new_event_loop()
 
@@ -18,14 +19,14 @@ class TestEvent:
     class TestProvider(Provider[str]):
 
         def validate(self, param: Param):
-            return param.name == "a"
+            return param.name == "aa"
 
         async def __call__(self, context: Contexts) -> str | None:
             return "1"
 
 
 @on(TestEvent)
-async def sub(a):
+async def sub(aa):
     pass
 
 
@@ -48,7 +49,7 @@ loop.run_until_complete(main())
 e = time.perf_counter_ns()
 n = e - s
 print("RUN 1:")
-print(f"used {n/10e8}, {count*10e8/n}o/s")
+print(f"used {n/10e8} s, {count*10e8/n}o/s")
 print(f"{n / count} ns per task with {count} tasks gather")
 
 
@@ -62,8 +63,22 @@ loop.run_until_complete(main1())
 e = time.perf_counter_ns()
 n = e - s
 print("RUN 2:")
-print(f"used {n/10e8}, {count*10e8/n}o/s")
+print(f"used {n/10e8} s, {count*10e8/n}o/s")
 print(f"{n / count} ns per loop with {count} loops")
+
+
+async def main2():
+    for _ in range(count):
+        await dispatch(a, slots=[(sub, '$event:__main__.TestEvent')])
+
+
+s = time.perf_counter_ns()
+loop.run_until_complete(main2())
+e = time.perf_counter_ns()
+n = e - s
+print("RUN 3:")
+print(f"used {n/10e8} s, {count*10e8/n}o/s")
+print(f"{n / count} ns per call with {count} events dispatch")
 
 # tasks.clear()
 # tasks.extend(
@@ -72,7 +87,7 @@ print(f"{n / count} ns per loop with {count} loops")
 # )
 
 
-async def main2():
+async def main3():
     for _ in range(count):
         await sub.handle(ctx.copy())
 

@@ -84,9 +84,11 @@ class Depend:
             res = await self.sub.handle(context.copy(), inner=True)
         except Exception as e:  # pragma: no cover
             fut.set_exception(e)
+            fut.cancel()
             raise
         except BaseException as e:  # pragma: no cover
             fut.set_exception(e)
+            fut.cancel()
             cache.pop(self.target, None)
             raise
         else:
@@ -314,7 +316,7 @@ class Subscriber(Generic[R]):
             e1 = e.args[0]
             if isinstance(e1, (UnresolvedRequirement, ProviderUnsatisfied)) and self.skip_req_missing:
                 return STOP
-            raise ExceptionHandler.call(e1, self.callable_target, context, inner) from e
+            raise ExceptionHandler.call(e, self.callable_target, context, inner) from e1
         except Exception as e:
             if isinstance(e, _ExitException):  # pragma: no cover
                 return e
