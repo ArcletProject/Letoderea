@@ -1,8 +1,15 @@
+<div align="center"> 
+
 # Letoderea
-[![Licence](https://img.shields.io/github/license/ArcletProject/Letoderea)](https://github.com/ArcletProject/Letoderea/blob/master/LICENSE)
+[![Licence](https://img.shields.io/github/license/ArcletProject/Letoderea)](https://github.com/ArcletProject/Letoderea/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/arclet-letoderea)](https://pypi.org/project/arclet-letoderea)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/arclet-letoderea)](https://www.python.org/)
 [![codecov](https://codecov.io/gh/ArcletProject/Letoderea/branch/main/graph/badge.svg?token=DOMUPLN5XO)](https://codecov.io/gh/ArcletProject/Letoderea)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ArcletProject/Letoderea)
+[![Docs](https://img.shields.io/badge/docs-arclet.top-28d178)](https://arclet.top/tutorial/letoderea/)
+[![QQ 群](https://img.shields.io/badge/QQ-654490750-yellow.svg)](https://jq.qq.com/?_wv=1027&k=PUPOnCSH)
+
+</div>
 
 一个高性能，结构简洁，依赖于 Python内置库`asyncio` 的事件系统, 设计灵感来自[`Graia BroadcastControl`](https://github.com/GraiaProject/BroadcastControl)。
 
