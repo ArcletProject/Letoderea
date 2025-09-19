@@ -18,7 +18,7 @@ class ExampleEvent:
             return context.get("a")
 
 
-async def wrapper(daa: str):  # sourcery skip: raise-specific-error
+async def wrapper(data: str):  # sourcery skip: raise-specific-error
     return int(data)
 
 

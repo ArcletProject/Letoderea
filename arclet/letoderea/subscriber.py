@@ -326,7 +326,7 @@ class Subscriber(Generic[R]):
         finally:
             current_subscriber.reset(token)  # type: ignore
             if not inner:
-                if "$exit_stack" in context:
+                if "$exit_stack" in context:  # pragma: no cover
                     await context[STACK].__aexit__(*sys.exc_info())
                 context.clear()
             if self.once:
