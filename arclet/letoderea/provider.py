@@ -19,10 +19,12 @@ T = TypeVar("T")
 
 
 class Param(NamedTuple):
+    """用于 Provider 的函数参数信息"""
     name: str
     annotation: Any
     default: Any
     is_empty: bool
+    """该参数是否还未有其他 Provider 提供"""
 
 
 @dataclass(init=False, repr=True)

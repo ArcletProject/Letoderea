@@ -31,7 +31,8 @@ from .scope import on as on
 from .scope import use as use
 from .scope import on_global as on_global
 from .subscriber import defer as defer
-from .subscriber import params as params
+from .subscriber import get_params as get_params
+from .subscriber import param as param
 from .subscriber import SUBSCRIBER as SUBSCRIBER
 from .subscriber import RESULT as RESULT
 from .subscriber import STACK as STACK

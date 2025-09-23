@@ -53,9 +53,10 @@ def propagate(*funcs: Callable[..., Any] | Propagator, prepend: bool = False):
 
 
 class _Check(Propagator):
-    def __init__(self, result: bool):
+    def __init__(self, result: bool, priority: int = 0):
         self.predicates = []
         self.result = result
+        self.priority = priority
 
     if TYPE_CHECKING:
         def derive(self, predicate: "_Check" | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool) -> Self: ...
@@ -71,6 +72,10 @@ class _Check(Propagator):
     __and__ = derive
     __or__ = derive
 
+    def __truediv__(self, other):
+        self.priority = other
+        return self
+
     def checkers(self):
         for predicate in self.predicates:
             func = predicate if is_coroutinefunction(predicate) else run_sync(predicate)
@@ -84,7 +89,7 @@ class _Check(Propagator):
 
     def compose(self):
         for checker in self.checkers():
-            yield checker, True, 0
+            yield checker, True, self.priority
 
     def __call__(self, func: TCallable) -> TCallable:
         return propagate(self)(func)
@@ -93,12 +98,17 @@ class _Check(Propagator):
 class _CheckBuilder:
     def __init__(self, result: bool):
         self.result = result
+        self._priority = 0
+
+    def priority(self, value: int):
+        self._priority = value
+        return self
 
     if TYPE_CHECKING:
         def __call__(self, predicate: "_Check" | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool) -> _Check: ...
     else:
         def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> _Check:
-            return _Check(self.result).derive(generate(predicate) if isinstance(predicate, Deref) else predicate)
+            return _Check(self.result, self._priority).derive(generate(predicate) if isinstance(predicate, Deref) else predicate)
 
     __and__ = __call__
     __or__ = __call__
@@ -109,6 +119,7 @@ enter_if = _CheckBuilder(True)
 
 
 def allow_event(*events: type):  # pragma: no cover
+    """仅允许指定事件通过"""
     def _(ctx: Contexts) -> bool:
         return isinstance(ctx[EVENT], events)
 
@@ -116,6 +127,7 @@ def allow_event(*events: type):  # pragma: no cover
 
 
 def refuse_event(*events: type):  # pragma: no cover
+    """拒绝指定事件通过"""
     def _(ctx: Contexts) -> bool:
         return isinstance(ctx[EVENT], events)
 

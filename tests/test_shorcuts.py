@@ -1,7 +1,9 @@
 import pytest
+from dataclasses import dataclass
 from typing import Annotated
 
-from arclet.letoderea import bypass_if, enter_if, es, on, on_global
+
+from arclet.letoderea import bypass_if, enter_if, es, on, on_global, provide, param
 from arclet.letoderea.ref import deref
 
 
@@ -14,6 +16,21 @@ class ShortcutEvent:
         context["flag"] = self.flag
         context["type"] = self.type
         context["msg"] = "hello"
+
+
+@dataclass
+class User:
+    id: int
+    name: str
+
+
+class ShortcutEvent1:
+    user: User
+
+    async def gather(self, context: dict):
+        context["user"] = self.user
+
+    providers = [provide(User, "user")]
 
 
 @pytest.mark.asyncio
@@ -42,7 +59,7 @@ async def test_deref():
     executed = []
 
     @on_global
-    @enter_if(deref(ShortcutEvent).flag)
+    @enter_if(deref(ShortcutEvent).flag) / 100
     async def s(flag: Annotated[bool, "flag"]):
         assert flag is True
         executed.append(1)
@@ -76,3 +93,46 @@ async def test_deref():
     e3.msg = "world"
     await es.publish(e3)
     assert len(executed) == 4
+
+
+@pytest.mark.asyncio
+async def test_deref_advance():
+    executed = []
+
+    @on_global
+    @enter_if & (deref(User).name == "test")
+    async def s(user: User):
+        assert user.name == "test"
+        executed.append(1)
+
+    @on_global
+    @enter_if & (deref(User).id == 2)
+    async def s1(user: User):
+        assert user.id == 2
+        executed.append(1)
+
+    e4 = ShortcutEvent1()
+    e4.user = User(id=1, name="test")
+    await es.publish(e4)
+    e5 = ShortcutEvent1()
+    e5.user = User(id=2, name="test1")
+    await es.publish(e5)
+    assert len(executed) == 2
+
+    s.dispose()
+    s1.dispose()
+
+    @on_global
+    @enter_if.priority(20) & (deref(User).id == param("user_id"))
+    async def s2(user: User, user_id: int):
+        assert user.id == user_id == 3
+        executed.append(1)
+
+    @s2.propagate(prepend=True)
+    async def _():
+        return {"user_id": 3}
+
+    e6 = ShortcutEvent1()
+    e6.user = User(id=3, name="test2")
+    await es.publish(e6)
+    assert len(executed) == 3

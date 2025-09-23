@@ -4,6 +4,7 @@ import abc
 import asyncio
 import sys
 from contextvars import ContextVar
+from inspect import Signature, Parameter
 from weakref import WeakSet
 from collections import defaultdict
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -30,7 +31,6 @@ from .exceptions import (
     _ExitException,
 )
 from .provider import TProviders, Param, Provider, ProviderFactory, provide
-from .ref import Deref, generate
 from .typing import (
     Contexts,
     CtxItem,
@@ -67,6 +67,8 @@ class Depend:
         self.cache = cache
 
     def fork(self, provider: list[Provider | ProviderFactory]):
+        if hasattr(self, "sub"):  # pragma: no cover
+            return self
         new = Depend(self.target, self.cache)
         new.sub = Subscriber(self.target, providers=provider)
         return new
@@ -139,6 +141,8 @@ class CompileParam:
 
 
 def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> list[CompileParam]:
+    from .ref import Deref, generate
+
     res = []
     for name, anno, default in signatures(target):
         param = CompileParam(name, anno, default, [], None, None)
@@ -466,6 +470,16 @@ def defer(func: Callable[..., Any], ctx: Contexts | TTarget | None = None):
     return sub.propagate(func, once=True)
 
 
-def params(ctx: Contexts):
+def get_params(ctx: Contexts):
     sub = ctx[SUBSCRIBER]
     return sub.params
+
+
+def param(name: str, anno: Any = Empty, default: Any = Empty) -> Any:
+    """通过名字来便捷地注入参数"""
+    func = lambda **kwargs: kwargs[name]
+    func.__signature__ = Signature(
+        parameters=[Parameter(name, Parameter.POSITIONAL_OR_KEYWORD, annotation=anno, default=default)],
+        return_annotation=anno,
+    )
+    return Depend(func)

@@ -17,7 +17,7 @@ async def as_int(result):
 
 
 async def int_when_int(ctx: le.Contexts):
-    params = le.params(ctx)
+    params = le.get_params(ctx)
     for param in params:  # pragma: no cover
         if param.annotation is int:
             return {param.name: 1}
@@ -265,8 +265,6 @@ async def test_dependency_condition2():
     async def p1(foo: str):
         executed.append(2)
         return {"info": {"len": len(foo), "parts": foo.split()}}
-
-
 
     await s1.handle(ctx.copy())
     assert executed == [2, 7, 1]
