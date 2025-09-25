@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 import arclet.letoderea as le
+from arclet.letoderea import Subscriber
 
 
 @le.make_event
@@ -204,6 +205,9 @@ async def test_propagator():
     executed = []
 
     class MyPropagator(le.Propagator):
+        def validate(self, subscriber: Subscriber) -> bool:
+            return len(subscriber.params) < 3
+
         def compose(self):
             yield lambda: executed.append(1), True
             yield Interval(0.3)
@@ -222,6 +226,16 @@ async def test_propagator():
 
     assert executed == [1, "1", 1, 1, "3"]
     assert s.get_propagator(Interval).success
+
+    @le.on(PropagateEvent)
+    @le.propagate(MyPropagator())
+    async def s2(last_time, foo: str, bar: int):
+        pass
+
+    with pytest.raises(ValueError):
+        s2.get_propagator(MyPropagator)
+    with pytest.raises(ValueError):
+        s2.get_propagator(Interval)
 
 
 @pytest.mark.asyncio

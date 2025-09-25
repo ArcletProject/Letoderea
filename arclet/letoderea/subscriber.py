@@ -179,6 +179,9 @@ class Propagator(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def compose(self) -> Generator[TTarget | Propagator | tuple[TTarget, bool] | tuple[TTarget, bool, int], None, None]: ...
 
+    def validate(self, subscriber: Subscriber) -> bool:
+        return True
+
     def __iter__(self):  # pragma: no cover
         return self.compose()
 
@@ -210,13 +213,14 @@ class Subscriber(Generic[R]):
 
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
-        if hasattr(callable_target, "__propagates__"):
-            for slot in getattr(callable_target, "__propagates__", []):
-                self.propagates(*slot[0], prepend=slot[1])
         self.callable_target = callable_target  # type: ignore
         self.is_cm = False
         self.is_agen = False
         self._recompile()
+
+        if hasattr(callable_target, "__propagates__"):
+            for slot in getattr(callable_target, "__propagates__", []):
+                self.propagates(*slot[0], prepend=slot[1])
 
         self._disposes = [dispose] if dispose else []
         self.available = True
@@ -382,6 +386,8 @@ class Subscriber(Generic[R]):
 
     def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False):
         if isinstance(func, Propagator):
+            if not func.validate(self):
+                return lambda: None
             disposes = []
             for slot in func.compose():
                 if isinstance(slot, Propagator):
