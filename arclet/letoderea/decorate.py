@@ -52,17 +52,17 @@ def propagate(*funcs: Callable[..., Any] | Propagator, prepend: bool = False):
     return wrapper
 
 
-class _Check(Propagator):
+class Check(Propagator):
     def __init__(self, result: bool, priority: int = 0):
         self.predicates = []
         self.result = result
         self.priority = priority
 
     if TYPE_CHECKING:
-        def derive(self, predicate: "_Check" | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool) -> Self: ...
+        def derive(self, predicate: "Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool") -> Self: ...
     else:
-        def derive(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> Self:
-            if isinstance(predicate, _Check):
+        def derive(self, predicate: Union["Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> Self:
+            if isinstance(predicate, Check):
                 self.predicates.extend(predicate.predicates)
             else:
                 self.predicates.append(generate(predicate) if isinstance(predicate, Deref) else predicate)
@@ -105,10 +105,10 @@ class _CheckBuilder:
         return self
 
     if TYPE_CHECKING:
-        def __call__(self, predicate: "_Check" | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool) -> _Check: ...
+        def __call__(self, predicate: "Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool") -> Check: ...
     else:
-        def __call__(self, predicate: Union["_Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> _Check:
-            return _Check(self.result, self._priority).derive(generate(predicate) if isinstance(predicate, Deref) else predicate)
+        def __call__(self, predicate: Union["Check", Callable[..., bool], Callable[..., Awaitable[bool]], Deref]) -> Check:
+            return Check(self.result, self._priority).derive(generate(predicate) if isinstance(predicate, Deref) else predicate)
 
     __and__ = __call__
     __or__ = __call__

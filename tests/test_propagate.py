@@ -212,8 +212,7 @@ async def test_propagator():
             yield lambda: executed.append(1), True
             yield Interval(0.3)
 
-    @le.on(PropagateEvent)
-    @le.propagate(MyPropagator())
+    @le.on(PropagateEvent).propagate(MyPropagator())
     async def s(last_time, foo: str):
         assert last_time is None or isinstance(last_time, datetime)
         executed.append(foo)

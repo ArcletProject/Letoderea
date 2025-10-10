@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from contextlib import contextmanager
 from secrets import token_urlsafe
-from typing import Any, TypeVar
-from collections.abc import Callable
+from typing import Any, TypeVar, Generic
+from collections.abc import Callable, Awaitable
 
 from tarina import ContextModel
 
 from .provider import TProviders, Provider, ProviderFactory, global_providers
 from .publisher import Publisher, _publishers, filter_publisher
 from .subscriber import Propagator, Subscriber
+from .decorate import Check, enter_if, bypass_if
 
 T = TypeVar("T")
 
@@ -18,6 +20,40 @@ _scopes: dict[str, Scope] = {}
 
 scope_ctx: ContextModel[Scope] = ContextModel("scope_ctx")
 global_propagators: list[Propagator] = []
+
+
+@dataclass
+class RegisterWrapper(Generic[T]):
+    _scope: Scope
+    _event: type | None
+    _priority: int
+    _providers: TProviders
+    _propagators: list[Propagator]
+    _publisher: Publisher | None
+    _pub_id: str
+    _once: bool
+    _skip_req_missing: bool
+
+    def if_(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
+        self._propagators.append(enter_if(predicate) / priority)
+        return self
+
+    def unless(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
+        self._propagators.append(bypass_if(predicate) / priority)
+        return self
+
+    def propagate(self, *propagators: Propagator):
+        self._propagators.extend(propagators)
+        return self
+
+    def __call__(self, func: Callable, /) -> Subscriber[T]:
+        if isinstance(func, Subscriber):
+            func = func.callable_target
+        res = Subscriber(func, priority=self._priority, providers=self._providers, dispose=self._scope.remove_subscriber, once=self._once, skip_req_missing=self._skip_req_missing, _listen=self._event)
+        res.propagates(*self._propagators)
+        if not self._publisher or (self._publisher and self._publisher.check_subscriber(res)):
+            self._scope.subscribers[res.id] = (res, self._pub_id)
+        return res
 
 
 class Scope:
@@ -85,24 +121,7 @@ class Scope:
             event_providers = _pub.providers
             _listen = event
 
-        def register_wrapper(exec_target: Callable, /) -> Subscriber:
-            if isinstance(exec_target, Subscriber):
-                exec_target = exec_target.callable_target
-            _providers = [*global_providers, *event_providers, *self.providers, *providers]
-            res = Subscriber(
-                exec_target,
-                priority=priority,
-                providers=_providers,
-                dispose=self.remove_subscriber,
-                once=once,
-                skip_req_missing=_skip_req_missing,
-                _listen=_listen,
-            )
-            res.propagates(*global_propagators, *self.propagators)
-            if not _pub or (_pub and _pub.check_subscriber(res)):
-                self.subscribers[res.id] = (res, pub_id)
-            return res
-
+        register_wrapper = RegisterWrapper(self, _listen, priority, [*global_providers, *event_providers, *self.providers, *providers], [*global_propagators, *self.propagators], _pub, pub_id, once, _skip_req_missing)
         if func:
             return register_wrapper(func)
         return register_wrapper

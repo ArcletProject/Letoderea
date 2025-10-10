@@ -58,14 +58,12 @@ async def test_annotated():
 async def test_deref():
     executed = []
 
-    @on_global
-    @enter_if(deref(ShortcutEvent).flag) / 100
+    @on_global().if_(deref(ShortcutEvent).flag, 100)
     async def s(flag: Annotated[bool, "flag"]):
         assert flag is True
         executed.append(1)
 
-    @on_global
-    @bypass_if(deref(ShortcutEvent).flag)
+    @on_global().unless(deref(ShortcutEvent).flag)
     async def s1(
         flag: Annotated[bool, deref(ShortcutEvent).flag],
         t: Annotated[int, deref(ShortcutEvent).type],
