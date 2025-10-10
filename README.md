@@ -119,8 +119,7 @@ class Event:
 async def sub_if_letoderea():
     ...
 
-@le.on_global
-@le.enter_if & le.deref(Event).flag & (le.deref(Event).name != "Letoderea")
+@le.on(Event).if_(le.deref(Event).flag & (le.deref(Event).name != "Letoderea"))
 async def sub_if_not_letoderea():
     ...
 

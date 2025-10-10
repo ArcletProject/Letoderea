@@ -46,6 +46,8 @@ async def test_check():
 
     @pub.check
     def c(_, sub: le.Subscriber):
+        if not (description := inspect.cleandoc(sub.__doc__ or "")):
+            return False
         properties = {}
         required = []
         for param in sub.params:
@@ -75,7 +77,7 @@ async def test_check():
                 "type": "function",
                 "function": {
                     "name": sub.__name__,
-                    "description": inspect.cleandoc(sub.__doc__ or ""),
+                    "description": description,
                     "parameters": {
                         "type": "object",
                         "properties": properties,
@@ -88,6 +90,10 @@ async def test_check():
         available_functions[sub.__name__] = lambda **kwargs: kwargs
         le.enter_if(le.deref(CallEvent).called == sub.__name__)(sub)
         return True
+
+    @le.on(CallEvent)
+    async def no_doc(name: str):  # pragma: no cover
+        return f"Hello {name}!"
 
     @le.on(CallEvent)
     async def get_hello(event: CallEvent, name: Annotated[str, Doc("user name")], msg: str = "Hello"):
