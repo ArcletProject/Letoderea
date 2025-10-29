@@ -36,7 +36,7 @@ from .typing import (
     CtxItem,
     Force,
     Result,
-    TTarget,
+    TTarget, TDispose,
 )
 
 
@@ -222,7 +222,7 @@ class Subscriber(Generic[R]):
             for slot in getattr(callable_target, "__propagates__", []):
                 self.propagates(*slot[0], prepend=slot[1])
 
-        self._disposes = [dispose] if dispose else []
+        self._disposes: list[Callable[[Self], None]] = [dispose] if dispose else []
         self.available = True
         self.once = once
 
@@ -376,13 +376,13 @@ class Subscriber(Generic[R]):
         return context.get(RESULT)
 
     @overload
-    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> Callable[[], None]: ...
+    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> TDispose: ...
 
     @overload
-    def propagate(self, func: Propagator, *, providers: TProviders | None = None, once: bool = False) -> Callable[[], None]: ...
+    def propagate(self, func: Propagator, *, providers: TProviders | None = None, once: bool = False) -> TDispose: ...
 
     @overload
-    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> Callable[[TTarget[Any]], Callable[[], None]]: ...
+    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> Callable[[TTarget[Any]], TDispose]: ...
 
     def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False):
         if isinstance(func, Propagator):
@@ -471,7 +471,7 @@ def defer(func: Callable[..., Any], ctx: Contexts | TTarget | None = None):
     else:
         try:
             sub = current_subscriber.get()
-        except LookupError:
+        except LookupError:  # pragma: no cover
             raise TypeError(f"Unsupported type {type(ctx)}") from None
     return sub.propagate(func, once=True)
 

@@ -4,7 +4,7 @@ from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, Union, overload, cast
 from collections.abc import Callable
-from typing_extensions import ParamSpec, Self
+from typing_extensions import Self
 
 
 T = TypeVar("T")
@@ -66,7 +66,7 @@ async def generate_contexts(
 
 TTarget = Union[Callable[..., Awaitable[T]], Callable[..., T]]  # noqa: UP007
 TCallable = TypeVar("TCallable", bound=Callable[..., Any])
-P = ParamSpec("P")
+TDispose = Callable[[], None]
 
 
 @dataclass
