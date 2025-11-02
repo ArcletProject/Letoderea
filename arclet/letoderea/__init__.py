@@ -5,6 +5,7 @@ from .core import waterfall as waterfall
 from .core import make_event as make_event
 from .core import ExceptionEvent as ExceptionEvent
 from .overload import Overloader as Overloader
+from .overload import overload as overload
 from .decorate import allow_event as allow_event
 from .decorate import bind as bind
 from .decorate import bypass_if as bypass_if

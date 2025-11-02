@@ -9,26 +9,22 @@ async def test_overload():
 
     ol = le.Overloader("test")
 
-    @overload
-    @ol.overload
+    @le.overload
     async def s() -> Literal[0]:
         executed.append((0, None))
         return 0
 
-    @overload
-    @ol.overload
+    @le.overload
     async def s(a: int, b: Literal[True]) -> Literal[1]:
         executed.append((1, a))
         return 1
 
-    @overload
-    @ol.overload
+    @le.overload
     async def s(a: int, b: Literal[False]) -> Literal[2]:
         executed.append((2, b))
         return 2
 
-    @overload
-    @ol.overload
+    @le.overload
     async def s(a: int, *, c: int) -> Literal[3]:
         executed.append((3, c * a))
         return 3

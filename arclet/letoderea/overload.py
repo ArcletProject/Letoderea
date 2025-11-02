@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import sys
+import functools
 import itertools
 from inspect import Signature
 from asyncio import Queue
-from typing import TypeVar, Any, get_args
+from typing import TYPE_CHECKING, TypeVar, Any, get_args
 from collections import defaultdict
 from collections.abc import Callable, Awaitable
 from typing_extensions import ParamSpec
@@ -22,6 +24,47 @@ P = ParamSpec("P")
 
 
 _collectors: defaultdict[str, dict[tuple, CollectedPublisher]] = defaultdict(dict)
+
+
+if sys.version_info >= (3, 11):  # pragma: no cover
+    from typing import overload as overload  # noqa: F401
+    from typing import get_overloads
+else:  # pragma: no cover
+    _overload_registry = defaultdict(functools.partial(defaultdict, dict))
+
+
+    def _overload_dummy(*args, **kwds):
+        """Helper for @overload to raise when called."""
+        raise NotImplementedError(
+            "You should not call an overloaded function. "
+            "A series of @overload-decorated functions "
+            "outside a stub module should always be followed "
+            "by an implementation that is not @overload-ed.")
+
+    if TYPE_CHECKING:
+        from typing import overload as overload
+    else:
+        def overload(func):
+            # classmethod and staticmethod
+            f = getattr(func, "__func__", func)
+            try:
+                _overload_registry[f.__module__][f.__qualname__][f.__code__.co_firstlineno] = func  # type: ignore
+            except AttributeError:
+                # Not a normal function; ignore.
+                pass
+            return _overload_dummy
+
+
+    def get_overloads(func):
+        """Return all defined overloads for *func* as a sequence."""
+        # classmethod and staticmethod
+        f = getattr(func, "__func__", func)
+        if f.__module__ not in _overload_registry:
+            return []
+        mod_dict = _overload_registry[f.__module__]
+        if f.__qualname__ not in mod_dict:
+            return []
+        return list(mod_dict[f.__qualname__].values())
 
 
 class CollectedPublisher(Publisher[T]):
@@ -63,13 +106,12 @@ class CollectedPublisher(Publisher[T]):
 class Overloader:
     def __init__(self, name: str, *, priority: int = 16, providers: TProviders | None = None, once: bool = False):
         self.name = name
-        self._functions: dict[tuple, Callable[..., Any]] = {}
         self.priority = priority
         self.providers = providers
         self.once = once
         self.scope = Scope.of(name)
 
-    def overload(self, func: TCallable) -> TCallable:
+    def _overload(self, func: TCallable) -> TCallable:
         params = signatures(func)
         annos = [[(name, ann) for ann in get_args(anno)] if origin_is_union(get_origin(anno)) else [(name, anno)] for name, anno, _ in params]
         matrix = list(itertools.product(*annos))
@@ -97,6 +139,10 @@ class Overloader:
             _collectors[key][args].dispose()
 
     def define(self, func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
+        overloads = get_overloads(func)
+        for ofunc in overloads:
+            self._overload(ofunc)
+
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             sig = Signature.from_callable(func)
             bound = sig.bind(*args, **kwargs)
