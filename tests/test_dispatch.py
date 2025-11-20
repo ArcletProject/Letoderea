@@ -1,4 +1,4 @@
-
+import asyncio
 import pytest
 import arclet.letoderea as le
 from arclet.letoderea import Contexts
@@ -104,6 +104,27 @@ async def test_event_dispatch():
     await le.publish(TestEvent("f", "b"))
     await le.publish(TestEvent1("f1", "b1"))
     assert executed == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_post():
+    executed = []
+
+    @le.on(TestEvent)
+    async def s1(foo: str, bar: str):
+        executed.append(1)
+        return f"{foo}_{bar}"
+
+    @le.on(TestEvent)
+    async def s2(foo: str, bar: str):
+        await asyncio.sleep(0.1)
+        executed.append(2)
+        return f"{bar}_{foo}"
+
+    res = await le.post(TestEvent("f", "b"))
+    assert res and res.value == "f_b"
+    assert executed == [1]
+    executed.clear()
 
 
 @pytest.mark.asyncio
@@ -228,15 +249,24 @@ async def test_async_generator():
 
     @le.on(TestEvent1)
     async def s_2(event: TestEvent1):
+        await asyncio.sleep(1)
         executed.append(1)
         yield event.foo
         executed.append(2)
         yield event.bar
         executed.append(3)
 
+    @le.on(TestEvent1)
+    async def s_3(event: TestEvent1):
+        executed.append(4)
+        yield event.bar
+        executed.append(5)
+        yield event.foo
+        executed.append(6)
+
     results = []
     async for ans in le.waterfall(TestEvent1("f", "b")):
         assert ans
         results.append(ans.value)
-    assert results == ["f", "b"]
-    assert executed == [1, 2, 3]
+    assert results == ["f", "b", "b", "f"]
+    assert executed == [1, 2, 3, 4, 5, 6]

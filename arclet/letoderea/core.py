@@ -83,51 +83,6 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     return grouped, context_map
 
 
-async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
-    grouped, context_map = await compute(event, scope, slots, inherit_ctx)
-
-    for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
-        contexts = context_map[pub_id]
-        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for _i, result in enumerate(results):
-            if result is None:
-                continue
-            if result is STOP:
-                continue
-            if result is BLOCK:
-                return
-            if isinstance(result, BaseException):
-                if isinstance(result, _ExitException):
-                    yield result.args[0]
-                    if result.args[1]:
-                        return
-                    continue
-                if isinstance(event, ExceptionEvent):
-                    return
-                await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
-                continue
-            if isinstance(result, AsyncGeneratorType):
-                async for res in result:
-                    if res in (None, STOP):
-                        continue
-                    if res is BLOCK:
-                        return
-                    if isinstance(result, _ExitException):
-                        yield result.args[0]
-                        if result.args[1]:
-                            return
-                        continue
-                    if res.__class__ is Force:
-                        yield res.value  # type: ignore
-                    else:
-                        yield res
-            elif result.__class__ is Force:
-                yield result.value  # type: ignore
-            else:
-                yield result
-
-
 async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):
     grouped, context_map = await compute(event, scope, slots, inherit_ctx)
 
@@ -168,14 +123,18 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[t
 
     for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
         contexts = context_map[pub_id]
-        tasks = [subscriber.handle(contexts.copy()) for subscriber in grouped[(priority, pub_id)]]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for _i, result in enumerate(results):
+        tasks = [asyncio.create_task(subscriber.handle(contexts.copy())) for subscriber in grouped[(priority, pub_id)]]
+        for _i, task in enumerate(asyncio.as_completed(tasks)):
+            try:
+                result = await task
+            except BaseException as result:  # pragma: no cover
+                pass
             if result is None:
                 continue
             if result is STOP:
                 continue
             if result is BLOCK:  # pragma: no cover
+                for t in tasks:    t.cancel()
                 return
             if isinstance(result, BaseException):  # pragma: no cover
                 if isinstance(result, _ExitException):
@@ -188,6 +147,7 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[t
                 async for res in result:
                     if res in (None, STOP):
                         continue
+                    for t in tasks:    t.cancel()
                     if res is BLOCK:
                         return
                     if isinstance(result, _ExitException):  # type: ignore
@@ -197,9 +157,58 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[t
                     else:
                         return res
             elif result.__class__ is Force:  # pragma: no cover
+                for t in tasks:    t.cancel()
                 return result.value  # type: ignore
             else:
+                for t in tasks:    t.cancel()
                 return result
+
+
+async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
+    grouped, context_map = await compute(event, scope, slots, inherit_ctx)
+
+    for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
+        contexts = context_map[pub_id]
+        for subscriber in grouped[(priority, pub_id)]:
+            try:
+                result = await subscriber.handle(contexts.copy())
+            except BaseException as result:
+                pass
+            if result is None:
+                continue
+            if result is STOP:
+                continue
+            if result is BLOCK:
+                return
+            if isinstance(result, BaseException):
+                if isinstance(result, _ExitException):
+                    yield result.args[0]
+                    if result.args[1]:
+                        return
+                    continue
+                if isinstance(event, ExceptionEvent):
+                    return
+                await publish_exc_event(ExceptionEvent(event, subscriber, result))
+                continue
+            if isinstance(result, AsyncGeneratorType):
+                async for res in result:
+                    if res in (None, STOP):
+                        continue
+                    if res is BLOCK:
+                        return
+                    if isinstance(result, _ExitException):
+                        yield result.args[0]
+                        if result.args[1]:
+                            return
+                        continue
+                    if res.__class__ is Force:
+                        yield res.value  # type: ignore
+                    else:
+                        yield res
+            elif result.__class__ is Force:
+                yield result.value  # type: ignore
+            else:
+                yield result
 
 
 async def _post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, *, validate: bool = False):
