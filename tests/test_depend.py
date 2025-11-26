@@ -79,3 +79,18 @@ async def test_context_depend():
     await le.publish(TestDependEvent("1"))
     assert len(executed) == 3
     assert executed == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_param_depend():
+
+    executed = []
+
+    @le.on(TestDependEvent)
+    async def s5(bar: str = le.param("foo", str), foo=le.param("aaa", int, 123)):
+        assert bar == "2"
+        assert foo == 123
+        executed.append(1)
+
+    await le.publish(TestDependEvent("2"))
+    assert len(executed) == 1

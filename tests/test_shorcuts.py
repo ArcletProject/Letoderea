@@ -10,12 +10,12 @@ from arclet.letoderea.ref import deref
 class ShortcutEvent:
     type: str = "ShortcutEvent"
     flag: bool = False
-    msg: str
+    msg: str = "hello"
 
     async def gather(self, context: dict):
         context["flag"] = self.flag
         context["type"] = self.type
-        context["msg"] = "hello"
+        context["msg"] = self.msg
 
 
 @dataclass
@@ -121,7 +121,7 @@ async def test_deref_advance():
     s1.dispose()
 
     @on_global
-    @enter_if.priority(20) & (deref(User).id == param("user_id"))
+    @enter_if.priority(20) & (deref(User, "user").id == param("user_id"))
     async def s2(user: User, user_id: int):
         assert user.id == user_id == 3
         executed.append(1)
@@ -134,3 +134,17 @@ async def test_deref_advance():
     e6.user = User(id=3, name="test2")
     await es.publish(e6)
     assert len(executed) == 3
+
+    s2.dispose()
+
+    @on_global
+    @enter_if & (deref(str, "type") == "ShortcutEvent") & (deref(str, "msg") == "greet_msg")
+    async def s3(msg: str, type: str):
+        assert type == "ShortcutEvent"
+        assert msg == "greet_msg"
+        executed.append(1)
+
+    e7 = ShortcutEvent()
+    e7.msg = "greet_msg"
+    await es.publish(e7)
+    assert len(executed) == 4

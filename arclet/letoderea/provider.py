@@ -10,10 +10,10 @@ from typing import Any, ClassVar, Generic, NamedTuple, TypeVar
 from collections.abc import Callable, Sequence
 from typing import TypeAlias
 
-from tarina import generic_issubclass, run_always_await
+from tarina import generic_issubclass
 from tarina.generic import get_origin, is_optional, origin_is_union
 
-from .typing import Contexts, EVENT
+from .typing import Contexts, EVENT, run_always_await
 
 T = TypeVar("T")
 

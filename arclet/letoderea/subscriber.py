@@ -4,7 +4,6 @@ import abc
 import asyncio
 import sys
 from contextvars import ContextVar
-from inspect import Signature, Parameter
 from weakref import WeakSet
 from collections import defaultdict
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -140,38 +139,43 @@ class CompileParam:
         raise UnresolvedRequirement(self.name, self.annotation, self.default, self.providers)
 
 
-def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> list[CompileParam]:
+def _compile_single(param: CompileParam, providers: list[Provider | ProviderFactory]) -> CompileParam:
     from .ref import Deref, generate
 
+    name = param.name
+    anno = param.annotation
+    for _provider in providers:
+        if isinstance(_provider, ProviderFactory):
+            if result := _provider.validate(Param(name, anno, param.default, bool(param.providers))):
+                param.providers.append(result)
+        elif _provider.validate(Param(name, anno, param.default, bool(param.providers))):
+            param.providers.append(_provider)
+    param.providers.sort(key=lambda x: x.priority)
+    if get_origin(anno) is Annotated:
+        org, *meta = get_args(anno)
+        for m in reversed(meta):
+            if isinstance(m, Depend):
+                param.depend = m.fork(providers)
+                break
+            if isinstance(m, Provider):
+                param.providers.insert(0, m)
+            elif isinstance(m, str):
+                param.providers.insert(0, provide(org, name, lambda x: x.get(m)))
+            elif isinstance(m, Deref):
+                param.providers.insert(0, provide(org, name, generate(m)))
+            elif callable(m):
+                param.providers.insert(0, provide(org, name, m))
+    if isinstance(param.default, Provider):
+        param.providers.insert(0, param.default)
+    if isinstance(param.default, Depend):
+        param.depend = param.default.fork(providers)
+    return param
+
+
+def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> list[CompileParam]:
     res = []
     for name, anno, default in signatures(target):
-        param = CompileParam(name, anno, default, [], None, None)
-        for _provider in providers:
-            if isinstance(_provider, ProviderFactory):
-                if result := _provider.validate(Param(name, anno, default, bool(param.providers))):
-                    param.providers.append(result)
-            elif _provider.validate(Param(name, anno, default, bool(param.providers))):
-                param.providers.append(_provider)
-        param.providers.sort(key=lambda x: x.priority)
-        if get_origin(anno) is Annotated:
-            org, *meta = get_args(anno)
-            for m in reversed(meta):
-                if isinstance(m, Depend):
-                    param.depend = m.fork(providers)
-                    break
-                if isinstance(m, Provider):
-                    param.providers.insert(0, m)
-                elif isinstance(m, str):
-                    param.providers.insert(0, provide(org, name, lambda x: x.get(m)))
-                elif isinstance(m, Deref):
-                    param.providers.insert(0, provide(org, name, generate(m)))
-                elif callable(m):
-                    param.providers.insert(0, provide(org, name, m))
-        if isinstance(default, Provider):
-            param.providers.insert(0, default)
-        if isinstance(default, Depend):
-            param.depend = default.fork(providers)
-        res.append(param)
+        res.append(_compile_single(CompileParam(name, anno, default, [], None, None), providers))
     return res
 
 
@@ -481,11 +485,21 @@ def get_params(ctx: Contexts):
     return sub.params
 
 
+class ParamDepend(Depend):
+    def __init__(self, name: str, anno: Any = Empty, default: Any = Empty, cache: bool = False):
+        self.param = CompileParam(name, anno, default, [], None, None)
+        super().__init__(self.param.solve, cache)
+
+    def fork(self, provider: list[Provider | ProviderFactory]):
+        if hasattr(self, "sub"):  # pragma: no cover
+            return self
+        self.param.providers.clear()
+        _compile_single(self.param, provider)
+        new = Depend(self.target, self.cache)
+        new.sub = Subscriber(self.target, providers=[provide(Contexts, call=lambda c: c)])
+        return new
+
+
 def param(name: str, anno: Any = Empty, default: Any = Empty) -> Any:
     """通过名字来便捷地注入参数"""
-    func = lambda **kwargs: kwargs[name]
-    func.__signature__ = Signature(
-        parameters=[Parameter(name, Parameter.POSITIONAL_OR_KEYWORD, annotation=anno, default=default)],
-        return_annotation=anno,
-    )
-    return Depend(func)
+    return ParamDepend(name, anno, default)

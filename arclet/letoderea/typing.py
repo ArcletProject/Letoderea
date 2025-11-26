@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, Union, overload, cast
 from collections.abc import Callable
+
+from tarina import is_async
 from typing_extensions import Self
 
 
@@ -86,3 +89,10 @@ class Result(Generic[T]):
 
 class Resultable(Protocol[T]):
     def check_result(self, value: Any) -> Result[T] | None: ...
+
+
+async def run_always_await(target: Callable[..., Any] | Callable[..., Awaitable[Any]], *args, **kwargs) -> Any:
+    obj = target(*args, **kwargs)
+    if is_async(target) or inspect.isawaitable(obj):
+        obj = await obj  # type: ignore
+    return obj

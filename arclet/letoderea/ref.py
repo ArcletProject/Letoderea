@@ -2,15 +2,18 @@ from collections.abc import Container, Awaitable
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 from collections.abc import Callable
 
+from tarina import Empty
+
 from .typing import Contexts, EVENT
-from .subscriber import Depend, SUBSCRIBER
+from .subscriber import Depend, SUBSCRIBER, CompileParam, ParamDepend
 
 T = TypeVar("T")
 
 
 class Deref:
-    def __init__(self, proxy_type: type):
+    def __init__(self, proxy_type: type, name: str | None = None):
         self.__proxy_type = proxy_type
+        self.__target_name = name
         self.__items: dict[str | None, tuple[bool, Callable[[Contexts, Any], Awaitable[Any]]] | None] = {}
         self.__last_key = None
 
@@ -248,9 +251,16 @@ else:
 
     def generate(ref: Deref) -> Callable[[Contexts], Awaitable[Any]]:
         proxy_typ = ref._Deref__proxy_type
+        target_name = ref._Deref__target_name
+        p = None
+        if target_name is not None:
+            p = ParamDepend(target_name, proxy_typ, Empty, True)
 
         async def _get(ctx: Contexts):
-            item = next((v for v in ctx.values() if isinstance(v, proxy_typ)), ctx[EVENT])
+            if p is not None:
+                item = await p.fork(ctx[SUBSCRIBER].providers)(ctx)
+            else:
+                item = next((v for v in ctx.values() if isinstance(v, proxy_typ)), ctx[EVENT])
             for key, value in ref:
                 if key and (item := getattr(item, key, ctx.get(key, None))) is None:
                     return item
@@ -292,5 +302,5 @@ else:
         return ref._isinstance(value)
 
 
-def deref(proxy_type: type[T]) -> T:
-    return cast(T, Deref(proxy_type))
+def deref(typ: type[T], name: str | None = None) -> T:
+    return cast(T, Deref(typ, name))
