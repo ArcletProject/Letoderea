@@ -58,6 +58,7 @@ class RegisterWrapper(Generic[T]):
 
 class Scope:
     global_skip_req_missing = False
+    __wrapper_class__ = RegisterWrapper
 
     @staticmethod
     def of(id_: str | None = None):
@@ -97,10 +98,11 @@ class Scope:
         """移除订阅者"""
         self.subscribers.pop(subscriber.id, None)
 
-    def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
+    def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
         """注册一个订阅者"""
         _skip_req_missing = self.global_skip_req_missing if skip_req_missing is None else skip_req_missing
         providers = providers or []
+        propagators = propagators or []
         if isinstance(publisher, Publisher):
             pub_id = publisher.id
             event_providers = publisher.providers
@@ -121,7 +123,7 @@ class Scope:
             event_providers = _pub.providers
             _listen = event
 
-        register_wrapper = RegisterWrapper(self, _listen, priority, [*global_providers, *event_providers, *self.providers, *providers], [*global_propagators, *self.propagators], _pub, pub_id, once, _skip_req_missing)
+        register_wrapper = self.__wrapper_class__(self, _listen, priority, [*global_providers, *event_providers, *self.providers, *providers], [*global_propagators, *self.propagators, *propagators], _pub, pub_id, once, _skip_req_missing)
         if func:
             return register_wrapper(func)
         return register_wrapper
@@ -157,12 +159,12 @@ def configure(skip_req_missing: bool = False):
     global_skip_req_missing = skip_req_missing
 
 
-def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
+def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, once=once)
-    return scope.register(func, event=event, priority=priority, providers=providers, skip_req_missing=skip_req_missing, once=once)
+        return scope.register(event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once)
+    return scope.register(func, event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once)
 
 
 def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None):
@@ -173,9 +175,9 @@ def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: 
     return scope.register(func, event=None, priority=priority, skip_req_missing=skip_req_missing, once=once)
 
 
-def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, once: bool = False, skip_req_missing: bool | None = None):
+def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(priority=priority, providers=providers, once=once, skip_req_missing=skip_req_missing, publisher=pub)
-    return scope.register(func, priority=priority, providers=providers, once=once, skip_req_missing=skip_req_missing, publisher=pub)
+        return scope.register(priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub)
+    return scope.register(func, priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub)
