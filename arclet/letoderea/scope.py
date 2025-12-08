@@ -60,9 +60,9 @@ class Scope:
     global_skip_req_missing = False
     __wrapper_class__ = RegisterWrapper
 
-    @staticmethod
-    def of(id_: str | None = None):
-        sp = Scope(id_)
+    @classmethod
+    def of(cls, id_: str | None = None):
+        sp = cls(id_)
         _scopes[sp.id] = sp
         return sp
 
