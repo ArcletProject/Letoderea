@@ -65,10 +65,11 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     grouped: dict[tuple[int, str], list[Subscriber]] = {}
     context_map: dict[str, Contexts] = {}
 
-    if pub := _publishers.get(
-            getattr(event, "__publisher__", f"$event:{type(event).__module__}.{type(event).__name__}")):
-        pubs = {pub.id: pub}
-    else:
+    pubs = {}
+    for cls in reversed(event.__class__.__mro__[:-1]):
+        if pub := _publishers.get(getattr(cls, "__publisher__", f"$event:{cls.__module__}.{cls.__name__}")):
+            pubs[pub.id] = pub
+    if not pubs:
         pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
 
     for sub, pub_id in slots:
