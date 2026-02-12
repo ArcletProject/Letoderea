@@ -125,6 +125,8 @@ async def test_post():
     assert res and res.value == "f_b"
     assert executed == [1]
     executed.clear()
+    await le.publish(TestEvent("f", "b"))
+    assert executed == [1, 2]
 
 
 @pytest.mark.asyncio

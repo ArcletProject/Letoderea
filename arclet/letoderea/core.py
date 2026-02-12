@@ -128,8 +128,8 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[t
         for _i, task in enumerate(asyncio.as_completed(tasks)):
             try:
                 result = await task
-            except BaseException as result:  # pragma: no cover
-                pass
+            except BaseException as e:  # pragma: no cover
+                result = e
             if result is None:
                 continue
             if result is STOP:
