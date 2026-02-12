@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from arclet.letoderea import deref, enter_if, on, es
+from arclet.letoderea import deref, enter_if, on, es, defer
 from arclet.letoderea.breakpoint import step_out
 from arclet.letoderea.typing import Contexts, generate_contexts
 
@@ -120,3 +120,57 @@ async def test_breakpoint_with_subscriber():
 
     with pytest.raises(RuntimeError):
         await s_1.handle(await generate_contexts(a))
+
+
+@pytest.mark.asyncio
+async def test_breakpoint_dispose():
+
+    executed = []
+
+    async def handler(msg: str):
+        return msg
+
+    @on(ExampleEvent)
+    @enter_if(deref(ExampleEvent).msg.startswith("/start"))
+    async def s(msg: str):
+        executed.append(1)
+        if msg == "/start":
+            step = step_out(ExampleEvent, handler, priority=18, block=True)
+            defer(step.dispose)
+            res = await step.wait()
+            executed.append(res)
+        else:
+            executed.append(msg[7:])
+        return
+
+    a = ExampleEvent()
+    a.msg = "/start"
+    b = ExampleEvent()
+    b.msg = "1234"
+    c = ExampleEvent()
+    c.msg = "/start 1234"
+
+    es.publish(a)
+    await asyncio.sleep(0.1)
+    es.publish(b)
+    await asyncio.sleep(0.1)
+    assert executed == [1, '1234']
+
+    executed.clear()
+
+    es.publish(a)
+    await asyncio.sleep(0.1)
+    es.publish(c)
+    await asyncio.sleep(0.1)
+    assert executed == [1, 1, '1234']
+
+    executed.clear()
+
+    es.publish(a)
+    await asyncio.sleep(0.1)
+    es.publish(b)
+    await asyncio.sleep(0.1)
+    es.publish(c)
+    await asyncio.sleep(0.1)
+
+    assert executed == [1, '1234', 1, '1234']

@@ -49,11 +49,13 @@ class StepOut(Generic[R]):
         self.waiting = False
         self._dispose = False
 
-    def dispose(self):  # pragma: no cover
+    def dispose(self):
         if not self._dispose:
-            if isinstance(self.handler, Subscriber):
+            if isinstance(self.handler, Subscriber):  # pragma: no cover
                 self.handler.dispose()
             self._dispose = True
+            if self.waiting:
+                self.fut.cancel()
 
     @overload
     def __call__(self, *, default: D, timeout: float = 120) -> _step_iter[R, D]: ...
@@ -88,14 +90,14 @@ class StepOut(Generic[R]):
             raise RuntimeError("This StepOut instance has been disposed and cannot be used anymore.")
         self.waiting = True
         handler = self.handler if isinstance(self.handler, Subscriber) else self.handler()
-        fut = asyncio.get_running_loop().create_future()
+        self.fut = asyncio.get_running_loop().create_future()
 
         async def _after(ctx: Contexts):
-            if fut.done():
+            if self.fut.done():
                 return False
             res = ctx[RESULT]
-            if res is not None and not fut.done():
-                fut.set_result(res)
+            if res is not None and not self.fut.done():
+                self.fut.set_result(res)
                 if self.block:
                     return BLOCK
 
@@ -104,12 +106,12 @@ class StepOut(Generic[R]):
         handler.priority = self.priority
 
         try:
-            return await asyncio.wait_for(fut, timeout) if timeout else await fut
+            return await asyncio.wait_for(self.fut, timeout) if timeout else await self.fut
         except asyncio.TimeoutError:
             return default
         finally:
-            if not fut.done():  # pragma: no cover
-                fut.cancel()
+            if not self.fut.done():  # pragma: no cover
+                self.fut.cancel()
             dispose()
             handler.priority = old_priority
             if not isinstance(self.handler, Subscriber):
