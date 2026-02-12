@@ -78,6 +78,7 @@ class CollectedPublisher(Publisher[T]):
         self._params = {name: (anno, de) for name, anno, de in params}
         self._required_keys = {name for name, _, de in params if de is Empty and name != "event"}
         self.providers = []
+        self.declare_cache_ignore()
 
     async def _supplier(self, event, context: Contexts):
         for key, val in event.items():

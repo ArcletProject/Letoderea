@@ -12,7 +12,7 @@ from collections.abc import Callable, Coroutine
 from typing_extensions import dataclass_transform
 
 from .exceptions import _ExitException, STOP, BLOCK
-from .publisher import Publisher, gather, define, _publishers
+from .publisher import Publisher, gather, define, get_publishers, _publishers
 from .provider import get_providers, provide
 from .scope import Scope, on, use, _scopes  # noqa: F401
 from .subscriber import Subscriber
@@ -65,12 +65,7 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     grouped: dict[tuple[int, str], list[Subscriber]] = {}
     context_map: dict[str, Contexts] = {}
 
-    pubs = {}
-    for cls in reversed(event.__class__.__mro__[:-1]):
-        if pub := _publishers.get(getattr(cls, "__publisher__", f"$event:{cls.__module__}.{cls.__name__}")):
-            pubs[pub.id] = pub
-    if not pubs:
-        pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
+    pubs = get_publishers(event)
 
     for sub, pub_id in slots:
         if pub_id != "$backend" and pub_id not in pubs:

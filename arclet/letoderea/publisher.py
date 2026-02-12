@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 T = TypeVar("T", covariant=True)
 T1 = TypeVar("T1")
 _publishers: dict[str, Publisher] = {}
-
+_publisher_cache: dict[type, list[str]] = {}
+_publisher_cache_ignore = set()
 
 async def _supplier(event: Any, context: Contexts):
     if isinstance(event, dict):
@@ -42,6 +43,10 @@ class Publisher(Generic[T]):
             else (lambda x: isinstance(x, target))
         )
         _publishers[self.id] = self
+
+    def declare_cache_ignore(self):
+        """声明该 Publisher 不适合被缓存，通常是因为其 validate 方法过于复杂或不稳定"""
+        _publisher_cache_ignore.add(self.__class__)
 
     def gather(self, func: Callable[[T, Contexts], Awaitable[Contexts | None]]):
         self.supplier = func
@@ -94,6 +99,16 @@ def filter_publisher(target: type[T]) -> Publisher[T] | None:
     if (label := getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")) in _publishers:
         return _publishers[label]
     return next((pub for pub in _publishers.values() if pub.target == target), None)
+
+
+def get_publishers(event: Any) -> dict[str, Publisher]:
+    t = event.__class__
+    if t in _publisher_cache:
+        return {id_: _publishers[id_] for id_ in _publisher_cache[t]}
+    pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
+    if cached := [pub.id for pub in pubs.values() if pub.__class__ not in _publisher_cache_ignore]:
+        _publisher_cache[t] = cached
+    return pubs
 
 
 def define(
