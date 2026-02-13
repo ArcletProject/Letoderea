@@ -6,9 +6,8 @@ import re
 import sys
 import traceback
 from enum import Enum
-from types import CodeType, TracebackType
+from types import CodeType, TracebackType, FunctionType
 from typing import Any, Final, cast
-from collections.abc import Callable
 
 from .typing import Contexts
 
@@ -55,7 +54,7 @@ class Trace(traceback.TracebackException):
 
 
 @functools.lru_cache(maxsize=None)
-def get_caller_info(func: Callable, name: str | None = None) -> tuple[str, int, int, str, int, int]:  # pragma: no cover
+def get_caller_info(func: FunctionType, name: str | None = None) -> tuple[str, int, int, str, int, int]:  # pragma: no cover
     """Get the caller information of a function or method.
 
     Returns:
@@ -66,7 +65,7 @@ def get_caller_info(func: Callable, name: str | None = None) -> tuple[str, int, 
         - param_lineno: The line number where the parameter is defined.
         - param_offset: The character offset in the line where the parameter is defined.
     """
-    code: CodeType = func.__code__  # type: ignore
+    code: CodeType = func.__code__
     lines = inspect.getsourcelines(func)
     lineno = code.co_firstlineno
     line = ""
@@ -116,7 +115,7 @@ class ExceptionHandler:
             print(line, file=sys.stderr, end="")
 
     @staticmethod
-    def call(e: Exception, callable_target: Callable, contexts: Contexts, inner: bool = False):
+    def call(e: Exception, callable_target: FunctionType, contexts: Contexts, inner: bool = False):
         if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
             name, anno, _, pds = e.args
             param = f"{name}: {inspect.formatannotation(anno)}" if anno is not None else name

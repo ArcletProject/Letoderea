@@ -8,7 +8,7 @@ from weakref import WeakSet
 from collections import defaultdict
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any, Generic, TypeVar, cast, final, overload
+from typing import Annotated, Any, Generic, TypeVar, final, overload
 from collections.abc import Callable, Generator, AsyncGenerator, Awaitable
 from typing_extensions import Self
 from typing import get_args, get_origin
@@ -41,9 +41,9 @@ from .typing import (
 
 R = TypeVar("R")
 T = TypeVar("T")
-RESULT: CtxItem[Any] = cast(CtxItem, "$result")
-STACK: CtxItem[AsyncExitStack] = cast(CtxItem, "$exit_stack")
-SUBSCRIBER: CtxItem[Subscriber] = cast(CtxItem, "$subscriber")
+RESULT: CtxItem[Any] = CtxItem.make("$result")
+STACK: CtxItem[AsyncExitStack] = CtxItem.make("$exit_stack")
+SUBSCRIBER: CtxItem[Subscriber] = CtxItem.make("$subscriber")
 current_subscriber: ContextVar[Subscriber] = ContextVar("_current_subscriber")
 
 
@@ -339,7 +339,8 @@ class Subscriber(Generic[R]):
             current_subscriber.reset(token)  # type: ignore
             if not inner:
                 if "$exit_stack" in context:  # pragma: no cover
-                    await context[STACK].__aexit__(*sys.exc_info())
+                    typ, e, tb = sys.exc_info()
+                    await context[STACK].__aexit__(typ, e, tb)
                 context.clear()
             if self.once:
                 self.dispose()
@@ -480,8 +481,16 @@ def defer(func: Callable[..., Any], ctx: Contexts | TTarget | None = None):
     return sub.propagate(func, once=True)
 
 
-def get_params(ctx: Contexts):
-    sub = ctx[SUBSCRIBER]
+def get_params(ctx: Contexts | Subscriber | None = None):  # pragma: no cover
+    if isinstance(ctx, dict):
+        sub = ctx[SUBSCRIBER]
+    elif isinstance(ctx, Subscriber):
+        sub = ctx
+    else:
+        try:
+            sub = current_subscriber.get()
+        except LookupError:
+            raise TypeError(f"Unsupported type {type(ctx)}") from None
     return sub.params
 
 

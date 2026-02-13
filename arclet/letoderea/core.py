@@ -108,8 +108,8 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
                         continue
                     if res is BLOCK:
                         return
-                    if isinstance(result, _ExitException):  # type: ignore
-                        if result.args[1]:
+                    if isinstance(res, _ExitException):
+                        if res.args[1]:
                             return
                         continue
 
@@ -146,15 +146,15 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[t
                     for t in tasks:    t.cancel()
                     if res is BLOCK:
                         return
-                    if isinstance(result, _ExitException):  # type: ignore
-                        return result.args[0]
+                    if isinstance(res, _ExitException):
+                        return res.args[0]
                     if res.__class__ is Force:
-                        return res.value  # type: ignore
+                        return res.value
                     else:
                         return res
             elif result.__class__ is Force:  # pragma: no cover
                 for t in tasks:    t.cancel()
-                return result.value  # type: ignore
+                return result.value
             else:
                 for t in tasks:    t.cancel()
                 return result
@@ -192,17 +192,17 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
                         continue
                     if res is BLOCK:
                         return
-                    if isinstance(result, _ExitException):
-                        yield result.args[0]
-                        if result.args[1]:
+                    if isinstance(res, _ExitException):
+                        yield res.args[0]
+                        if res.args[1]:
                             return
                         continue
                     if res.__class__ is Force:
-                        yield res.value  # type: ignore
+                        yield res.value
                     else:
                         yield res
             elif result.__class__ is Force:
-                yield result.value  # type: ignore
+                yield result.value
             else:
                 yield result
 
@@ -267,7 +267,7 @@ async def _loop_fetch(publisher: Publisher):
 
 def publish(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> asyncio.Task[None]:
     """发布事件，并行处理所有响应"""
-    return add_task(dispatch(event, scope, inherit_ctx=inherit_ctx))  # type: ignore
+    return add_task(dispatch(event, scope, inherit_ctx=inherit_ctx))
 
 
 @overload

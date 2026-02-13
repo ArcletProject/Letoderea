@@ -18,6 +18,7 @@ _publishers: dict[str, Publisher] = {}
 _publisher_cache: dict[type, list[str]] = {}
 _publisher_cache_ignore = set()
 
+
 async def _supplier(event: Any, context: Contexts):
     if isinstance(event, dict):
         return context.update(event)
@@ -95,7 +96,7 @@ class Publisher(Generic[T]):
         return True
 
 
-def filter_publisher(target: type[T]) -> Publisher[T] | None:
+def filter_publisher(target: type[T1]) -> Publisher[T1] | None:
     if (label := getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")) in _publishers:
         return _publishers[label]
     return next((pub for pub in _publishers.values() if pub.target == target), None)
@@ -112,10 +113,10 @@ def get_publishers(event: Any) -> dict[str, Publisher]:
 
 
 def define(
-    target: type[T],
-    supplier: Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None,
+    target: type[T1],
+    supplier: Callable[[T1, Contexts], Awaitable[Contexts | None]] | None = None,
     name: str | None = None,
-) -> Publisher[T]:
+) -> Publisher[T1]:
     if name and name in _publishers:
         return _publishers[name]
     if (_id := getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")) in _publishers:
@@ -123,8 +124,8 @@ def define(
     return Publisher(target, name, supplier)
 
 
-def gather(func: Callable[[T, Contexts], Awaitable[Contexts | None]]):
-    target: type[T] = next(iter(get_type_hints(func).values()))  # type: ignore
+def gather(func: Callable[[Any, Contexts], Awaitable[Contexts | None]]):
+    target: type[T1] = next(iter(get_type_hints(func).values()))  # type: ignore
     pub = filter_publisher(target) or define(target)
     pub.supplier = func
     return func

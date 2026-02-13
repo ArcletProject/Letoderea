@@ -14,7 +14,10 @@ T = TypeVar("T")
 T1 = TypeVar("T1")
 
 
-class CtxItem(Generic[T]): ...
+class CtxItem(Generic[T]):
+    @classmethod
+    def make(cls, name: str) -> CtxItem[T]:
+        return cast(CtxItem[T], cast(object, name))
 
 
 class Contexts(dict[str, Any]):
@@ -50,7 +53,7 @@ class Contexts(dict[str, Any]):
     ...
 
 
-EVENT: CtxItem[Any] = cast(CtxItem, "$event")
+EVENT: CtxItem[Any] = CtxItem.make("$event")
 
 
 async def generate_contexts(
