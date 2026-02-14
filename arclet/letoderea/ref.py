@@ -6,7 +6,7 @@ import operator
 from tarina import Empty
 
 from .exceptions import STOP
-from .typing import Contexts, EVENT
+from .typing import Contexts, Force
 from .subscriber import Depend, SUBSCRIBER, ParamDepend
 
 T = TypeVar("T")
@@ -147,7 +147,9 @@ else:
             if p is not None:
                 item = await p.fork(ctx[SUBSCRIBER].providers)(ctx)
             else:
-                item = next((v for v in ctx.values() if isinstance(v, proxy_typ)), ctx[EVENT])
+                item = next((v for v in ctx.values() if isinstance(v, proxy_typ)), None)
+                if item is None and proxy_typ is not type(None):
+                    raise STOP
             for is_terminal, value in ref:
                 if isinstance(value, str):
                     if not hasattr(item, value):
@@ -157,7 +159,7 @@ else:
                     if is_terminal:
                         return await value(ctx, item)
                     item = await value(ctx, item)
-            return item
+            return Force(item) if item is None else item
 
         return _get
 
