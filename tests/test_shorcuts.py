@@ -67,11 +67,11 @@ async def test_deref():
     async def s1(
         flag: Annotated[bool, deref(ShortcutEvent).flag],
         t: Annotated[int, deref(ShortcutEvent).type],
-        a: str = deref(ShortcutEvent).msg
+        a: str = deref(ShortcutEvent).msg + "a"
     ):
         assert flag is False
         assert t == "ShortcutEvent"
-        assert a == "hello"
+        assert a == "helloa"
         executed.append(1)
 
     @on_global

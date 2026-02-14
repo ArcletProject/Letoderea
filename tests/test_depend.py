@@ -65,15 +65,9 @@ async def test_context_depend():
         finally:
             executed.append(3)
 
-    async def dep2(foo: str, ctx: le.Contexts):
-        stack = ctx[le.STACK]
-        ans = await stack.enter_async_context(_mgr())
-        assert ans == 2
-        return f"{foo}+{ans}"
-
     @le.on(TestDependEvent)
-    async def s4(a=le.Depends(dep2)):
-        assert a == "1+2"
+    async def s4(a=le.Depends(_mgr)):
+        assert a == 2
         executed.append(2)
 
     await le.publish(TestDependEvent("1"))
