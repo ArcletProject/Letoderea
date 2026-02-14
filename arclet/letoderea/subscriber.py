@@ -167,6 +167,8 @@ def _compile_single(param: CompileParam, providers: list[Provider | ProviderFact
                 param.providers.insert(0, provide(org, name, m))
     if isinstance(param.default, Provider):
         param.providers.insert(0, param.default)
+    elif isinstance(param.default, Deref):
+        param.providers.insert(0, provide(anno, name, generate(param.default)))
     if isinstance(param.default, Depend):
         param.depend = param.default.fork(providers)
     return param
