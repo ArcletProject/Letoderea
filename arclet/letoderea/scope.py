@@ -14,6 +14,7 @@ from .subscriber import Propagator, Subscriber
 from .decorate import Check, enter_if, bypass_if
 
 T = TypeVar("T")
+TC = TypeVar("TC")
 
 _scopes: dict[str, Scope] = {}
 
@@ -23,7 +24,7 @@ global_propagators: list[Propagator] = []
 
 
 @dataclass
-class RegisterWrapper(Generic[T]):
+class RegisterWrapper(Generic[T, TC]):
     _scope: Scope
     _event: type | None
     _priority: int
