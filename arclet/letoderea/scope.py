@@ -51,7 +51,8 @@ class RegisterWrapper(Generic[T, TC]):
         if isinstance(func, Subscriber):
             func = func.callable_target
         res = Subscriber(func, priority=self._priority, providers=self._providers, dispose=self._scope.remove_subscriber, once=self._once, skip_req_missing=self._skip_req_missing, _listen=self._event)
-        res.propagates(*self._propagators)
+        for pro in self._propagators:
+            res.propagate(pro, _skip_providers=True)
         if not self._publisher or (self._publisher and self._publisher.check_subscriber(res)):
             self._scope.subscribers[res.id] = (res, self._pub_id)
         return res
@@ -124,7 +125,9 @@ class Scope:
             event_providers = _pub.providers
             _listen = event
 
-        register_wrapper = self.__wrapper_class__(self, _listen, priority, [*global_providers, *event_providers, *self.providers, *providers], [*global_propagators, *self.propagators, *propagators], _pub, pub_id, once, _skip_req_missing)
+        _propagators: list[Propagator] = [*global_propagators, *self.propagators, *propagators]
+        _propagator_providers = [p for pro in _propagators for p in pro.providers()]
+        register_wrapper = self.__wrapper_class__(self, _listen, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, _pub, pub_id, once, _skip_req_missing)
         if func:
             return register_wrapper(func)
         return register_wrapper

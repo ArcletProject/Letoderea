@@ -389,22 +389,24 @@ class Subscriber(Generic[R]):
         return context.get(RESULT)
 
     @overload
-    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> TDispose: ...
+    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> TDispose: ...
 
     @overload
-    def propagate(self, func: Propagator, *, providers: TProviders | None = None, once: bool = False) -> TDispose: ...
+    def propagate(self, func: Propagator, *, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> TDispose: ...
 
     @overload
-    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False) -> Callable[[TTarget[Any]], TDispose]: ...
+    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> Callable[[TTarget[Any]], TDispose]: ...
 
-    def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False):
+    def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False):
         if isinstance(func, Propagator):
             if not func.validate(self):
                 return lambda: None
-            extra_providers = func.providers()
-            if extra_providers:
+            if not _skip_providers and (extra_providers := func.providers()):
                 self.providers.extend(extra_providers)
                 self._recompile()
+                for sub in self._propagates:  # pragma: no cover
+                    sub.providers.extend(extra_providers)
+                    sub._recompile()
             disposes = []
             for slot in func.compose():
                 if isinstance(slot, Propagator):

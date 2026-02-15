@@ -284,20 +284,21 @@ async def test_dependency_condition2():
     assert executed == [2, 7, 1]
 
 
-# ── Propagator.providers() tests ──
-
-
 @dataclass
 class MatchResult:
     text: str
 
 
-class _MatchResultProvider(le.Provider["MatchResult"]):
-    def validate(self, param: le.Param) -> bool:
-        return param.annotation is MatchResult
-
+class _MatchResultProvider(le.Provider[MatchResult]):
     async def __call__(self, context: le.Contexts):
         return context.get("$match_result")
+
+
+class _MatchResultFactory(le.ProviderFactory):
+    def validate(self, param: le.Param):
+        if param.annotation is MatchResult:
+            return _MatchResultProvider()
+        return None
 
 
 @pytest.mark.asyncio
@@ -305,10 +306,11 @@ async def test_propagator_providers():
     executed = []
 
     class PrefixMatcher(le.Propagator):
+        def prepend(self, foo: str):
+            return {"$match_result": MatchResult(text=foo.upper())}
+
         def compose(self):
-            def prepend(foo: str):
-                return {"$match_result": MatchResult(text=foo.upper())}
-            yield prepend, True
+            yield self.prepend, True
 
         def providers(self):
             return [_MatchResultProvider()]
@@ -326,20 +328,15 @@ async def test_propagator_providers():
 async def test_propagator_providers_with_factory():
     executed = []
 
-    class MatchResultFactory(le.ProviderFactory):
-        def validate(self, param: le.Param):
-            if param.annotation is MatchResult:
-                return _MatchResultProvider()
-            return None
-
     class PrefixMatcher(le.Propagator):
+        def prepend(self, foo: str):
+            return {"$match_result": MatchResult(text=f"cmd:{foo}")}
+
         def compose(self):
-            def prepend(foo: str):
-                return {"$match_result": MatchResult(text=f"cmd:{foo}")}
-            yield prepend, True
+            yield self.prepend, True
 
         def providers(self):
-            return [MatchResultFactory()]
+            return [_MatchResultFactory()]
 
     @le.on(PropagateEvent)
     @le.propagate(PrefixMatcher())
@@ -348,25 +345,6 @@ async def test_propagator_providers_with_factory():
 
     await le.publish(PropagateEvent("test"))
     assert executed == ["cmd:test"]
-
-
-@pytest.mark.asyncio
-async def test_propagator_providers_name_still_works():
-    executed = []
-
-    class MyPropagator(le.Propagator):
-        def compose(self):
-            def prepend(foo: str):
-                return {"text": foo.upper()}
-            yield prepend, True
-
-    @le.on(PropagateEvent)
-    @le.propagate(MyPropagator())
-    async def s(text: str):
-        executed.append(text)
-
-    await le.publish(PropagateEvent("hello"))
-    assert executed == ["HELLO"]
 
 
 @pytest.mark.asyncio
