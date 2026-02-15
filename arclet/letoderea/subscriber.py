@@ -191,6 +191,9 @@ class Propagator(metaclass=abc.ABCMeta):
     def validate(self, subscriber: Subscriber) -> bool:
         return True
 
+    def providers(self) -> list[Provider | ProviderFactory]:
+        return []
+
     def __iter__(self):  # pragma: no cover
         return self.compose()
 
@@ -398,6 +401,10 @@ class Subscriber(Generic[R]):
         if isinstance(func, Propagator):
             if not func.validate(self):
                 return lambda: None
+            extra_providers = func.providers()
+            if extra_providers:
+                self.providers.extend(extra_providers)
+                self._recompile()
             disposes = []
             for slot in func.compose():
                 if isinstance(slot, Propagator):
