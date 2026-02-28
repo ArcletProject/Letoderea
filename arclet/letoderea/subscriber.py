@@ -302,8 +302,8 @@ class Subscriber(Generic[R]):
     async def handle(self, context: Contexts, inner=False):
         token = current_subscriber.set(self)
         if not inner:
-            context["$subscriber"] = self
-            context["$exit_stack"] = AsyncExitStack()
+            context[SUBSCRIBER] = self
+            context[STACK] = AsyncExitStack()
         try:
             if self._cursor:
                 _res = await self._run_propagate(context, self._propagates[: self._cursor])
@@ -319,14 +319,14 @@ class Subscriber(Generic[R]):
                 else:
                     arguments[param.name] = await param.solve(context)
             if self.is_cm:
-                stack: AsyncExitStack = context["$exit_stack"]
+                stack: AsyncExitStack = context[STACK]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
             elif self.is_agen:
                 result = self._callable_target(**arguments)
             else:
                 result = await self._callable_target(**arguments)
             if self._propagates:
-                context["$result"] = result
+                context[RESULT] = result
                 result = (await self._run_propagate(context, self._propagates[self._cursor :])) or result
                 if result is STOP or result is BLOCK:
                     return result
@@ -346,7 +346,7 @@ class Subscriber(Generic[R]):
         finally:
             current_subscriber.reset(token)  # type: ignore
             if not inner:
-                if "$exit_stack" in context:  # pragma: no cover
+                if STACK in context:  # pragma: no cover
                     typ, e, tb = sys.exc_info()
                     await context[STACK].__aexit__(typ, e, tb)
                 context.clear()
@@ -377,9 +377,9 @@ class Subscriber(Generic[R]):
                 if isinstance(result, dict):
                     context.update(result)
                 elif isinstance(result, Result):
-                    context["$result"] = result.value
+                    context[RESULT] = result.value
                 elif result is not None:
-                    context["$result"] = result
+                    context[RESULT] = result
                 if pending:
                     for key in filter(context.__contains__, list(pending.keys())):
                         await self._run_propagate(context, [x[0] for x in pending.pop(key)])
