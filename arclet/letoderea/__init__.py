@@ -4,7 +4,8 @@ from .core import post as post
 from .core import waterfall as waterfall
 from .core import make_event as make_event
 from .core import ExceptionEvent as ExceptionEvent
-from .overload import Overloader as Overloader
+from .overload import apply_overload as apply_overload
+from .overload import call_overload as call_overload
 from .overload import overload as overload
 from .decorate import allow_event as allow_event
 from .decorate import bind as bind

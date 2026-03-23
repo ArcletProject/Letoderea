@@ -83,7 +83,7 @@ TCallable = TypeVar("TCallable", bound=Callable[..., Any])
 TDispose = Callable[[], None]
 
 
-@dataclass
+@dataclass(slots=True)
 class Force:
     """用于转义在本框架中特殊部分的特殊值"""
 

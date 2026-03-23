@@ -194,6 +194,9 @@ class Propagator(metaclass=abc.ABCMeta):
     def providers(self) -> list[Provider | ProviderFactory]:
         return []
 
+    def dispose(self) -> None:
+        return None
+
     def __iter__(self):  # pragma: no cover
         return self.compose()
 
@@ -229,12 +232,12 @@ class Subscriber(Generic[R]):
         self.is_cm = False
         self.is_agen = False
         self._recompile()
+        self._disposes: list[Callable[[Self], None]] = [dispose] if dispose else []
 
         if hasattr(callable_target, "__propagates__"):
             for slot in getattr(callable_target, "__propagates__", []):
                 self.propagates(*slot[0], prepend=slot[1])
 
-        self._disposes: list[Callable[[Self], None]] = [dispose] if dispose else []
         self.available = True
         self.once = once
 
@@ -327,7 +330,8 @@ class Subscriber(Generic[R]):
                 result = await self._callable_target(**arguments)
             if self._propagates:
                 context[RESULT] = result
-                result = (await self._run_propagate(context, self._propagates[self._cursor :])) or result
+                propagate_result = await self._run_propagate(context, self._propagates[self._cursor :])
+                result = result if propagate_result is None else propagate_result
                 if result is STOP or result is BLOCK:
                     return result
         except InnerHandlerException as e:
@@ -407,7 +411,7 @@ class Subscriber(Generic[R]):
                 for sub in self._propagates:  # pragma: no cover
                     sub.providers.extend(extra_providers)
                     sub._recompile()
-            disposes = []
+            disposes = [func.dispose]
             for slot in func.compose():
                 if isinstance(slot, Propagator):
                     disposes.append(self.propagate(slot))

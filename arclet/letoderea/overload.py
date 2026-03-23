@@ -2,28 +2,22 @@ from __future__ import annotations
 
 import sys
 import functools
-import itertools
-from inspect import Signature
-from asyncio import Queue
-from typing import TYPE_CHECKING, TypeVar, Any, get_args
+import inspect
+from typing import TYPE_CHECKING, TypeVar, Any
 from collections import defaultdict
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 from typing_extensions import ParamSpec
 
-from tarina import signatures, generic_isinstance, Empty
-from tarina.generic import origin_is_union, get_origin
+from tarina import generic_isinstance
 
-from .core import post
-from .provider import TProviders, provide
+from .subscriber import Propagator, Subscriber
+from .exceptions import BLOCK, STOP, ExceptionHandler, InnerHandlerException, UnresolvedRequirement, _ExitException
+from .decorate import propagate
 from .typing import Contexts, TCallable
-from .scope import Scope
-from .publisher import Publisher, _publishers
+from .subscriber import CompileParam, current_subscriber, STACK
 
 T = TypeVar("T")
 P = ParamSpec("P")
-
-
-_collectors: defaultdict[str, dict[tuple, CollectedPublisher]] = defaultdict(dict)
 
 
 if sys.version_info >= (3, 11):  # pragma: no cover
@@ -67,88 +61,117 @@ else:  # pragma: no cover
         return list(mod_dict[f.__qualname__].values())
 
 
-class CollectedPublisher(Publisher[T]):
+class Overloads(Propagator):
+    def __init__(self):
+        self.funcs: list[Subscriber] = []
+        self.allow_empty: dict[str, bool] = {}
+        self.funcs_params: dict[str, dict[Any, tuple[CompileParam, int]]] = {}
+        self.names_index: dict[str, set[int]] = {}
+        self.impl_params: list[CompileParam] = []
 
-    def __init__(self, id_: str, params: list[tuple[str, Any, Any]], queue_size: int = -1):
-        self.event_queue = Queue(queue_size)
-        self.target = object
-        self.supplier = self._supplier
-        self.id = id_
-        _publishers[self.id] = self
-        self._params = {name: (anno, de) for name, anno, de in params}
-        self._required_keys = {name for name, _, de in params if de is Empty and name != "event"}
-        self.providers = []
-        self.declare_cache_ignore()
+    def validate(self, subscriber: Subscriber) -> bool:
+        overloads = get_overloads(subscriber.callable_target)
+        if not overloads or len(overloads) == 1:
+            raise TypeError("No overloads found for the function.")
+        self.impl_params.extend(subscriber.params)
+        names_list = []
+        for i, func in enumerate(overloads):
+            sub = Subscriber(
+                func,
+                providers=subscriber.providers,
+                skip_req_missing=False
+            )
+            self.funcs.append(sub)
+            names_list.append(set(param.name for param in sub.params))
+            for param in sub.params:
+                if param.name not in self.names_index:
+                    self.names_index[param.name] = set()
+                self.names_index[param.name].add(i)
+                if param.name not in self.funcs_params:
+                    self.funcs_params[param.name] = {}
+                if param.annotation not in self.funcs_params[param.name]:
+                    self.funcs_params[param.name][param.annotation] = (param, i)
+        if set(self.funcs_params.keys()) - set(param.name for param in self.impl_params):
+            # 实现函数的参数必须包含所有重载函数的参数
+            raise TypeError("Implementation function must contain all parameters of overloads.")
+        for param in self.impl_params:
+            self.allow_empty[param.name] = any(param.name not in names for names in names_list)
+        setattr(subscriber, "__overload_source__", subscriber.callable_target)
+        subscriber.callable_target = self.execute
+        subscriber._recompile()
+        subscriber._attach_disposes(lambda _: self.dispose())
+        return False
 
-    async def _supplier(self, event, context: Contexts):
-        for key, val in event.items():
-            context[f"${self.id}_{key}"] = val
-        return context
+    def dispose(self):
+        self.funcs.clear()
+        self.allow_empty.clear()
+        self.funcs_params.clear()
+        self.names_index.clear()
+        self.impl_params.clear()
 
-    def validate(self, x):
-        if not isinstance(x, dict):
-            return False
-        if not self._required_keys.issuperset(x.keys()):
-            return False
-        for key, val in x.items():
-            if key in self._params and self._params[key][0] and not generic_isinstance(val, self._params[key][0]):
-                return False
-        return True
+    async def _solve(self, context: Contexts, param: CompileParam):
+        if param.depend:
+            dep_res = await param.depend(context)
+            if dep_res is STOP or dep_res is BLOCK:  # pragma: no cover
+                raise UnresolvedRequirement(f"Failed to resolve parameter {param.name} for overloads.")
+            return dep_res
+        res = await param.solve(context)
+        if res is STOP or res is BLOCK:  # pragma: no cover
+            raise UnresolvedRequirement(f"Failed to resolve parameter {param.name} for overloads.")
+        return res
 
-    def dispose(self):  # pragma: no cover
-        _publishers.pop(self.id, None)
-        key = self.id.split("::")[0]
-        annos = [[(name, ann) for ann in get_args(anno)] if origin_is_union(get_origin(anno)) else [(name, anno)] for name, anno, _ in self._params]
-        for args in itertools.product(*annos):
-            if args in _collectors[key] and _collectors[key][args] is self:
-                del _collectors[key][args]
+    async def execute(self, context: Contexts):
+        arguments: Contexts = {}  # type: ignore
+        choice: int = 0
+        for param in self.impl_params:
+            if param.name not in self.funcs_params:
+                continue
+            ans = None
+            for anno, (params, index) in self.funcs_params[param.name].items():
+                ans = await self._solve(context, params)
+                if not generic_isinstance(ans, anno):
+                    continue
+                if index not in self.names_index[param.name]:  # pragma: no cover
+                    continue
+                arguments[param.name] = ans
+                choice = index
+                break
+            else:
+                if ans is not None or not self.allow_empty[param.name]:
+                    raise UnresolvedRequirement(f"Failed to resolve parameter {param.name!r} for overloads.")
+        func = self.funcs[choice]
+        token = current_subscriber.set(func)
+
+        try:
+            if func.is_cm:  # pragma: no cover
+                stack = context[STACK]
+                result = await stack.enter_async_context(func._callable_target(**arguments))
+            elif func.is_agen:  # pragma: no cover
+                result = func._callable_target(**arguments)
+            else:
+                result = await func._callable_target(**arguments)
+        except InnerHandlerException:  # pragma: no cover
+            raise
+        except Exception as e:  # pragma: no cover
+            if isinstance(e, _ExitException):
+                return e
+            raise ExceptionHandler.call(e, func.callable_target, context, True) from e
+        finally:
+            current_subscriber.reset(token)  # type: ignore
+        return result
+
+    def compose(self):  # pragma: no cover
+        yield self.execute
 
 
-class Overloader:
-    def __init__(self, name: str, *, priority: int = 16, providers: TProviders | None = None, once: bool = False):
-        self.name = name
-        self.priority = priority
-        self.providers = providers
-        self.once = once
-        self.scope = Scope.of(name)
+def apply_overload(func: TCallable) -> TCallable:
+    return propagate(Overloads())(func)
 
-    def _overload(self, func: TCallable) -> TCallable:
-        params = signatures(func)
-        annos = [[(name, ann) for ann in get_args(anno)] if origin_is_union(get_origin(anno)) else [(name, anno)] for name, anno, _ in params]
-        matrix = list(itertools.product(*annos))
-        if any(args in _collectors[self.name] for args in matrix):  # pragma: no cover
-            pub = _collectors[self.name][matrix[0]]
-        else:
-            pub = CollectedPublisher(f"{self.name}::{func.__qualname__}_{hash(matrix[0])}", params)
-            for args in matrix:
-                _collectors[self.name][args] = pub
-            pub.providers = [provide(ann, target=name, call=f"${pub.id}_{name}") for slot in annos for name, ann in slot]
-        self.scope.register(
-            func,
-            priority=self.priority,
-            providers=self.providers,
-            once=self.once,
-            skip_req_missing=True,
-            publisher=pub,
-        )
-        return func
 
-    def dispose(self):  # pragma: no cover
-        self.scope.dispose()
-        key = self.name
-        for args in list(_collectors[key].keys()):
-            _collectors[key][args].dispose()
-
-    def define(self, func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
-        overloads = get_overloads(func)
-        for ofunc in overloads:
-            self._overload(ofunc)
-
-        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            sig = Signature.from_callable(func)
-            bound = sig.bind(*args, **kwargs)
-            bound.apply_defaults()
-            event = {k: v for k, v in bound.arguments.items() if v is not None}
-            result = await post(event, self.scope)
-            return result.value  # type: ignore
-        return wrapper
+async def call_overload(func: Callable[P, Awaitable[T]] | Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+    assert isinstance(func, Subscriber) and hasattr(func, "__overload_source__"), "Function must be decorated with @apply_overload."
+    source = getattr(func, "__overload_source__")
+    bind = inspect.signature(source).bind(*args, **kwargs)
+    bind.apply_defaults()
+    context = dict(bind.arguments)
+    return await func.callable_target(context)  # type: ignore
