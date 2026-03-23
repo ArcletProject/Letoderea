@@ -114,36 +114,55 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
                         continue
 
 
+async def serial_exec(subs: list[Subscriber], ctx: Contexts, concurrent: bool = False):
+    if not concurrent:
+        for subscriber in subs:
+            try:
+                yield subscriber, await subscriber.handle(ctx.copy())
+            except BaseException as e:
+                yield subscriber, e
+    else:
+        pending = {asyncio.create_task(subscriber.handle(ctx.copy()), name=f"sub_{i}") for i, subscriber in enumerate(subs)}
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                subscriber = subs[int(task.get_name().split("_")[1])]
+                try:
+                    yield subscriber, await task
+                except GeneratorExit:
+                    if pending:
+                        for t in pending:
+                            t.cancel()  # 发送取消信号
+                        await asyncio.gather(*pending, return_exceptions=True)
+                    raise
+                except BaseException as e:  # pragma: no cover
+                    yield subscriber, e
+
+
 async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):
     grouped, context_map = await compute(event, scope, slots, inherit_ctx)
 
     for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
         contexts = context_map[pub_id]
-        tasks = [asyncio.create_task(subscriber.handle(contexts.copy())) for subscriber in grouped[(priority, pub_id)]]
-        for _i, task in enumerate(asyncio.as_completed(tasks)):
-            try:
-                result = await task
-            except BaseException as e:  # pragma: no cover
-                result = e
+        gene = serial_exec(grouped[(priority, pub_id)], contexts, concurrent=True)
+        async for subscriber, result in gene:
             if result is None:
                 continue
             if result is STOP:
                 continue
             if result is BLOCK:  # pragma: no cover
-                for t in tasks:    t.cancel()
                 return
             if isinstance(result, BaseException):  # pragma: no cover
                 if isinstance(result, _ExitException):
                     return result.args[0]
                 if isinstance(event, ExceptionEvent):
                     return
-                await publish_exc_event(ExceptionEvent(event, grouped[(priority, pub_id)][_i], result))
+                await publish_exc_event(ExceptionEvent(event, subscriber, result))
                 continue
             if isinstance(result, AsyncGeneratorType):  # pragma: no cover
                 async for res in result:
                     if res in (None, STOP):
                         continue
-                    for t in tasks:    t.cancel()
                     if res is BLOCK:
                         return
                     if isinstance(res, _ExitException):
@@ -153,23 +172,16 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[t
                     else:
                         return res
             elif result.__class__ is Force:  # pragma: no cover
-                for t in tasks:    t.cancel()
                 return result.value
             else:
-                for t in tasks:    t.cancel()
                 return result
 
 
-async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
+async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterable[tuple[Subscriber, str]] | None = None, inherit_ctx: Contexts | None = None, concurrent: bool = False):  # pragma: no cover
     grouped, context_map = await compute(event, scope, slots, inherit_ctx)
-
     for (priority, pub_id) in sorted(grouped.keys(), key=lambda x: x[0]):
         contexts = context_map[pub_id]
-        for subscriber in grouped[(priority, pub_id)]:
-            try:
-                result = await subscriber.handle(contexts.copy())
-            except BaseException as result:
-                pass
+        async for subscriber, result in serial_exec(grouped[(priority, pub_id)], contexts, concurrent):
             if result is None:
                 continue
             if result is STOP:
@@ -280,12 +292,12 @@ def post(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | N
 
 
 @overload
-def waterfall(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None) -> AsyncGenerator[Result[T], Any]: ...
+def waterfall(event: Resultable[T], scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, concurrent: bool = False) -> AsyncGenerator[Result[T], Any]: ...
 @overload
-def waterfall(event: Any, scope: str | Scope | None = None,  inherit_ctx: Contexts | None = None) -> AsyncGenerator[Result[Any], Any]: ...
-async def waterfall(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None):  # pragma: no cover
+def waterfall(event: Any, scope: str | Scope | None = None,  inherit_ctx: Contexts | None = None, concurrent: bool = False) -> AsyncGenerator[Result[Any], Any]: ...
+async def waterfall(event: Any, scope: str | Scope | None = None, inherit_ctx: Contexts | None = None, concurrent: bool = False):  # pragma: no cover
     """发布事件，并行处理事件，逐个产出所有响应结果"""
-    async for res in broadcast(event, scope, inherit_ctx=inherit_ctx):
+    async for res in broadcast(event, scope, inherit_ctx=inherit_ctx, concurrent=concurrent):
         yield res if isinstance(res, Result) else Result(res)
 
 

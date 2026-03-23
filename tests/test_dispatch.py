@@ -112,12 +112,13 @@ async def test_post():
 
     @le.on(TestEvent)
     async def s1(foo: str, bar: str):
+        await asyncio.sleep(0.1)
         executed.append(1)
         return f"{foo}_{bar}"
 
     @le.on(TestEvent)
     async def s2(foo: str, bar: str):
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.2)
         executed.append(2)
         return f"{bar}_{foo}"
 
