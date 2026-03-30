@@ -47,7 +47,7 @@ async def _(event: ExceptionEvent, context: Contexts):
 
 async def publish_exc_event(event: ExceptionEvent):
     scopes = [sp for sp in _scopes.values() if sp.available]
-    subs = [slot for sp in scopes for slot in sp.subscribers.values() if slot[1] != "$backend"]
+    subs = [slot for sp in scopes for slot in sp.subscribers if slot[1] != "$backend"]
     await dispatch(event, slots=subs)
 
 
@@ -56,11 +56,11 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     if slots:
         pass
     elif isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-        slots = sp.subscribers.values()
+        slots = sp.subscribers
     elif isinstance(scope, Scope) and scope.available:
-        slots = scope.subscribers.values()
+        slots = scope.subscribers
     else:
-        slots = chain.from_iterable(sp.subscribers.values() for sp in _scopes.values() if sp.available)
+        slots = chain.from_iterable(sp.subscribers for sp in _scopes.values() if sp.available)
 
     grouped: dict[tuple[int, str], list[Subscriber]] = {}
     context_map: dict[str, Contexts] = {}

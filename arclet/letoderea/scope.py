@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from secrets import token_urlsafe
 from typing import Any, TypeVar, Generic
 from collections.abc import Callable, Awaitable
+from fnmatch import filter as fnfilter
 
 from tarina import ContextModel
 
@@ -26,12 +27,10 @@ global_propagators: list[Propagator] = []
 @dataclass
 class RegisterWrapper(Generic[T, TC]):
     _scope: Scope
-    _event: type | None
+    _publisher: tuple[type, Publisher] | tuple[tuple[type, ...], tuple[Publisher, ...]] | None
     _priority: int
     _providers: TProviders
     _propagators: list[Propagator]
-    _publisher: Publisher | None
-    _pub_id: str
     _once: bool
     _skip_req_missing: bool
 
@@ -50,11 +49,18 @@ class RegisterWrapper(Generic[T, TC]):
     def __call__(self, func: Callable, /) -> Subscriber[T]:
         if isinstance(func, Subscriber):
             func = func.callable_target
-        res = Subscriber(func, priority=self._priority, providers=self._providers, dispose=self._scope.remove_subscriber, once=self._once, skip_req_missing=self._skip_req_missing, _listen=self._event)
+        events = self._publisher[0] if self._publisher else None
+        res = Subscriber(func, priority=self._priority, providers=self._providers, dispose=self._scope.remove_subscriber, once=self._once, skip_req_missing=self._skip_req_missing, _listen=events)
         for pro in self._propagators:
             res.propagate(pro, _skip_providers=True)
-        if not self._publisher or (self._publisher and self._publisher.check_subscriber(res)):
-            self._scope.subscribers[res.id] = (res, self._pub_id)
+        pubs = self._publisher[1] if self._publisher else None
+        pubs = (pubs,) if isinstance(pubs, Publisher) else pubs
+        if not pubs:
+            self._scope.subscribers.append((res, "$backend"))
+        else:
+            for pub in pubs:
+                if pub.check_subscriber(res):
+                    self._scope.subscribers.append((res, pub.id))
         return res
 
 
@@ -70,7 +76,7 @@ class Scope:
 
     def __init__(self, id_: str | None = None):
         self.id = id_ or token_urlsafe(16)
-        self.subscribers = {}
+        self.subscribers = []
         self.available = True
         self.providers = []
         self.propagators = []
@@ -98,7 +104,11 @@ class Scope:
 
     def remove_subscriber(self, subscriber: Subscriber) -> None:
         """移除订阅者"""
-        self.subscribers.pop(subscriber.id, None)
+        indexes = [i for i, (sub, _) in enumerate(self.subscribers) if sub.id == subscriber.id]
+        removed = 0
+        for i in indexes:
+            self.subscribers.pop(i - removed)
+            removed += 1
 
     def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
         """注册一个订阅者"""
@@ -106,51 +116,54 @@ class Scope:
         providers = providers or []
         propagators = propagators or []
         if isinstance(publisher, Publisher):
-            pub_id = publisher.id
             event_providers = publisher.providers
-            _listen = publisher.target
-            _pub = publisher
-        elif isinstance(publisher, str) and publisher in _publishers:
-            pub_id = publisher
-            _pub = _publishers[publisher]
-            event_providers = _pub.providers
-            _listen = _pub.target
+            slots = (publisher.target, publisher)
+        elif isinstance(publisher, str):
+            if publisher in _publishers:
+                _pub = _publishers[publisher]
+                event_providers = _pub.providers
+                slots = (_pub.target, _pub)
+            elif not (pub_ids := tuple(p for p in fnfilter(_publishers.keys(), publisher))):
+                slots = None
+                event_providers = []
+            else:
+                pubs = tuple(_publishers[pub_id] for pub_id in pub_ids)
+                event_providers = [p for pub in pubs for p in pub.providers]
+                slots = (tuple(pub.target for pub in pubs), pubs)
         elif not event:
-            pub_id = "$backend"
+            slots = None
             event_providers = []
-            _listen = _pub = None
         else:
             _pub = (filter_publisher(event) or Publisher(event))
-            pub_id = _pub.id
             event_providers = _pub.providers
-            _listen = event
+            slots = (event, _pub)
 
         _propagators: list[Propagator] = [*global_propagators, *self.propagators, *propagators]
         _propagator_providers = [p for pro in _propagators for p in pro.providers()]
-        register_wrapper = self.__wrapper_class__(self, _listen, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, _pub, pub_id, once, _skip_req_missing)
+        register_wrapper = self.__wrapper_class__(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, once, _skip_req_missing)
         if func:
             return register_wrapper(func)
         return register_wrapper
 
     def iter(self, pub_ids: set[str], pass_backend: bool = True):
-        for slot in self.subscribers.values():
+        for slot in self.subscribers:
             if slot[1] in pub_ids or (pass_backend and slot[1] == "$backend"):
                 yield slot[0]
 
     def disable(self):
         self.available = False
-        for subscriber in self.subscribers.values():
+        for subscriber in self.subscribers:
             subscriber[0].available = False
 
     def enable(self):
         self.available = True
-        for subscriber in self.subscribers.values():
+        for subscriber in self.subscribers:
             subscriber[0].available = True
 
     def dispose(self):
         self.disable()
         while self.subscribers:
-            _, (sub, __) = self.subscribers.popitem()
+            sub, _ = self.subscribers[-1]
             sub.dispose()
         _scopes.pop(self.id, None)
 

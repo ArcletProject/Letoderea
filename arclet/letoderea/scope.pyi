@@ -23,19 +23,17 @@ global_propagators: list[Propagator]
 
 class RegisterWrapper(Generic[T, TC]):
     _scope: Scope
-    _event: type | None
+    _publisher: tuple[type, Publisher] | tuple[tuple[type, ...], tuple[Publisher, ...]] | None
     _priority: int
     _providers: TProviders
     _propagators: list[Propagator]
-    _publisher: Publisher | None
-    _pub_id: str
     _once: bool
     _skip_req_missing: bool
 
     def if_(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0) -> Self: ...
     def unless(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0) -> Self: ...
     def propagate(self, *propagators: Propagator) -> Self: ...
-    def __init__(self, _scope: Scope, _event: type | None, _priority: int, _providers: TProviders, _propagators: list[Propagator], _publisher: Publisher | None, _pub_id: str, _once: bool = False, _skip_req_missing: bool | None = None): ...
+    def __init__(self, _scope: Scope, _publisher: tuple[type, Publisher] | tuple[tuple[type, ...], tuple[Publisher, ...]] | None, _priority: int, _providers: TProviders, _propagators: list[Propagator], _once: bool = False, _skip_req_missing: bool | None = None): ...
     @overload
     def __call__(self: RegisterWrapper[None, Callable], func: Callable[..., T1]) -> Subscriber[T1]: ...
     @overload
@@ -52,7 +50,7 @@ class Scope:
     global_skip_req_missing: ClassVar[bool]
     __wrapper_class__: ClassVar[type[RegisterWrapper]]
     id: str
-    subscribers: dict[str, tuple[Subscriber, str]]
+    subscribers: list[tuple[Subscriber, str]]
     available: bool
     providers: list[Provider[Any] | ProviderFactory]
     propagators: list[Propagator]

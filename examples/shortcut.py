@@ -1,7 +1,7 @@
 import asyncio
 from typing import Annotated
 
-from arclet.letoderea import bypass_if, enter_if, es, on
+from arclet.letoderea import bypass_if, enter_if, es, on_global
 from arclet.letoderea.ref import deref
 
 
@@ -16,7 +16,7 @@ class TestEvent:
         context["msg"] = "hello"
 
 
-@on()
+@on_global
 @enter_if(deref(TestEvent).flag)
 # @is_event(TestEvent)
 async def test(flag: Annotated[bool, "flag"], a: Annotated[str, deref(TestEvent).msg]):
@@ -24,7 +24,7 @@ async def test(flag: Annotated[bool, "flag"], a: Annotated[str, deref(TestEvent)
     print("test1:", flag, a)
 
 
-@on()
+@on_global
 @bypass_if(deref(TestEvent).flag)
 # @is_event(TestEvent)
 async def test1(
