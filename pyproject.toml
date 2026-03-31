@@ -71,6 +71,7 @@ ignore = ["E402", "F403", "F405", "C901", "UP038", "T201", "T203"]
 pythonVersion = "3.10"
 pythonPlatform = "All"
 typeCheckingMode = "basic"
+enableExperimentalFeatures = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

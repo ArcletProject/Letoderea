@@ -7,7 +7,7 @@ from typing_extensions import Self
 from tarina.generic import is_typed_dict, generic_isinstance
 
 from .provider import Provider, ProviderFactory, get_providers
-from .typing import Contexts
+from .context import Contexts
 
 if TYPE_CHECKING:
     from .subscriber import Subscriber

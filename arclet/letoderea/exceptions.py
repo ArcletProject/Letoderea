@@ -9,7 +9,7 @@ from enum import Enum
 from types import CodeType, TracebackType, FunctionType
 from typing import Any, Final, cast
 
-from .typing import Contexts
+from .context import Contexts
 
 
 pat = re.compile(r"(async\s+)?def\s+(\w+)\s*(\[[\w.\[\], ]+\])?\s*\((?P<params>.*)\)")

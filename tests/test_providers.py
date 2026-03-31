@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from arclet.letoderea import Contexts, Provider, ProviderFactory, on, Param
-from arclet.letoderea.typing import generate_contexts
+from arclet.letoderea import Contexts, Provider, ProviderFactory, Param, on, provide, publish
+from arclet.letoderea.context import generate_contexts, shared_suppliers
 
 
 class IntProvider(Provider[int]):
@@ -102,3 +102,32 @@ async def test_providers_factory():
 
     ctx = await generate_contexts(ProviderEvent())
     await s1.handle(ctx)
+
+
+@pytest.mark.asyncio
+async def test_shared_supplier():
+    foo = object()
+    executed = []
+
+    async def _add_foo(contexts: Contexts):
+        contexts["foo"] = foo
+
+    shared_suppliers.append(_add_foo)
+    foo_provide = provide(object, call="foo", validate=lambda param: param.name.startswith("foo"))
+
+    @on(ProviderEvent, providers=[foo_provide])
+    async def s2(foo0: object, foo1: object):
+        assert foo0 is foo1 is foo
+        executed.append(foo0)
+        executed.append(foo1)
+
+    @on(ProviderEvent, providers=[foo_provide])
+    async def s3(foo2: object, foo3: object):
+        assert foo2 is foo3 is foo
+        executed.append(foo2)
+        executed.append(foo3)
+
+    await publish(ProviderEvent())
+    assert executed == [foo, foo, foo, foo]
+
+    shared_suppliers.remove(_add_foo)

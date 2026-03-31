@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, ClassVar, Generic, NamedTuple, TypeVar
 from collections.abc import Callable, Sequence
-from typing import TypeAlias
+from typing import TypeAlias, cast
+from typing_extensions import TypeForm
 
 from tarina import generic_issubclass
 from tarina.generic import get_origin, is_optional, origin_is_union
 
-from .typing import Contexts, EVENT, run_always_await
+from .context import Contexts, EVENT
+from .typing import run_always_await
 
 T = TypeVar("T")
 
@@ -56,7 +58,7 @@ class Provider(Generic[T], metaclass=ABCMeta):
 
 
 def provide(
-    origin: type[T],
+    origin: TypeForm[T],
     target: str | None = None,
     call: Callable[[Contexts], T | None | Awaitable[T | None]] | str | None = None,
     validate: Callable[[Param], bool] | None = None,
@@ -66,10 +68,12 @@ def provide(
     """
     用于动态生成 Provider 的装饰器
     """
+    origin = cast(type[T], origin)
+
     if not call and not target:
         raise ValueError("Either `call` or `target` must be provided")
 
-    class _Provider(Provider[origin]):
+    class _Provider(Provider[origin]):  # type: ignore  # noqa
         def validate(self, param: Param):
             if validate:
                 return validate(param)

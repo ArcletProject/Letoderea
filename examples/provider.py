@@ -5,7 +5,7 @@ import time
 from pprint import pprint
 
 from arclet.letoderea import Contexts, Provider, Publisher, Scope
-from arclet.letoderea.handler import generate_contexts
+from arclet.letoderea.context import generate_contexts
 
 
 class IntProvider(Provider[int]):

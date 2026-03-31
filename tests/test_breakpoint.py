@@ -4,7 +4,7 @@ import pytest
 
 from arclet.letoderea import deref, enter_if, on, es, defer
 from arclet.letoderea.breakpoint import step_out
-from arclet.letoderea.typing import Contexts, generate_contexts
+from arclet.letoderea.context import Contexts, generate_contexts
 
 
 class ExampleEvent:

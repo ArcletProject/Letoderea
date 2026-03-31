@@ -4,11 +4,11 @@ from typing import Generic, TypeVar, overload, Any
 from collections.abc import Callable
 from types import CoroutineType
 
+from .context import Contexts
 from .exceptions import BLOCK
 from .provider import TProviders
 from .subscriber import Subscriber, RESULT
 from .scope import on
-from .typing import Contexts
 
 R = TypeVar("R")
 R1 = TypeVar("R1")

@@ -5,8 +5,9 @@ import operator
 
 from tarina import Empty
 
+from .context import Contexts
 from .exceptions import STOP
-from .typing import Contexts, Force
+from .typing import Force
 from .subscriber import Depend, SUBSCRIBER, ParamDepend
 
 T = TypeVar("T")
@@ -59,7 +60,6 @@ class Deref:
         self.__items.append((False, _call))
         return self
 
-
     def __bool__(self):
         async def _(c, x): return bool(x)
         self.__items.append((True, _))
@@ -91,7 +91,7 @@ class Deref:
     __eq__ = _make_op(operator.eq, True)
     __ne__ = _make_op(operator.ne, True)
 
-    _is_ = _make_op( operator.is_, True)
+    _is_ = _make_op(operator.is_, True)
     _is_not = _make_op(operator.is_not, True)
 
     def __contains__(self, item, *, _left: bool = False):

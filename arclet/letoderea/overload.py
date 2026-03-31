@@ -10,10 +10,11 @@ from typing_extensions import ParamSpec
 
 from tarina import generic_isinstance
 
+from .context import Contexts
 from .subscriber import Propagator, Subscriber
 from .exceptions import BLOCK, STOP, ExceptionHandler, InnerHandlerException, UnresolvedRequirement, _ExitException
 from .decorate import propagate
-from .typing import Contexts, TCallable
+from .typing import TCallable
 from .subscriber import CompileParam, current_subscriber, STACK
 
 T = TypeVar("T")

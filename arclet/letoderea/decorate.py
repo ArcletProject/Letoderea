@@ -7,10 +7,11 @@ from tarina.tools import run_sync
 from typing_extensions import Self
 from functools import wraps
 
+from .context import EVENT, Contexts
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import STOP, Propagator, Subscriber, _compile
-from .typing import EVENT, Contexts, TCallable
+from .typing import TCallable
 
 
 def bind(*args: Provider | type[Provider]):

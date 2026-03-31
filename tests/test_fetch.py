@@ -18,7 +18,7 @@ async def test_event_dispatch():
     from arclet.letoderea.core import setup_fetch
 
     await pub.push(FetchEvent("f1", "b1"))
-    await pub.push(FetchEvent("f2", "b2"))
+    pub.unsafe_push(FetchEvent("f2", "b2"))
 
     setup_fetch()
     executed = []

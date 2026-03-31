@@ -11,12 +11,13 @@ from collections.abc import Callable, Coroutine
 
 from typing_extensions import dataclass_transform
 
+from .context import Contexts, generate_contexts
 from .exceptions import _ExitException, STOP, BLOCK
 from .publisher import Publisher, gather, define, get_publishers, _publishers
 from .provider import get_providers, provide
 from .scope import Scope, on, use, _scopes  # noqa: F401
 from .subscriber import Subscriber
-from .typing import Contexts, Force, Result, Resultable, generate_contexts
+from .typing import Force, Result, Resultable
 
 
 T = TypeVar("T")
@@ -36,13 +37,11 @@ class ExceptionEvent:
         )
     ]
 
+    async def gather(self, context: Contexts):
+        return context.update(exception=self.exception, origin=self.origin, subscriber=self.subscriber)
+
 
 exc_pub = define(ExceptionEvent, name="internal/exception")
-
-
-@gather
-async def _(event: ExceptionEvent, context: Contexts):
-    return context.update(exception=event.exception, origin=event.origin, subscriber=event.subscriber)
 
 
 async def publish_exc_event(event: ExceptionEvent):
