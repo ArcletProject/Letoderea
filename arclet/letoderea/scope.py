@@ -24,6 +24,13 @@ scope_ctx: ContextModel[Scope] = ContextModel("scope_ctx")
 global_propagators: list[Propagator] = []
 
 
+@dataclass(slots=True, frozen=True)
+class SubscriberSlot:
+    subscriber: Subscriber
+    publisher_id: str
+    priority: int
+
+
 @dataclass
 class RegisterWrapper(Generic[T, TC]):
     _scope: Scope
@@ -56,11 +63,11 @@ class RegisterWrapper(Generic[T, TC]):
         pubs = self._publisher[1] if self._publisher else None
         pubs = (pubs,) if isinstance(pubs, Publisher) else pubs
         if not pubs:
-            self._scope.subscribers.append((res, "$backend"))
+            self._scope.subscribers.append(SubscriberSlot(res, "$backend", res.priority))
         else:
             for pub in pubs:
                 if pub.check_subscriber(res):
-                    self._scope.subscribers.append((res, pub.id))
+                    self._scope.subscribers.append(SubscriberSlot(res, pub.id, res.priority))
         return res
 
 
@@ -76,7 +83,7 @@ class Scope:
 
     def __init__(self, id_: str | None = None):
         self.id = id_ or token_urlsafe(16)
-        self.subscribers = []
+        self.subscribers: list[SubscriberSlot] = []
         self.available = True
         self.providers = []
         self.propagators = []
@@ -104,7 +111,7 @@ class Scope:
 
     def remove_subscriber(self, subscriber: Subscriber) -> None:
         """移除订阅者"""
-        indexes = [i for i, (sub, _) in enumerate(self.subscribers) if sub.id == subscriber.id]
+        indexes = [i for i, slot in enumerate(self.subscribers) if slot.subscriber.id == subscriber.id]
         removed = 0
         for i in indexes:
             self.subscribers.pop(i - removed)
@@ -147,23 +154,23 @@ class Scope:
 
     def iter(self, pub_ids: set[str], pass_backend: bool = True):
         for slot in self.subscribers:
-            if slot[1] in pub_ids or (pass_backend and slot[1] == "$backend"):
-                yield slot[0]
+            if slot.publisher_id in pub_ids or (pass_backend and slot.publisher_id == "$backend"):
+                yield slot.subscriber
 
     def disable(self):
         self.available = False
-        for subscriber in self.subscribers:
-            subscriber[0].available = False
+        for slot in self.subscribers:
+            slot.subscriber.available = False
 
     def enable(self):
         self.available = True
-        for subscriber in self.subscribers:
-            subscriber[0].available = True
+        for slot in self.subscribers:
+            slot.subscriber.available = True
 
     def dispose(self):
         self.disable()
         while self.subscribers:
-            sub, _ = self.subscribers[-1]
+            sub = self.subscribers[-1].subscriber
             sub.dispose()
         _scopes.pop(self.id, None)
 

@@ -7,7 +7,7 @@ from cProfile import Profile
 from pprint import pprint
 
 from arclet.letoderea import Contexts, Param, Provider, on
-from arclet.letoderea.core import dispatch
+from arclet.letoderea.core import SubscriberSlot, dispatch
 
 loop = asyncio.new_event_loop()
 
@@ -66,10 +66,12 @@ print("RUN 2:")
 print(f"used {n/10e8} s, {count*10e8/n}o/s")
 print(f"{n / count} ns per loop with {count} loops")
 
+slot = SubscriberSlot(sub, '$event:__main__.TestEvent', 16)
+
 
 async def main2():
     for _ in range(count):
-        await dispatch(a, slots=[(sub, '$event:__main__.TestEvent')])
+        await dispatch(a, slots=[slot, slot])
 
 
 s = time.perf_counter_ns()

@@ -21,6 +21,13 @@ scope_ctx: ContextModel[Scope]
 global_propagators: list[Propagator]
 
 
+@dataclass
+class SubscriberSlot:
+    subscriber: Subscriber
+    publisher_id: str
+    priority: int
+
+
 class RegisterWrapper(Generic[T, TC]):
     _scope: Scope
     _publisher: tuple[type, Publisher] | tuple[tuple[type, ...], tuple[Publisher, ...]] | None
@@ -50,7 +57,7 @@ class Scope:
     global_skip_req_missing: ClassVar[bool]
     __wrapper_class__: ClassVar[type[RegisterWrapper]]
     id: str
-    subscribers: list[tuple[Subscriber, str]]
+    subscribers: list[SubscriberSlot]
     available: bool
     providers: list[Provider[Any] | ProviderFactory]
     propagators: list[Propagator]

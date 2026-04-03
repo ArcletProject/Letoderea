@@ -117,7 +117,7 @@ class CompileParam:
     async def solve(self, context: Contexts | dict[str, Any]):
         if self.name in context:
             return context[self.name]
-        if self.record and (res := await self.record(context)):  # type: ignore
+        if self.record and (res := await self.record(context)) is not None:  # type: ignore
             if res.__class__ is Force:
                 res = res.value
             return res
