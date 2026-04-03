@@ -78,16 +78,15 @@ class Depend:
         cache[self.target] = fut = asyncio.Future()
         try:
             res = await self.sub.handle(context.copy(), inner=True)
-        except Exception as e:  # pragma: no cover
-            fut.set_exception(e)
-            fut.cancel()
-            raise
         except BaseException as e:  # pragma: no cover
             fut.set_exception(e)
             fut.cancel()
-            cache.pop(self.target, None)
+            if isinstance(e, Exception):
+                cache.pop(self.target, None)
             raise
         else:
+            if isinstance(res, _ExitException):
+                raise
             fut.set_result(res)
             return res
 
@@ -115,6 +114,8 @@ class CompileParam:
     __slots__ = ("name", "annotation", "default", "providers", "depend", "record")
 
     async def solve(self, context: Contexts | dict[str, Any]):
+        if self.depend:
+            return await self.depend(context)  # type: ignore
         if self.name in context:
             return context[self.name]
         if self.record and (res := await self.record(context)) is not None:  # type: ignore
@@ -219,6 +220,7 @@ class Subscriber(Generic[R]):
         self._propagates: list[Subscriber] = []
         self._propagator_cache: WeakSet[Propagator] = WeakSet()
         self._cursor = 0
+        self._after_propagates = 0
         self._listen = _listen
 
         if hasattr(callable_target, "__providers__"):
@@ -304,18 +306,10 @@ class Subscriber(Generic[R]):
             context[STACK] = AsyncExitStack()
         try:
             if self._cursor:
-                _res = await self._run_propagate(context, self._propagates[: self._cursor])
-                if _res is STOP or _res is BLOCK:
-                    return _res
-            arguments: Contexts = {}  # type: ignore
+                await self._run_propagate(context, self._propagates[: self._cursor])
+            arguments = {}  # type: ignore
             for param in self.params:
-                if param.depend:
-                    dep_res = await param.depend(context)
-                    if dep_res is STOP or dep_res is BLOCK:
-                        return dep_res
-                    arguments[param.name] = dep_res
-                else:
-                    arguments[param.name] = await param.solve(context)
+                arguments[param.name] = await param.solve(context)
             if self.is_cm:
                 stack: AsyncExitStack = context[STACK]
                 result = await stack.enter_async_context(self._callable_target(**arguments))
@@ -323,12 +317,10 @@ class Subscriber(Generic[R]):
                 result = self._callable_target(**arguments)
             else:
                 result = await self._callable_target(**arguments)
-            if self._propagates:
+            if self._after_propagates:
                 context[RESULT] = result
                 propagate_result = await self._run_propagate(context, self._propagates[self._cursor :])
                 result = result if propagate_result is None else propagate_result
-                if result is STOP or result is BLOCK:
-                    return result
         except InnerHandlerException as e:
             if inner:
                 raise
@@ -369,9 +361,7 @@ class Subscriber(Generic[R]):
                 else:
                     raise
             else:
-                if isinstance(result, ExitState):
-                    return result
-                if isinstance(result, _ExitException):  # pragma: no cover
+                if isinstance(result, _ExitException):
                     raise result
                 if isinstance(result, dict):
                     context.update(result)
@@ -384,7 +374,7 @@ class Subscriber(Generic[R]):
                         await self._run_propagate(context, [x[0] for x in pending.pop(key)])
         if pending:
             key, (slot, *_) = pending.popitem()
-            raise ExceptionHandler.call(slot[1], slot[0].callable_target,context, inner=True)
+            raise ExceptionHandler.call(slot[1], slot[0].callable_target, context, inner=True)
         return context.get(RESULT)
 
     @overload
@@ -419,36 +409,27 @@ class Subscriber(Generic[R]):
             self._propagator_cache.add(func)
             return lambda: ([dispose() for dispose in disposes] or self._propagator_cache.discard(func))
 
-        def _dispose(x: Subscriber):
-            self._propagates.remove(x)
-            self._cursor -= 1
-
         def wrapper(callable_target: TTarget[Any], /):
             if isinstance(callable_target, Subscriber):
                 raise ValueError("Subscriber can't be propagated")
             _providers = [*(providers or []), *self.providers]
             if prepend:
-                sub = Subscriber(
-                    callable_target,
-                    priority=priority,
-                    providers=_providers,
-                    dispose=_dispose,
-                    once=once,
-                    _listen=self._listen,
-                )
+                def _dispose(x: Subscriber):
+                    self._propagates.remove(x)
+                    self._cursor -= 1
+
+                sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=_dispose, once=once, _listen=self._listen)
                 self._propagates.insert(self._cursor, sub)
                 self._cursor += 1
             else:
+                def _dispose(x: Subscriber):
+                    self._propagates.remove(x)
+                    self._after_propagates -= 1
+
                 _providers.append(ResultProvider())
-                sub = Subscriber(
-                    callable_target,
-                    priority=priority,
-                    providers=_providers,
-                    dispose=lambda x: self._propagates.remove(x),
-                    once=once,
-                    _listen=self._listen,
-                )
+                sub = Subscriber(callable_target, priority=priority, providers=_providers, dispose=_dispose, once=once, _listen=self._listen)
                 self._propagates.append(sub)
+                self._after_propagates += 1
             return sub.dispose
 
         if func:

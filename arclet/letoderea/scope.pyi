@@ -21,7 +21,7 @@ scope_ctx: ContextModel[Scope]
 global_propagators: list[Propagator]
 
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class SubscriberSlot:
     subscriber: Subscriber
     publisher_id: str

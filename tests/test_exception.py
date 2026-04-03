@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 import arclet.letoderea as le
@@ -26,5 +28,5 @@ async def test_get_exc():
         executed.append(1)
 
     await le.publish(TestExcEvent("1"))
-
+    await asyncio.sleep(0)
     assert len(executed) == 3
