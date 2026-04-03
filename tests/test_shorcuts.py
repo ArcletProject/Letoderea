@@ -1,9 +1,9 @@
-import pytest
 from dataclasses import dataclass
 from typing import Annotated
 
+import pytest
 
-from arclet.letoderea import bypass_if, enter_if, es, on, on_global, provide, param
+from arclet.letoderea import bypass_if, enter_if, es, on, on_global, param, provide
 from arclet.letoderea.ref import deref
 
 

@@ -1,23 +1,24 @@
 from __future__ import annotations
 
-import sys
 import functools
 import itertools
-from inspect import Signature
+import sys
 from asyncio import Queue
-from typing import TYPE_CHECKING, TypeVar, Any, get_args
 from collections import defaultdict
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from inspect import Signature
+from typing import TYPE_CHECKING, Any, TypeVar, get_args
 from typing_extensions import ParamSpec
 
-from tarina import signatures, generic_isinstance, Empty
-from tarina.generic import origin_is_union, get_origin
+from tarina import Empty, generic_isinstance, signatures
+from tarina.generic import get_origin, origin_is_union
 
+from arclet.letoderea.context import Contexts
 from arclet.letoderea.core import post
 from arclet.letoderea.provider import TProviders, provide
-from arclet.letoderea.typing import Contexts, TCallable
-from arclet.letoderea.scope import Scope
 from arclet.letoderea.publisher import Publisher, _publishers
+from arclet.letoderea.scope import Scope
+from arclet.letoderea.typing import TCallable
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -27,8 +28,8 @@ _collectors: defaultdict[str, dict[tuple, CollectedPublisher]] = defaultdict(dic
 
 
 if sys.version_info >= (3, 11):  # pragma: no cover
-    from typing import overload as overload  # noqa: F401
     from typing import get_overloads
+    from typing import overload as overload  # noqa: F401
 else:  # pragma: no cover
     _overload_registry = defaultdict(functools.partial(defaultdict, dict))
 

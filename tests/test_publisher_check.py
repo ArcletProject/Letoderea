@@ -1,10 +1,12 @@
-import pytest
 import inspect
 from dataclasses import dataclass
-from tarina import Empty
-from tarina.generic import origin_is_union, get_origin
-from typing_extensions import Doc
 from typing import Annotated, get_args
+from typing_extensions import Doc
+
+import pytest
+from tarina import Empty
+from tarina.generic import get_origin, origin_is_union
+
 import arclet.letoderea as le
 
 

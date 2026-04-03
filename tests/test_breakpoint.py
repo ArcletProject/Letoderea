@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from arclet.letoderea import deref, enter_if, on, es, defer
+from arclet.letoderea import defer, deref, enter_if, es, on
 from arclet.letoderea.breakpoint import step_out
 from arclet.letoderea.context import Contexts, generate_contexts
 

@@ -3,17 +3,16 @@ from __future__ import annotations
 import abc
 import asyncio
 import sys
-from contextvars import ContextVar
-from weakref import WeakSet
 from collections import defaultdict
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import AsyncExitStack, asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Annotated, Any, Generic, TypeVar, final, overload
-from collections.abc import Callable, Generator, AsyncGenerator, Awaitable
-from typing_extensions import Self
-from typing import get_args, get_origin
 from types import CoroutineType
+from typing import Annotated, Any, Generic, TypeVar, final, get_args, get_origin, overload
+from typing_extensions import Self
 from uuid import uuid4
+from weakref import WeakSet
 
 from tarina import Empty, is_async, signatures
 from tarina.guard import is_async_gen_callable, is_gen_callable
@@ -21,18 +20,16 @@ from tarina.tools import run_sync, run_sync_generator
 
 from .context import Contexts, CtxItem
 from .exceptions import (
+    STOP,
+    ExceptionHandler,
+    ExitState,
     InnerHandlerException,
     ProviderUnsatisfied,
     UnresolvedRequirement,
-    ExceptionHandler,
-    STOP,
-    BLOCK,
-    ExitState,
     _ExitException,
 )
-from .provider import TProviders, Param, Provider, ProviderFactory, provide
-from .typing import Force, Result, TTarget, TDispose
-
+from .provider import Param, Provider, ProviderFactory, TProviders, provide
+from .typing import Force, Result, TDispose, TTarget
 
 R = TypeVar("R")
 T = TypeVar("T")
@@ -161,10 +158,7 @@ def _compile_single(param: CompileParam, providers: list[Provider | ProviderFact
                 param.providers.insert(0, provide(org, name, generate(m)))
             elif callable(m):
                 param.providers.insert(0, provide(org, name, m))
-    if isinstance(param.default, Provider):
-        param.providers.insert(0, param.default)
-        param.default = Empty
-    elif isinstance(param.default, Deref):
+    if isinstance(param.default, Deref):
         param.providers.insert(0, provide(anno, name, generate(param.default)))
         param.default = Empty
     if isinstance(param.default, Depend):

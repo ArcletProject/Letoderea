@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from arclet.letoderea import Contexts, Depends, es, STOP
+from arclet.letoderea import STOP, Contexts, Depends, es
 
 
 class ExampleEvent:

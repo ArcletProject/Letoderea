@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Generic, Protocol, TypeVar
-from collections.abc import Callable
 
 from tarina import is_async
-
 
 T = TypeVar("T")
 

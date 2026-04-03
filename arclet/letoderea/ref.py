@@ -1,14 +1,13 @@
-from collections.abc import Container, Awaitable
-from typing import TYPE_CHECKING, Any, TypeVar, cast, final
-from collections.abc import Callable
 import operator
+from collections.abc import Awaitable, Callable, Container
+from typing import TYPE_CHECKING, Any, TypeVar, cast, final
 
 from tarina import Empty
 
 from .context import Contexts
 from .exceptions import STOP
+from .subscriber import SUBSCRIBER, Depend, ParamDepend
 from .typing import Force
-from .subscriber import Depend, SUBSCRIBER, ParamDepend
 
 T = TypeVar("T")
 

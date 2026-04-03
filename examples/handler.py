@@ -3,7 +3,7 @@ import time
 
 from arclet.letoderea import Contexts, Provider, define
 from arclet.letoderea.core import dispatch
-from arclet.letoderea.subscriber import Subscriber, STOP
+from arclet.letoderea.subscriber import STOP, Subscriber
 
 loop = asyncio.new_event_loop()
 

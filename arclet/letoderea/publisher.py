@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from asyncio import Queue
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, get_type_hints
-from collections.abc import Callable, Awaitable
 from typing_extensions import Self
-from tarina.generic import is_typed_dict, generic_isinstance
 
-from .provider import Provider, ProviderFactory, get_providers
+from tarina.generic import generic_isinstance, is_typed_dict
+
 from .context import Contexts
+from .provider import Provider, ProviderFactory, get_providers
 
 if TYPE_CHECKING:
     from .subscriber import Subscriber

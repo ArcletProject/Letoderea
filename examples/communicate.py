@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
-from arclet.letoderea import Result, es, make_event, define
+from arclet.letoderea import Result, define, es, make_event
 
 
 @make_event

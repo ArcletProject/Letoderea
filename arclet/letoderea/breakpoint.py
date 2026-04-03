@@ -1,14 +1,13 @@
 import asyncio
-from collections.abc import Awaitable
-from typing import Generic, TypeVar, overload, Any
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from types import CoroutineType
+from typing import Any, Generic, TypeVar, overload
 
 from .context import Contexts
 from .exceptions import BLOCK
 from .provider import TProviders
-from .subscriber import Subscriber, RESULT
 from .scope import on
+from .subscriber import RESULT, Subscriber
 
 R = TypeVar("R")
 R1 = TypeVar("R1")

@@ -1,11 +1,10 @@
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
+from functools import wraps
 from typing import TYPE_CHECKING, Any, Union, overload
-from collections.abc import Callable
+from typing_extensions import Self
 
 from tarina import is_coroutinefunction
 from tarina.tools import run_sync
-from typing_extensions import Self
-from functools import wraps
 
 from .context import EVENT, Contexts
 from .provider import Provider

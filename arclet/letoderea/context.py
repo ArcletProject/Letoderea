@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload, cast
-from collections.abc import Callable
-
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
 from typing_extensions import Self
-
 
 T = TypeVar("T")
 T1 = TypeVar("T1")

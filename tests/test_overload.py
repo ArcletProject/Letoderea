@@ -1,5 +1,7 @@
+from typing import Any, Literal
+
 import pytest
-from typing import Literal, Any
+
 import arclet.letoderea as le
 
 

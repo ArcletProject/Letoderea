@@ -1,29 +1,28 @@
 from __future__ import annotations
 
-import sys
 import functools
 import inspect
-from typing import TYPE_CHECKING, TypeVar, Any
+import sys
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, TypeVar
 from typing_extensions import ParamSpec
 
 from tarina import generic_isinstance
 
 from .context import Contexts
-from .subscriber import Propagator, Subscriber
-from .exceptions import BLOCK, STOP, ExceptionHandler, InnerHandlerException, UnresolvedRequirement, _ExitException
 from .decorate import propagate
+from .exceptions import BLOCK, STOP, ExceptionHandler, InnerHandlerException, UnresolvedRequirement, _ExitException
+from .subscriber import STACK, CompileParam, Propagator, Subscriber, current_subscriber
 from .typing import TCallable
-from .subscriber import CompileParam, current_subscriber, STACK
 
 T = TypeVar("T")
 P = ParamSpec("P")
 
 
 if sys.version_info >= (3, 11):  # pragma: no cover
-    from typing import overload as overload  # noqa: F401
     from typing import get_overloads
+    from typing import overload as overload  # noqa: F401
 else:  # pragma: no cover
     _overload_registry = defaultdict(functools.partial(defaultdict, dict))
 

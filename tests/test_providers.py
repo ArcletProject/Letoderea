@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from arclet.letoderea import Contexts, Provider, ProviderFactory, Param, on, provide, publish
+
+from arclet.letoderea import Contexts, Param, Provider, ProviderFactory, on, provide, publish
 from arclet.letoderea.context import generate_contexts, shared_suppliers
 
 

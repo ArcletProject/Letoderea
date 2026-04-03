@@ -2,25 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-from collections.abc import Awaitable, AsyncGenerator, Iterable
 from collections import defaultdict
+from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Iterable
 from dataclasses import dataclass
-from operator import attrgetter
 from itertools import chain
+from operator import attrgetter
 from types import AsyncGeneratorType
-from typing import Any, TypeVar, overload, cast
-from collections.abc import Callable, Coroutine
-
+from typing import Any, TypeVar, cast, overload
 from typing_extensions import dataclass_transform
 
 from .context import Contexts, generate_contexts
-from .exceptions import _ExitException, STOP, BLOCK
-from .publisher import Publisher, gather, define, get_publishers, _publishers
+from .exceptions import BLOCK, STOP, _ExitException
 from .provider import get_providers, provide
-from .scope import SubscriberSlot, Scope, on, use, _scopes  # noqa: F401
+from .publisher import Publisher, _publishers, define, gather, get_publishers
+from .scope import Scope, SubscriberSlot, _scopes, on, use  # noqa: F401
 from .subscriber import Subscriber
 from .typing import Force, Result, Resultable
-
 
 T = TypeVar("T")
 

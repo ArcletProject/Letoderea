@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import inspect
 from abc import ABCMeta, abstractmethod
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack
-from collections.abc import Awaitable
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, ClassVar, Generic, NamedTuple, TypeVar
-from collections.abc import Callable, Sequence
-from typing import TypeAlias, cast
+from typing import Any, ClassVar, Generic, NamedTuple, TypeAlias, TypeVar, cast
 from typing_extensions import TypeForm
 
 from tarina import generic_issubclass
 from tarina.generic import get_origin, is_optional, origin_is_union
 
-from .context import Contexts, EVENT
+from .context import EVENT, Contexts
 from .typing import run_always_await
 
 T = TypeVar("T")

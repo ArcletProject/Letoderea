@@ -1,8 +1,10 @@
-import pytest
 import random
-import arclet.letoderea as le
 from contextlib import asynccontextmanager
 from typing import Annotated
+
+import pytest
+
+import arclet.letoderea as le
 
 
 @le.make_event
