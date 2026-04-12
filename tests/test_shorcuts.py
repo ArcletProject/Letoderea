@@ -98,13 +98,13 @@ async def test_deref_advance():
     executed = []
 
     @on_global
-    @enter_if & (deref(User).name == "test")
+    @enter_if(deref(User).name == "test")
     async def s(user: User):
         assert user.name == "test"
         executed.append(1)
 
     @on_global
-    @enter_if & (deref(User).id == 2)
+    @enter_if(deref(User).id == 2)
     async def s1(user: User):
         assert user.id == 2
         executed.append(1)

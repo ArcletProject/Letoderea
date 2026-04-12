@@ -16,8 +16,9 @@ if TYPE_CHECKING:
 T = TypeVar("T", covariant=True)
 T1 = TypeVar("T1")
 _publishers: dict[str, Publisher] = {}
+_custom_validates: dict[type, set[str]] = {}
+_static_validates: set[str] = set()
 _publisher_cache: dict[type, list[str]] = {}
-_publisher_cache_ignore = set()
 
 
 async def _supplier(event: Any, context: Contexts):
@@ -29,7 +30,7 @@ async def _supplier(event: Any, context: Contexts):
 class Publisher(Generic[T]):
     id: str
 
-    def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None, queue_size: int = -1):
+    def __init__(self, target: type[T], id_: str | None = None, supplier: Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None, validator: Callable[[T], bool] | None = None, queue_size: int = -1):
         self.providers: list[Provider | ProviderFactory] = get_providers(target)
         if not isinstance(target, type) and not id_:  # pragma: no cover
             raise TypeError("Publisher with generic type must have a name")
@@ -39,16 +40,19 @@ class Publisher(Generic[T]):
         if hasattr(target, "gather"):
             self.supplier = target.gather  # type: ignore
         self.event_queue = Queue(queue_size)
-        self.validate = (
-            (lambda x: generic_isinstance(x, target))
-            if is_typed_dict(target) or not isinstance(target, type)
-            else (lambda x: isinstance(x, target))
-        )
+        if validator:
+            self.validate = validator
+            _custom_validates.setdefault(self.target, set()).add(self.id)
+        elif not hasattr(self, "validate"):
+            self.validate = (
+                (lambda x: generic_isinstance(x, target))
+                if is_typed_dict(target) or not isinstance(target, type)
+                else (lambda x: isinstance(x, target))
+            )
+            _static_validates.add(self.id)
+        else:
+            _custom_validates.setdefault(self.target, set()).add(self.id)
         _publishers[self.id] = self
-
-    def declare_cache_ignore(self):
-        """声明该 Publisher 不适合被缓存，通常是因为其 validate 方法过于复杂或不稳定"""
-        _publisher_cache_ignore.add(self.__class__)
 
     def gather(self, func: Callable[[T, Contexts], Awaitable[Contexts | None]]):
         self.supplier = func
@@ -106,23 +110,28 @@ def filter_publisher(target: type[T1]) -> Publisher[T1] | None:
 def get_publishers(event: Any) -> dict[str, Publisher]:
     t = event.__class__
     if t in _publisher_cache:
-        return {id_: _publishers[id_] for id_ in _publisher_cache[t]}
-    pubs = {pub.id: pub for pub in _publishers.values() if pub.validate(event)}
-    if cached := [pub.id for pub in pubs.values() if pub.__class__ not in _publisher_cache_ignore]:
-        _publisher_cache[t] = cached
-    return pubs
+        statics = _publisher_cache[t]
+        static_pubs = {id_: _publishers[id_] for id_ in statics}
+    else:
+        static_pubs = {id_: pub for id_, pub in _publishers.items() if id_ in _static_validates and pub.validate(event)}
+        _publisher_cache[t] = list(static_pubs.keys())
+    if t in _custom_validates:
+        dynamic_pubs = {id_: pub for id_, pub in _publishers.items() if id_ in _custom_validates[t] and pub.validate(event)}
+        return static_pubs | dynamic_pubs
+    return static_pubs
 
 
 def define(
     target: type[T1],
     supplier: Callable[[T1, Contexts], Awaitable[Contexts | None]] | None = None,
+    validator: Callable[[T1], bool] | None = None,
     name: str | None = None,
 ) -> Publisher[T1]:
     if name and name in _publishers:
         return _publishers[name]
     if (_id := getattr(target, "__publisher__", f"$event:{target.__module__}.{target.__name__}")) in _publishers:
         return _publishers[_id]
-    return Publisher(target, name, supplier)
+    return Publisher(target, name, supplier, validator)
 
 
 def gather(func: Callable[[Any, Contexts], Awaitable[Contexts | None]]):

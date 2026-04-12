@@ -71,15 +71,10 @@ else:  # pragma: no cover
 class CollectedPublisher(Publisher[T]):
 
     def __init__(self, id_: str, params: list[tuple[str, Any, Any]], queue_size: int = -1):
-        self.event_queue = Queue(queue_size)
-        self.target = object
-        self.supplier = self._supplier
-        self.id = id_
-        _publishers[self.id] = self
+        super().__init__(object, id_, supplier=self._supplier, queue_size=queue_size)
         self._params = {name: (anno, de) for name, anno, de in params}
         self._required_keys = {name for name, _, de in params if de is Empty and name != "event"}
         self.providers = []
-        self.declare_cache_ignore()
 
     async def _supplier(self, event, context: Contexts):
         for key, val in event.items():

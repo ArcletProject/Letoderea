@@ -23,28 +23,25 @@ class CallEvent:
 pub = le.define(CallEvent, name="called_event")
 
 
-@pub.gather
-async def _(ev, ctx):
-    ctx.update(ev.params)
-    return ctx
-
-
-mapping = {
-    str: "string",
-    int: "integer",
-    float: "number",
-    bool: "boolean",
-    list: "array",
-    set: "array",
-    tuple: "array",
-    dict: "object",
-}
-
-
 @pytest.mark.asyncio
 async def test_check():
     subs = []
     available_functions = {}
+    mapping = {
+        str: "string",
+        int: "integer",
+        float: "number",
+        bool: "boolean",
+        list: "array",
+        set: "array",
+        tuple: "array",
+        dict: "object",
+    }
+
+    @pub.gather
+    async def _(ev, ctx):
+        ctx.update(ev.params)
+        return ctx
 
     @pub.check
     def c(_, sub: le.Subscriber):
@@ -133,3 +130,30 @@ async def test_check():
     async for result in le.waterfall(CallEvent("get_hello", "Bill", "Hello!", response)):
         assert result
         assert result.value == "Hello Bill!"
+
+
+@dataclass
+class ValidateEvent:
+    called: str
+    user: str
+
+
+@pytest.mark.asyncio
+async def test_validate():
+    pub = le.define(ValidateEvent, name="validated_event")
+    pub1 = le.define(ValidateEvent, validator=lambda x: x.called == "test" and x.user == "test", name="validated_event/test")
+
+    @le.use("validated_event")
+    async def _(called: str, user: str):
+        """Get a message for a user."""
+        return f"{called!r} by {user}"
+
+    @le.use("validated_event/test")
+    async def _(called: str, user: str):
+        """Get a message for a user, but only if the called is 'test' and the user is 'test"""
+        return f"{called!r} by {user} and must be test"
+
+    result1 = [res.value async for res in le.waterfall(ValidateEvent("test", "test"))]
+    result2 = [res.value async for res in le.waterfall(ValidateEvent("test", "not_test"))]
+    assert result1 == ["'test' by test", "'test' by test and must be test"]
+    assert result2 == ["'test' by not_test"]
