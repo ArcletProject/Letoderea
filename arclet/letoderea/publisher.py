@@ -76,19 +76,6 @@ class Publisher(Generic[T]):
     def dispose(self):
         _publishers.pop(self.id, None)
 
-    def bind(self, *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
-        """增加间接 Provider"""
-        self.providers.extend(p() if isinstance(p, type) else p for p in args)
-
-    def unbind(
-        self,
-        arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory],
-    ) -> None:  # pragma: no cover
-        """移除间接 Provider"""
-        idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
-        for i in reversed(idx):
-            self.providers.pop(i)
-
     def check(self: Self, func: Callable[[Self, Subscriber], bool]):
         self.check_subscriber = func.__get__(self)  # type: ignore
         return func

@@ -33,9 +33,10 @@ from .typing import Force, Result, TDispose, TTarget
 
 R = TypeVar("R")
 T = TypeVar("T")
-RESULT: CtxItem[Any] = CtxItem.make("$result")
-STACK: CtxItem[AsyncExitStack] = CtxItem.make("$exit_stack")
-SUBSCRIBER: CtxItem[Subscriber] = CtxItem.make("$subscriber")
+RESULT = CtxItem[Any].make("$result")
+STACK = CtxItem[AsyncExitStack[Any]].make("$exit_stack")
+SUBSCRIBER = CtxItem["Subscriber"].make("$subscriber")
+
 current_subscriber: ContextVar[Subscriber] = ContextVar("_current_subscriber")
 
 

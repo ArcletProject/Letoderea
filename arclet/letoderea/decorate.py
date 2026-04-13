@@ -21,10 +21,8 @@ def bind(*args: Provider | type[Provider]):
             target.providers.extend(providers)
             target.params = _compile(target.callable_target, target.providers)
         else:
-            if not hasattr(target, "__providers__"):
-                setattr(target, "__providers__", providers)
-            else:
-                getattr(target, "__providers__").extend(providers)
+            _providers = getattr(target, "__providers__", [])
+            setattr(target, "__providers__", _providers + providers)
         return target  # type: ignore
 
     return wrapper
@@ -43,10 +41,8 @@ def propagate(*funcs: Callable[..., Any] | Propagator, prepend: bool = False):
         if isinstance(target, Subscriber):
             target.propagates(*funcs, prepend=prepend)
         else:
-            if not hasattr(target, "__propagates__"):
-                setattr(target, "__propagates__", [(funcs, prepend)])
-            else:
-                getattr(target, "__propagates__").append((funcs, prepend))
+            _propagates = getattr(target, "__propagates__", [])
+            setattr(target, "__propagates__", _propagates + [(funcs, prepend)])
         return target  # type: ignore
 
     return wrapper
@@ -85,11 +81,10 @@ class Check(Propagator):
                 if await _func(*args, **kwargs) is not self.result:
                     return STOP
 
-            yield _
+            yield _, True, self.priority
 
     def compose(self):
-        for checker in self.checkers():
-            yield checker, True, self.priority
+        yield from self.checkers()
 
     def __call__(self, func: TCallable) -> TCallable:
         return propagate(self)(func)

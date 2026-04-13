@@ -44,6 +44,8 @@ exc_pub = define(ExceptionEvent, name="internal/exception")
 
 
 def publish_exc_event(event: ExceptionEvent):
+    if isinstance(event.origin, ExceptionEvent) or isinstance(event.exception, _ExitException):  # pragma: no cover
+        return
     scopes = [sp for sp in _scopes.values() if sp.available]
     subs = [slot for sp in scopes for slot in sp.subscribers if slot.publisher_id != "$backend"]
     return add_task(dispatch(event, slots=subs))
@@ -90,8 +92,6 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
                 return
             if isinstance(result, BaseException):
                 if isinstance(result, _ExitException) and result.args[1]:  # pragma: no cover
-                    return
-                if isinstance(event, ExceptionEvent):  # pragma: no cover
                     return
                 publish_exc_event(ExceptionEvent(event, subs[_i], result))
             if isinstance(result, AsyncGeneratorType):  # pragma: no cover
@@ -143,8 +143,6 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[S
             if isinstance(result, BaseException):  # pragma: no cover
                 if isinstance(result, _ExitException):
                     return result.args[0]
-                if isinstance(event, ExceptionEvent):
-                    return
                 publish_exc_event(ExceptionEvent(event, subscriber, result))
             elif isinstance(result, AsyncGeneratorType):  # pragma: no cover
                 async for res in result:
@@ -163,7 +161,8 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
     grouped, context_map = await compute(event, scope, slots, inherit_ctx)
     for key, subs in grouped.items():
         contexts = context_map[key[1]]
-        async for subscriber, result in (serial_exec_concurrent(subs, contexts) if concurrent else serial_exec(subs, contexts)):
+        gene = serial_exec_concurrent(subs, contexts) if concurrent else serial_exec(subs, contexts)
+        async for subscriber, result in gene:
             if result is None or result is STOP:
                 continue
             if result is BLOCK:
@@ -174,8 +173,6 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
                     if result.args[1]:
                         return
                     continue
-                if isinstance(event, ExceptionEvent):
-                    return
                 publish_exc_event(ExceptionEvent(event, subscriber, result))
             elif isinstance(result, AsyncGeneratorType):
                 async for res in result:

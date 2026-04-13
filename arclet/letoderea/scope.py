@@ -91,16 +91,6 @@ class Scope:
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
-    def bind(self, *args: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:
-        """增加间接 Provider"""
-        self.providers.extend(p() if isinstance(p, type) else p for p in args)
-
-    def unbind(self, arg: Provider | type[Provider] | ProviderFactory | type[ProviderFactory]) -> None:  # pragma: no cover
-        """移除间接 Provider"""
-        idx = [i for i, p in enumerate(self.providers) if (isinstance(arg, (ProviderFactory, Provider)) and p == arg) or (isinstance(arg, type) and isinstance(p, arg))]
-        for i in reversed(idx):
-            self.providers.pop(i)
-
     @contextmanager
     def context(self):
         token = scope_ctx.set(self)
@@ -112,10 +102,8 @@ class Scope:
     def remove_subscriber(self, subscriber: Subscriber) -> None:
         """移除订阅者"""
         indexes = [i for i, slot in enumerate(self.subscribers) if slot.subscriber.id == subscriber.id]
-        removed = 0
-        for i in indexes:
-            self.subscribers.pop(i - removed)
-            removed += 1
+        for i in reversed(indexes):
+            self.subscribers.pop(i)
 
     def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
         """注册一个订阅者"""
