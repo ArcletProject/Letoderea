@@ -300,8 +300,8 @@ class Subscriber(Generic[R]):
             context[SUBSCRIBER] = self
             context[STACK] = AsyncExitStack()
         try:
-            if self._cursor:
-                await self._run_propagate(context, self._propagates[: self._cursor])
+            if self._cursor and (ans := await self._run_propagate(context, self._propagates[: self._cursor])):
+                return ans
             arguments = {}  # type: ignore
             for param in self.params:
                 arguments[param.name] = await param.solve(context)
@@ -357,7 +357,7 @@ class Subscriber(Generic[R]):
                     raise
             else:
                 if isinstance(result, _ExitException):
-                    raise result
+                    return result
                 if isinstance(result, dict):
                     context.update(result)
                 elif isinstance(result, Result):
