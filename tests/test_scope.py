@@ -36,7 +36,7 @@ async def test_event_dispatch():
 
     scope2.disable()
     await le.publish(ScopeEvent("f"), scope="scope2")
-    assert executed == [1]
+    assert executed == []
     executed.clear()
 
     scope2.enable()

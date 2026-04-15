@@ -132,28 +132,35 @@ async def test_check():
         assert result.value == "Hello Bill!"
 
 
-@dataclass
-class ValidateEvent:
-    called: str
-    user: str
-
-
 @pytest.mark.asyncio
 async def test_validate():
-    pub = le.define(ValidateEvent, name="validated_event")
-    pub1 = le.define(ValidateEvent, validator=lambda x: x.called == "test" and x.user == "test", name="validated_event/test")
+    @le.define(name="validated_event")
+    def validate(x: CallEvent):
+        return True
 
-    @le.use("validated_event")
-    async def _(called: str, user: str):
+    @le.define(name="validated_event/test")
+    def validate_test(x: CallEvent):
+        return x.called == "test" and x.user == "test"
+
+    @validate.gather
+    @validate_test.gather
+    async def _(ev, ctx):
+        ctx.update({"called": ev.called, "user": ev.user, "content": ev.content})
+        return ctx
+
+    @le.use(validate)
+    async def _(called: str, user: str, content: str):
         """Get a message for a user."""
+        assert content in ("Hello!", "World!")
         return f"{called!r} by {user}"
 
-    @le.use("validated_event/test")
-    async def _(called: str, user: str):
+    @le.use(validate_test)
+    async def _(called: str, user: str, content: str):
         """Get a message for a user, but only if the called is 'test' and the user is 'test"""
+        assert content == "Hello!"
         return f"{called!r} by {user} and must be test"
 
-    result1 = [res.value async for res in le.waterfall(ValidateEvent("test", "test"))]
-    result2 = [res.value async for res in le.waterfall(ValidateEvent("test", "not_test"))]
+    result1 = [res.value async for res in le.waterfall(CallEvent("test", "test", "Hello!", {}))]
+    result2 = [res.value async for res in le.waterfall(CallEvent("test", "not_test", "World!", {}))]
     assert result1 == ["'test' by test", "'test' by test and must be test"]
     assert result2 == ["'test' by not_test"]

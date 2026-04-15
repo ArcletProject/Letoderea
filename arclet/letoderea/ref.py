@@ -144,7 +144,10 @@ else:
 
         async def _get(ctx: Contexts):
             if p is not None:
-                item = await p.fork(ctx[SUBSCRIBER].providers)(ctx)
+                try:
+                    item = await p.fork(ctx[SUBSCRIBER].providers)(ctx)
+                except Exception:
+                    raise STOP
             else:
                 item = next((v for v in ctx.values() if isinstance(v, proxy_typ)), None)
                 if item is None and proxy_typ is not type(None):

@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 import arclet.letoderea as le
@@ -69,7 +71,7 @@ async def test_result_validate():
 
 @pytest.mark.asyncio
 async def test_inherit():
-    event = DeriveEvent("1", "res_ster")
+    ev = DeriveEvent("1", "res_ster")
 
     finish = []
 
@@ -89,6 +91,13 @@ async def test_inherit():
         finish.append(1)
         return f"res_{foo}"
 
-    await le.publish(event)
+    @le.on(le.ExceptionEvent)
+    async def _(event: le.ExceptionEvent):
+        assert event.origin is ev
+        assert event.subscriber is t
+        finish.append(3)
 
-    assert finish == [1, 2]
+    await le.publish(ev)
+    await asyncio.sleep(0)
+
+    assert finish == [1, 2, 3]

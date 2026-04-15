@@ -55,10 +55,10 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     """准备事件处理的公共逻辑"""
     if slots:
         pass
-    elif isinstance(scope, str) and ((sp := _scopes.get(scope)) and sp.available):
-        slots = sp.subscribers
-    elif isinstance(scope, Scope) and scope.available:
-        slots = scope.subscribers
+    elif isinstance(scope, str) and (sp := _scopes.get(scope)):
+        slots = sp.subscribers if sp.available else []
+    elif isinstance(scope, Scope):
+        slots = scope.subscribers if scope.available else []
     else:
         slots = chain.from_iterable(sp.subscribers for sp in _scopes.values() if sp.available)
 
