@@ -1,6 +1,6 @@
 [project]
 name = "arclet-letoderea"
-version = "0.21.0-rc1"
+version = "0.21.0-rc2"
 description = "A high-performance, simple-structured event system, relies on asyncio"
 authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.10",
+    "Framework :: AsyncIO",
 ]
 
 [project.urls]
