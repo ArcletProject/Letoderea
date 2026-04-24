@@ -100,20 +100,12 @@ def depends(cache: bool = False) -> Callable[[TTarget[Any]], Any]:
     return wrapper
 
 
-@dataclass
-class CompileParam:
-    name: str
-    annotation: Any
-    default: Any
-    providers: list[Provider]
+@dataclass(slots=True)
+class CompileParam(Param):
     depend: Depend | None
     record: Provider | None
 
-    __slots__ = ("name", "annotation", "default", "providers", "depend", "record")
-
     async def solve(self, context: Contexts | dict[str, Any]):
-        if self.depend:
-            return await self.depend(context)  # type: ignore
         if self.name in context:
             return context[self.name]
         if self.record and (res := await self.record(context)) is not None:  # type: ignore
@@ -140,9 +132,9 @@ def _compile_single(param: CompileParam, providers: list[Provider | ProviderFact
     anno = param.annotation
     for _provider in providers:
         if isinstance(_provider, ProviderFactory):
-            if result := _provider.validate(Param(name, anno, param.default, bool(param.providers))):
+            if result := _provider.validate(param):
                 param.providers.append(result)
-        elif _provider.validate(Param(name, anno, param.default, bool(param.providers))):
+        elif _provider.validate(param):
             param.providers.append(_provider)
     param.providers.sort(key=lambda x: x.priority)
     if get_origin(anno) is Annotated:
@@ -304,7 +296,7 @@ class Subscriber(Generic[R]):
                 return ans
             arguments = {}  # type: ignore
             for param in self.params:
-                arguments[param.name] = await param.solve(context)
+                arguments[param.name] = await param.depend(context) if param.depend else await param.solve(context)
             if self.is_cm:
                 stack: AsyncExitStack = context[STACK]
                 result = await stack.enter_async_context(self._callable_target(**arguments))

@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from typing_extensions import Self
 from tarina import ContextModel
 
 from .decorate import Check
+from .effect import EffectManager
 from .exceptions import ExitState
 from .provider import Provider, ProviderFactory, TProviders
 from .publisher import Publisher
@@ -36,11 +38,12 @@ class RegisterWrapper(Generic[T, TC]):
     _propagators: list[Propagator]
     _once: bool
     _skip_req_missing: bool
+    _effect_manager: EffectManager
 
     def if_(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0) -> Self: ...
     def unless(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0) -> Self: ...
     def propagate(self, *propagators: Propagator) -> Self: ...
-    def __init__(self, _scope: Scope, _publisher: tuple[type, Publisher] | tuple[tuple[type, ...], tuple[Publisher, ...]] | None, _priority: int, _providers: TProviders, _propagators: list[Propagator], _once: bool = False, _skip_req_missing: bool | None = None): ...
+    def __init__(self, _scope: Scope, _publisher: tuple[type, Publisher] | tuple[tuple[type, ...], tuple[Publisher, ...]] | None, _priority: int, _providers: TProviders, _propagators: list[Propagator], _effect_manager: EffectManager, _once: bool = False, _skip_req_missing: bool | None = None): ...
     @overload
     def __call__(self: RegisterWrapper[None, Callable], func: Callable[..., T1]) -> Subscriber[T1]: ...
     @overload
@@ -61,6 +64,9 @@ class Scope:
     available: bool
     providers: list[Provider[Any] | ProviderFactory]
     propagators: list[Propagator]
+    _effect_manager: EffectManager
+
+    effect = EffectManager.effect
 
     @classmethod
     def of(cls: type[Self], id_: str | None = None) -> Self: ...
@@ -75,7 +81,7 @@ class Scope:
     def iter(self, pub_ids: set[str], pass_backend: bool = True) -> Generator[Subscriber, None, None]: ...
     def disable(self) -> None: ...
     def enable(self) -> None: ...
-    def dispose(self) -> None: ...
+    def dispose(self) -> set[asyncio.Task]: ...
 
 
 def configure(skip_req_missing: bool = False) -> None: ...

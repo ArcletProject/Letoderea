@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, ClassVar, Generic, NamedTuple, TypeAlias, TypeVar, cast
+from typing import Any, ClassVar, Generic, TypeAlias, TypeVar, cast
 from typing_extensions import TypeForm
 
 from tarina import generic_issubclass
@@ -18,13 +18,14 @@ from .typing import run_always_await
 T = TypeVar("T")
 
 
-class Param(NamedTuple):
+@dataclass(slots=True)
+class Param:
     """用于 Provider 的函数参数信息"""
     name: str
     annotation: Any
     default: Any
-    is_empty: bool
-    """该参数是否还未有其他 Provider 提供"""
+    providers: list[Provider]
+    """该参数下已有的其他 Provider"""
 
 
 @dataclass(init=False, repr=True)

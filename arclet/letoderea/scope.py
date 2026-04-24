@@ -11,6 +11,7 @@ from tarina import ContextModel
 
 from .decorate import Check, bypass_if, enter_if
 from .provider import Provider, ProviderFactory, TProviders, global_providers
+from .effect import EffectManager
 from .publisher import Publisher, _publishers, filter_publisher
 from .subscriber import Propagator, Subscriber
 
@@ -38,6 +39,7 @@ class RegisterWrapper(Generic[T, TC]):
     _priority: int
     _providers: TProviders
     _propagators: list[Propagator]
+    _effect_manager: EffectManager
     _once: bool
     _skip_req_missing: bool
 
@@ -68,6 +70,7 @@ class RegisterWrapper(Generic[T, TC]):
             for pub in pubs:
                 if pub.check_subscriber(res):
                     self._scope.subscribers.append(SubscriberSlot(res, pub.id, res.priority))
+        self._effect_manager.effect(lambda: res.dispose, res.id)
         return res
 
 
@@ -84,6 +87,8 @@ class Scope:
     def __init__(self, id_: str | None = None):
         self.id = id_ or token_urlsafe(16)
         self.subscribers: list[SubscriberSlot] = []
+        self._effect_manager = EffectManager()
+        self.effect = self._effect_manager.effect
         self.available = True
         self.providers = []
         self.propagators = []
@@ -135,7 +140,7 @@ class Scope:
 
         _propagators: list[Propagator] = [*global_propagators, *self.propagators, *propagators]
         _propagator_providers = [p for pro in _propagators for p in pro.providers()]
-        register_wrapper = self.__wrapper_class__(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, once, _skip_req_missing)
+        register_wrapper = self.__wrapper_class__(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, self._effect_manager, once, _skip_req_missing)
         if func:
             return register_wrapper(func)
         return register_wrapper
@@ -157,10 +162,8 @@ class Scope:
 
     def dispose(self):
         self.disable()
-        while self.subscribers:
-            sub = self.subscribers[-1].subscriber
-            sub.dispose()
         _scopes.pop(self.id, None)
+        return self._effect_manager.dispose()
 
 
 _scopes["$global"] = Scope("$global")
