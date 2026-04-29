@@ -12,7 +12,7 @@ from types import CoroutineType
 from typing import Annotated, Any, Generic, TypeVar, final, get_args, get_origin, overload
 from typing_extensions import Self
 from uuid import uuid4
-from weakref import WeakSet
+from weakref import WeakSet, finalize
 
 from tarina import Empty, is_async, signatures
 from tarina.guard import is_async_gen_callable, is_gen_callable
@@ -225,6 +225,8 @@ class Subscriber(Generic[R]):
         self.available = True
         self.once = once
 
+        finalize(self, self.dispose)
+
     def _recompile(self):  # pragma: no cover
         self.is_cm = False
         self.is_agen = False
@@ -270,10 +272,11 @@ class Subscriber(Generic[R]):
     def _attach_disposes(self, dispose: Callable[[Subscriber], None]) -> None:
         self._disposes.append(dispose)
 
-    def dispose(self):  # pragma: no cover
-        for dispose in self._disposes:
-            dispose(self)
-        self._disposes.clear()
+    def dispose(self):
+        if self._disposes:
+            for dispose in self._disposes:
+                dispose(self)
+            self._disposes.clear()
         while self._propagates:
             self._propagates[0].dispose()
 
