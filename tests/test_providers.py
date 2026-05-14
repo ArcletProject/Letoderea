@@ -84,6 +84,11 @@ async def test_providers():
     ctx = await generate_contexts(ProviderEvent1())
     await s0.handle(ctx)
 
+    with pytest.raises(TypeError, match="Subclass of Provider must be generic. If you need a wildcard, please using `typing.Any`"):
+        class ErrorProvider(Provider):
+            ...
+
+
 
 @pytest.mark.asyncio
 async def test_providers_factory():

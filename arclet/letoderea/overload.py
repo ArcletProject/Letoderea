@@ -14,7 +14,7 @@ from .context import Contexts
 from .decorate import propagate
 from .exceptions import BLOCK, STOP, ExceptionHandler, InnerHandlerException, UnresolvedRequirement, _ExitException
 from .subscriber import STACK, CompileParam, Propagator, Subscriber, current_subscriber
-from .typing import TCallable
+from .utils import TCallable
 
 T = TypeVar("T")
 P = ParamSpec("P")

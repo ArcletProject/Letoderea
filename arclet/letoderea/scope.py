@@ -10,7 +10,7 @@ from typing import Any, Generic, TypeVar
 from tarina import ContextModel
 
 from .decorate import Check, bypass_if, enter_if
-from .provider import Provider, ProviderFactory, TProviders, global_providers
+from .provider import TProviders, global_providers
 from .effect import EffectManager
 from .publisher import Publisher, _publishers, filter_publisher
 from .subscriber import Propagator, Subscriber
@@ -78,16 +78,20 @@ class Scope:
     global_skip_req_missing = False
     __wrapper_class__ = RegisterWrapper
 
+    @staticmethod
+    def root():
+        return _scopes["$global"]
+
     @classmethod
-    def of(cls, id_: str | None = None):
-        sp = cls(id_)
+    def of(cls, id_: str | None = None, effect_manager: EffectManager | None = None):
+        sp = cls(id_, effect_manager)
         _scopes[sp.id] = sp
         return sp
 
-    def __init__(self, id_: str | None = None):
+    def __init__(self, id_: str | None = None, effect_manager: EffectManager | None = None):
         self.id = id_ or token_urlsafe(16)
         self.subscribers: list[SubscriberSlot] = []
-        self._effect_manager = EffectManager()
+        self._effect_manager = effect_manager or EffectManager()
         self.effect = self._effect_manager.effect
         self.available = True
         self.providers = []

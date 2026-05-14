@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 import arclet.letoderea as le
-from arclet.letoderea import Subscriber
+from arclet.letoderea import Subscriber, Provider, ProviderFactory
 
 
 @le.make_event
@@ -367,3 +367,31 @@ async def test_propagator_empty_providers():
     await le.publish(PropagateEvent("go"))
     await le.publish(PropagateEvent("stop"))
     assert executed == ["go"]
+
+
+@pytest.mark.asyncio
+async def test_propagator_recompile():
+    executed = []
+
+    @le.on(PropagateEvent)
+    async def s(bar: int):
+        executed.append(bar)
+
+    @s.propagate(prepend=True)
+    async def p1(bar: int):
+        executed.append(bar)
+        return {"bar": bar + 1}
+
+    with pytest.raises(le.UnresolvedRequirement):
+        await le.core.run_handler(s, PropagateEvent("1"))
+
+    class RecompilePropagator(le.Propagator):
+        def providers(self):
+            return [le.provide(int, "bar", call=lambda ctx: int(ctx["foo"]) + 1)]
+
+        def compose(self):
+            yield lambda foo: {"foo": foo}, True
+
+    s.propagate(RecompilePropagator())
+    await le.core.run_handler(s, PropagateEvent("1"))
+    assert executed == [2, 3]

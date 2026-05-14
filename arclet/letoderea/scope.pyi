@@ -13,7 +13,7 @@ from .exceptions import ExitState
 from .provider import Provider, ProviderFactory, TProviders
 from .publisher import Publisher
 from .subscriber import Propagator, Subscriber
-from .typing import Resultable
+from .utils import Resultable
 
 T = TypeVar("T")
 TC = TypeVar("TC")
@@ -67,10 +67,11 @@ class Scope:
     _effect_manager: EffectManager
 
     effect = EffectManager.effect
-
+    @staticmethod
+    def root() -> Scope: ...
     @classmethod
-    def of(cls: type[Self], id_: str | None = None) -> Self: ...
-    def __init__(self, id_: str | None = None): ...
+    def of(cls: type[Self], id_: str | None = None, effect_manager: EffectManager | None = None) -> Self: ...
+    def __init__(self, id_: str | None = None, effect_manager: EffectManager | None = None): ...
     @contextmanager
     def context(self) -> Generator[Scope, None, None]: ...
     def remove_subscriber(self, subscriber: Subscriber) -> None: ...

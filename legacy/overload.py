@@ -3,7 +3,6 @@ from __future__ import annotations
 import functools
 import itertools
 import sys
-from asyncio import Queue
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from inspect import Signature
@@ -18,7 +17,7 @@ from arclet.letoderea.core import post
 from arclet.letoderea.provider import TProviders, provide
 from arclet.letoderea.publisher import Publisher, _publishers
 from arclet.letoderea.scope import Scope
-from arclet.letoderea.typing import TCallable
+from arclet.letoderea.utils import TCallable
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -68,7 +67,7 @@ else:  # pragma: no cover
         return list(mod_dict[f.__qualname__].values())
 
 
-class CollectedPublisher(Publisher[T]):
+class CollectedPublisher(Publisher[object]):
 
     def __init__(self, id_: str, params: list[tuple[str, Any, Any]], queue_size: int = -1):
         super().__init__(object, id_, supplier=self._supplier, queue_size=queue_size)

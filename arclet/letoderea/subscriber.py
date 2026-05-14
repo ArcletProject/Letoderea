@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 import asyncio
 import sys
-from collections import defaultdict
+from collections import defaultdict, ChainMap
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import AsyncExitStack, asynccontextmanager
 from contextvars import ContextVar
@@ -19,6 +19,7 @@ from tarina.guard import is_async_gen_callable, is_gen_callable
 from tarina.tools import run_sync, run_sync_generator
 
 from .context import Contexts, CtxItem
+from .effect import Disposable
 from .exceptions import (
     STOP,
     ExceptionHandler,
@@ -29,7 +30,7 @@ from .exceptions import (
     _ExitException,
 )
 from .provider import Param, Provider, ProviderFactory, TProviders, provide
-from .typing import Force, Result, TDispose, TTarget
+from .utils import Force, Result, TTarget
 
 R = TypeVar("R")
 T = TypeVar("T")
@@ -227,25 +228,32 @@ class Subscriber(Generic[R]):
 
         finalize(self, self.dispose)
 
-    def _recompile(self):  # pragma: no cover
+    def _recompile(self, new_providers: list[Provider | ProviderFactory] | None = None):
         self.is_cm = False
         self.is_agen = False
+        if new_providers:
+            self.providers.extend(new_providers)
         self.params = _compile(self.callable_target, self.providers)
-        if hasattr(self.callable_target, "__code__") and self.callable_target.__code__.co_name == "helper" and self.callable_target.__code__.co_filename.endswith("contextlib.py"):
+        if hasattr(self.callable_target, "__code__") and self.callable_target.__code__.co_name == "helper" and self.callable_target.__code__.co_filename.endswith("contextlib.py"):  # pragma: no cover
             self.is_cm = True
             wrapped = getattr(self.callable_target, "__wrapped__")
             if is_gen_callable(wrapped):
                 self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
             else:
                 self._callable_target = asynccontextmanager(wrapped)  # type: ignore
-        elif is_async_gen_callable(self.callable_target):
+        elif is_async_gen_callable(self.callable_target):  # pragma: no cover
             self._callable_target = self.callable_target  # type: ignore
             self.is_agen = True
-        elif is_gen_callable(self.callable_target):
+        elif is_gen_callable(self.callable_target):  # pragma: no cover
             self._callable_target = run_sync_generator(self.callable_target)
             self.is_agen = True
         else:
             self._callable_target = self.callable_target if is_async(self.callable_target) else run_sync(self.callable_target)  # noqa: E501 # type: ignore
+        for p in self.params:
+            if p.depend:
+                p.depend.sub._recompile(new_providers)
+        for propagate in self._propagates:
+            propagate._recompile(new_providers)
 
     def __call__(self, *args, **kwargs) -> R:  # pragma: no cover
         return self.callable_target(*args, **kwargs)
@@ -368,24 +376,20 @@ class Subscriber(Generic[R]):
         return context.get(RESULT)
 
     @overload
-    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> TDispose: ...
+    def propagate(self, func: TTarget[Any], *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> Disposable[None]: ...
 
     @overload
-    def propagate(self, func: Propagator, *, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> TDispose: ...
+    def propagate(self, func: Propagator, *, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> Disposable[None]: ...
 
     @overload
-    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> Callable[[TTarget[Any]], TDispose]: ...
+    def propagate(self, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False) -> Callable[[TTarget[Any]], Disposable[None]]: ...
 
     def propagate(self, func: TTarget[Any] | Propagator | None = None, *, prepend: bool = False, priority: int = 16, providers: TProviders | None = None, once: bool = False, _skip_providers=False):
         if isinstance(func, Propagator):
             if not func.validate(self):
                 return lambda: None
             if not _skip_providers and (extra_providers := func.providers()):
-                self.providers.extend(extra_providers)
-                self._recompile()
-                for sub in self._propagates:  # pragma: no cover
-                    sub.providers.extend(extra_providers)
-                    sub._recompile()
+                self._recompile(extra_providers)
             disposes = [func.dispose]
             for slot in func.compose():
                 if isinstance(slot, Propagator):

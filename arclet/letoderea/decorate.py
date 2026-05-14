@@ -10,7 +10,7 @@ from .context import EVENT, Contexts
 from .provider import Provider
 from .ref import Deref, generate
 from .subscriber import STOP, Propagator, Subscriber, _compile
-from .typing import TCallable
+from .utils import TCallable
 
 
 def bind(*args: Provider | type[Provider]):

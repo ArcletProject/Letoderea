@@ -17,7 +17,7 @@ from .provider import get_providers, provide
 from .publisher import Publisher, _publishers, define, gather, get_publishers
 from .scope import Scope, SubscriberSlot, _scopes, on, use  # noqa: F401
 from .subscriber import Subscriber
-from .typing import Force, Result, Resultable
+from .utils import Force, Result, Resultable
 
 T = TypeVar("T")
 

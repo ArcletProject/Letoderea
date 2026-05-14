@@ -7,7 +7,7 @@ from tarina import Empty
 from .context import Contexts
 from .exceptions import STOP
 from .subscriber import SUBSCRIBER, Depend, ParamDepend
-from .typing import Force
+from .utils import Force
 
 T = TypeVar("T")
 

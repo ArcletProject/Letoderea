@@ -4,9 +4,10 @@ from collections.abc import Awaitable, Callable, Iterable, AsyncIterable
 from dataclasses import dataclass
 from typing import TypeAlias, Protocol, Generic, Any, overload
 from typing_extensions import TypeVar
-from weakref import WeakKeyDictionary
 
 from tarina import is_awaitable, is_async
+
+from .utils import DisposableList
 
 T = TypeVar("T")
 _Awaitable: TypeAlias = T | Awaitable[T]
@@ -33,45 +34,7 @@ class _Meta:
 class _Runner(Generic[T]):
     epoch: T
     execute: Callable[[], Any]
-    collect: Callable[[Disposable], None]
-
-
-def _delete(mapping, key):
-    if key in mapping:
-        del mapping[key]
-        return True
-    return False
-
-
-class DisposableList(Generic[T]):
-    def __init__(self):
-        self.sn = 0
-        self.data: dict[int, T] = {}
-        self.ref: WeakKeyDictionary[T, int] = WeakKeyDictionary()
-
-    def __len__(self):
-        return self.data.__len__()
-
-    def append(self, item: T):
-        sn = self.sn
-        self.data[sn] = item
-        self.ref[item] = sn
-        self.sn += 1
-        return lambda: _delete(self.data, sn)
-
-    def remove(self, item: T):
-        sn = self.ref.get(item)
-        if sn is None:
-            return False
-        return _delete(self.data, sn)  # pragma: no cover
-
-    def clear(self):
-        values = list(self.data.values())
-        self.data.clear()
-        return reversed(values)
-
-    def __iter__(self):
-        return iter(self.data.values())
+    collect: Callable[[Disposable], Any]
 
 
 class EffectManager:

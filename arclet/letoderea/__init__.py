@@ -48,5 +48,5 @@ from .subscriber import defer as defer
 from .subscriber import depends as depends
 from .subscriber import get_params as get_params
 from .subscriber import param as param
-from .typing import Force as Force
-from .typing import Result as Result
+from .utils import Force as Force
+from .utils import Result as Result

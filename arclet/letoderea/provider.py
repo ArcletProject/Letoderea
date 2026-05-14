@@ -13,7 +13,7 @@ from tarina import generic_issubclass
 from tarina.generic import get_origin, is_optional, origin_is_union
 
 from .context import EVENT, Contexts
-from .typing import run_always_await
+from .utils import run_always_await
 
 T = TypeVar("T")
 

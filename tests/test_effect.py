@@ -3,6 +3,23 @@ import asyncio
 import pytest
 
 from arclet.letoderea.effect import EffectManager
+from arclet.letoderea.utils import DisposableList
+
+
+def test_disposable_list():
+    objects = [lambda: None for _ in range(5)]
+
+    dl = DisposableList(objects[:3])
+    assert len(dl) == 3
+    dispose1 = dl.append(objects[3])
+    assert len(dl) == 4
+    dispose2 = dl.append(objects[4])
+    assert len(dl) == 5
+
+    dispose1()
+    assert len(dl) == 4
+    dispose2()
+    assert len(dl) == 3
 
 
 @pytest.mark.asyncio
@@ -27,6 +44,7 @@ async def test_effect_manager():
         print("Connecting to database...")
         await asyncio.sleep(0.1)
         resource = "db_connection"
+
         async def cleanup():
             print(f"Closing {resource}")
             await asyncio.sleep(0.01)
@@ -102,6 +120,7 @@ async def test_sync_effect_async_cleanup():
 
     def sync_effect():
         executed.append("Setting up sync effect")
+
         async def cleanup():
             executed.append("Cleaning up sync effect asynchronously")
             await asyncio.sleep(0.1)
