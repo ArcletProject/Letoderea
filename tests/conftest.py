@@ -1,8 +1,8 @@
 import pytest
 
 from arclet.letoderea import scope
-from arclet.letoderea.scope import scope_ctx
 from arclet.letoderea.exceptions import ExceptionHandler
+from arclet.letoderea.scope import scope_ctx
 
 
 def pytest_runtest_setup(item):

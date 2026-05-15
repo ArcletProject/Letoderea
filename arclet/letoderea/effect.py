@@ -1,11 +1,10 @@
 import asyncio
-
-from collections.abc import Awaitable, Callable, Iterable, AsyncIterable
+from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from typing import TypeAlias, Protocol, Generic, Any, overload
+from typing import Any, Generic, Protocol, TypeAlias, overload
 from typing_extensions import TypeVar
 
-from tarina import is_awaitable, is_async
+from tarina import is_async, is_awaitable
 
 from .utils import DisposableList
 

@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 
 import arclet.letoderea as le
-from arclet.letoderea import Subscriber, Provider, ProviderFactory
 
 
 @le.make_event
@@ -207,7 +206,7 @@ async def test_propagator():
     executed = []
 
     class MyPropagator(le.Propagator):
-        def validate(self, subscriber: Subscriber) -> bool:
+        def validate(self, subscriber: le.Subscriber) -> bool:
             return len(subscriber.params) < 3
 
         def compose(self):
