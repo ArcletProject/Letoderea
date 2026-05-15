@@ -168,7 +168,7 @@ class EffectManager:
                     await dispose()
 
                 wrapper = wrapper_with_task  # type: ignore
-        wrapper.__effect__ = meta
+        wrapper.__effect__ = meta  # type: ignore
         disposables.append(self._disposables.append(wrapper))
         return wrapper  # type: ignore
 

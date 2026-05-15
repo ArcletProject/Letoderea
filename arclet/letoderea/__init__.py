@@ -23,7 +23,7 @@ from .exceptions import UnresolvedRequirement as UnresolvedRequirement
 from .exceptions import switch_print_traceback as switch_print_traceback
 from .overload import apply_overload as apply_overload
 from .overload import call_overload as call_overload
-from .overload import overload as overload
+from .overload import overload as overload  # noqa: F401
 from .provider import Param as Param
 from .provider import Provider as Provider
 from .provider import ProviderFactory as ProviderFactory

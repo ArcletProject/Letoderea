@@ -51,7 +51,7 @@ def publish_exc_event(event: ExceptionEvent):
     return add_task(dispatch(event, slots=subs))
 
 
-async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[SubscriberSlot] | None = None, inherit_ctx: Contexts | None = None):
+async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[SubscriberSlot] | None = None, inherit_ctx: Contexts | None = None) -> tuple[defaultdict[tuple[int, str], list[Subscriber]], dict[str, Contexts]]:
     """准备事件处理的公共逻辑"""
     if slots:
         pass
@@ -65,7 +65,7 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     context_map: dict[str, Contexts] = {}
 
     pubs = get_publishers(event)
-    grouped = defaultdict(list)
+    grouped: defaultdict[tuple[int, str], list[Subscriber]] = defaultdict(list)
 
     for slot in sorted(slots, key=attrgetter("priority")):
         pub_id = slot.publisher_id
@@ -94,7 +94,7 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
                 if isinstance(result, _ExitException) and result.args[1]:  # pragma: no cover
                     return
                 publish_exc_event(ExceptionEvent(event, subs[_i], result))
-            if isinstance(result, AsyncGeneratorType):  # pragma: no cover
+            elif isinstance(result, AsyncGeneratorType):  # pragma: no cover
                 async for res in result:
                     if result is None or result is STOP:
                         continue

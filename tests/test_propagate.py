@@ -373,9 +373,14 @@ async def test_propagator_empty_providers():
 async def test_propagator_recompile():
     executed = []
 
+    @le.depends()
+    async def to_baz(bar: int):
+        return bar + 1
+
     @le.on(PropagateEvent)
-    async def s(bar: int):
+    async def s(bar: int, baz: int = to_baz):
         executed.append(bar)
+        executed.append(baz)
 
     @s.propagate(prepend=True)
     async def p1(bar: int):
@@ -394,4 +399,4 @@ async def test_propagator_recompile():
 
     s.propagate(RecompilePropagator())
     await le.core.run_handler(s, PropagateEvent("1"))
-    assert executed == [2, 3]
+    assert executed == [2, 3, 4]

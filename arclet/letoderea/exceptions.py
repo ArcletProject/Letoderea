@@ -118,7 +118,7 @@ class ExceptionHandler:
         if isinstance(e, UnresolvedRequirement) and not isinstance(e, SyntaxError):
             name, anno, _, pds = e.args
             param = f"{name}: {inspect.formatannotation(anno)}" if anno is not None else name
-            etype: type[Exception] = type("UnresolvedRequirement", (UnresolvedRequirement, SyntaxError), {})  # type: ignore
+            etype: type[SyntaxError] = type("UnresolvedRequirement", (UnresolvedRequirement, SyntaxError), {})  # type: ignore
             exc: SyntaxError = etype(
                 f"Unable to parse parameter `{param}`"
                 f"\n> providers on parameter `{param}`: "
@@ -127,7 +127,7 @@ class ExceptionHandler:
                 f"\n{pprint.pformat(contexts)}",
                 get_caller_info(callable_target, name),
             )
-            exc.__origin_args__ = e.args
+            exc.__origin_args__ = e.args  # type: ignore
             exc.__traceback__ = e.__traceback__
             if inner:
                 return InnerHandlerException(exc)

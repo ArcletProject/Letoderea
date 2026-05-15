@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import functools
 import inspect
 import sys
-from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 from typing_extensions import ParamSpec
@@ -24,6 +22,9 @@ if sys.version_info >= (3, 11):  # pragma: no cover
     from typing import get_overloads
     from typing import overload as overload  # noqa: F401
 else:  # pragma: no cover
+    import functools
+    from collections import defaultdict
+
     _overload_registry = defaultdict(functools.partial(defaultdict, dict))
 
 

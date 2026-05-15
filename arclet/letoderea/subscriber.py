@@ -3,8 +3,8 @@ from __future__ import annotations
 import abc
 import asyncio
 import sys
-from collections import defaultdict, ChainMap
-from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
+from collections import defaultdict
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -36,7 +36,7 @@ R = TypeVar("R")
 T = TypeVar("T")
 RESULT = CtxItem[Any].make("$result")
 STACK = CtxItem[AsyncExitStack[Any]].make("$exit_stack")
-SUBSCRIBER = CtxItem["Subscriber"].make("$subscriber")
+SUBSCRIBER: CtxItem[Subscriber] = CtxItem.make("$subscriber")
 
 current_subscriber: ContextVar[Subscriber] = ContextVar("_current_subscriber")
 
@@ -175,7 +175,7 @@ class Propagator(metaclass=abc.ABCMeta):
     def validate(self, subscriber: Subscriber) -> bool:
         return True
 
-    def providers(self) -> list[Provider | ProviderFactory]:
+    def providers(self) -> Sequence[Provider | ProviderFactory]:
         return []
 
     def dispose(self) -> None:
@@ -228,7 +228,7 @@ class Subscriber(Generic[R]):
 
         finalize(self, self.dispose)
 
-    def _recompile(self, new_providers: list[Provider | ProviderFactory] | None = None):
+    def _recompile(self, new_providers: Sequence[Provider | ProviderFactory] | None = None):
         self.is_cm = False
         self.is_agen = False
         if new_providers:
@@ -249,11 +249,12 @@ class Subscriber(Generic[R]):
             self.is_agen = True
         else:
             self._callable_target = self.callable_target if is_async(self.callable_target) else run_sync(self.callable_target)  # noqa: E501 # type: ignore
-        for p in self.params:
-            if p.depend:
-                p.depend.sub._recompile(new_providers)
-        for propagate in self._propagates:
-            propagate._recompile(new_providers)
+        if new_providers:
+            for p in self.params:
+                if p.depend:
+                    p.depend.sub._recompile(new_providers)
+            for propagate in self._propagates:
+                propagate._recompile(new_providers)
 
     def __call__(self, *args, **kwargs) -> R:  # pragma: no cover
         return self.callable_target(*args, **kwargs)

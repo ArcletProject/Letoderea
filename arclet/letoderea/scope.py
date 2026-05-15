@@ -174,8 +174,7 @@ _scopes["$global"] = Scope("$global")
 
 
 def configure(skip_req_missing: bool = False):
-    global global_skip_req_missing
-    global_skip_req_missing = skip_req_missing
+    Scope.global_skip_req_missing = skip_req_missing
 
 
 def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None):

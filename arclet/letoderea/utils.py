@@ -16,19 +16,17 @@ TTarget: TypeAlias = Callable[..., Awaitable[T]] | Callable[..., T]
 TCallable = TypeVar("TCallable", bound=Callable[..., Any])
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Force:
     """用于转义在本框架中特殊部分的特殊值"""
 
     value: Any
 
 
+@dataclass(slots=True, frozen=True)
 class Result(Generic[T]):
     """用于标记一个事件响应器的处理结果，通常应用在某个事件响应器的处理结果需要被事件发布者使用的情况"""
-    __slots__ = ("value",)
-
-    def __init__(self, value: T):
-        self.value = value
+    value: T
 
 
 class Resultable(Protocol[T]):
@@ -49,7 +47,7 @@ def _delete(mapping, key):
     return False
 
 
-class DisposableList(MutableSequence[T_Weak]):
+class DisposableList(Generic[T_Weak]):
     def __init__(self, iterable: Iterable[T_Weak] | None = None):
         self.sn = 0
         self.data: dict[int, T_Weak] = {}
@@ -100,10 +98,10 @@ class DisposableList(MutableSequence[T_Weak]):
             raise TypeError(f"Invalid index type: {type(index)}")
 
     @overload
-    def __setitem__(self, index: int, value: T_Weak): ...
+    def __setitem__(self, index: int, value: T_Weak) -> Callable[[], bool]: ...
 
     @overload
-    def __setitem__(self, index: slice[int | None], value: Iterable[T_Weak]): ...
+    def __setitem__(self, index: slice[int | None], value: Iterable[T_Weak]) -> Callable[[], list[bool]]: ...
 
     def __setitem__(self, index, value):  # pragma: no cover
         if isinstance(index, int):

@@ -35,6 +35,7 @@ class _step_iter(Generic[R, D]):
 
 
 class StepOut(Generic[R]):
+    fut: asyncio.Future[R]
 
     def __init__(
         self,
