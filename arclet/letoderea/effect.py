@@ -6,7 +6,7 @@ from typing_extensions import TypeVar
 
 from tarina import is_async, is_awaitable
 
-from .utils import DisposableList
+from .utils import DisposableList, add_task
 
 T = TypeVar("T")
 _Awaitable: TypeAlias = T | Awaitable[T]
@@ -120,7 +120,7 @@ class EffectManager:
         try:
             task_ = self._execute(runner)
         except Exception:  # pragma: no cover
-            asyncio.get_event_loop().call_soon(lambda: asyncio.create_task(dispose()))
+            asyncio.get_event_loop().call_soon(lambda: add_task(dispose()))
             raise
 
         async def dispose_async():  # pragma: no cover
@@ -137,7 +137,7 @@ class EffectManager:
                     await dispose_async()
                     raise
 
-            task = asyncio.create_task(guarded_task())
+            task = add_task(guarded_task())
 
             async def wrapper_with_task():
                 if not runner.epoch:  # pragma: no cover
@@ -180,7 +180,9 @@ class EffectManager:
         for d in self._disposables.clear():
             r = d()
             if r is not None and is_awaitable(r):  # pragma: no cover
-                tasks.add(asyncio.create_task(r))  # type: ignore
+                t = add_task(r)  # type: ignore
+                tasks.add(t)
+                t.add_done_callback(tasks.discard)
         return tasks
 
     async def cleanup(self):

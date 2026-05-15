@@ -17,7 +17,7 @@ from .provider import get_providers, provide
 from .publisher import Publisher, _publishers, define, gather, get_publishers
 from .scope import Scope, SubscriberSlot, _scopes, on, use  # noqa: F401
 from .subscriber import Subscriber
-from .utils import Force, Result, Resultable
+from .utils import Force, Result, Resultable, add_task
 
 T = TypeVar("T")
 
@@ -209,31 +209,6 @@ async def run_handler(
     contexts = await generate_contexts(event, external_gather)
     _target: Subscriber[T] = target if isinstance(target, Subscriber) else Subscriber(target, providers=get_providers(event.__class__))
     return await _target.handle(contexts)
-
-
-class _EventSystem:
-    ref_tasks: set[asyncio.Task] = set()
-    loop: asyncio.AbstractEventLoop | None = None
-
-
-def add_task(coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
-    loop = _EventSystem.loop or asyncio.get_running_loop()
-    task = loop.create_task(coro)
-    _EventSystem.ref_tasks.add(task)
-    task.add_done_callback(_EventSystem.ref_tasks.discard)
-    return task
-
-
-def set_event_loop(loop: asyncio.AbstractEventLoop):  # pragma: no cover
-    _EventSystem.loop = loop
-
-
-@atexit.register
-def _cleanup():  # pragma: no cover
-    for task in _EventSystem.ref_tasks:
-        if not task.done() and not task.get_loop().is_closed():
-            task.cancel()
-    _EventSystem.ref_tasks.clear()
 
 
 def setup_fetch():

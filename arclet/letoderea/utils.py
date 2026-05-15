@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import atexit
 import inspect
-from collections.abc import Awaitable, Callable, Hashable, Iterable, MutableSequence
+from collections.abc import Awaitable, Callable, Hashable, Iterable, Coroutine
 from dataclasses import dataclass
 from typing import Any, Generic, Protocol, TypeAlias, overload
 from typing_extensions import TypeVar
@@ -130,3 +132,28 @@ class DisposableList(Generic[T_Weak]):
                 _delete(self.data, i) for i in range(*index.indices(self.sn))
             ]
         raise TypeError(f"Invalid index type: {type(index)}")
+
+
+class _EventSystem:
+    ref_tasks: set[asyncio.Task] = set()
+    loop: asyncio.AbstractEventLoop | None = None
+
+
+def add_task(coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
+    loop = _EventSystem.loop or asyncio.get_running_loop()
+    task = loop.create_task(coro)
+    _EventSystem.ref_tasks.add(task)
+    task.add_done_callback(_EventSystem.ref_tasks.discard)
+    return task
+
+
+def set_event_loop(loop: asyncio.AbstractEventLoop):  # pragma: no cover
+    _EventSystem.loop = loop
+
+
+@atexit.register
+def _cleanup():  # pragma: no cover
+    for task in _EventSystem.ref_tasks:
+        if not task.done() and not task.get_loop().is_closed():
+            task.cancel()
+    _EventSystem.ref_tasks.clear()

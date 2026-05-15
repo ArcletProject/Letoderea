@@ -74,9 +74,11 @@ class RegisterWrapper(Generic[T, TC]):
         return res
 
 
-class Scope:
+TWrapper = TypeVar("TWrapper", bound=RegisterWrapper[None, Callable])
+
+
+class Scope(Generic[TWrapper]):
     global_skip_req_missing = False
-    __wrapper_class__ = RegisterWrapper
 
     @staticmethod
     def root():
@@ -87,6 +89,10 @@ class Scope:
         sp = cls(id_, effect_manager)
         _scopes[sp.id] = sp
         return sp
+
+    @classmethod
+    def wrapper_class(cls):
+        return RegisterWrapper
 
     def __init__(self, id_: str | None = None, effect_manager: EffectManager | None = None):
         self.id = id_ or token_urlsafe(16)
@@ -144,7 +150,7 @@ class Scope:
 
         _propagators: list[Propagator] = [*global_propagators, *self.propagators, *propagators]
         _propagator_providers = [p for pro in _propagators for p in pro.providers()]
-        register_wrapper = self.__wrapper_class__(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, self._effect_manager, once, _skip_req_missing)
+        register_wrapper = self.wrapper_class()(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, self._effect_manager, once, _skip_req_missing)
         if func:
             return register_wrapper(func)
         return register_wrapper
