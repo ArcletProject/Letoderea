@@ -20,7 +20,7 @@ async def test_get_exc():
         raise Exception("test")
 
     @le.on(le.ExceptionEvent)
-    async def _(event: le.ExceptionEvent, origin, exc: Exception, subscriber):
+    async def e(event: le.ExceptionEvent, origin, exc: Exception, subscriber):
         executed.append(1)
         assert event.origin.__class__ is origin.__class__ is TestExcEvent
         assert event.exception.__class__ is exc.__class__ is Exception

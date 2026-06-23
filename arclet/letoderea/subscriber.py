@@ -191,6 +191,7 @@ _TPG = TypeVar("_TPG", bound=Propagator)
 @final
 class Subscriber(Generic[R]):
     id: str
+    label: str
     callable_target: Callable[..., R]
     priority: int
     providers: list[Provider | ProviderFactory]
@@ -198,7 +199,7 @@ class Subscriber(Generic[R]):
 
     _callable_target: Callable[..., Any]
 
-    def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False, _listen: Any = None) -> None:
+    def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False, label: str | None = None, _listen: Any = None) -> None:
         self.id = str(uuid4())
         self.priority = priority
         self.skip_req_missing = skip_req_missing
@@ -214,6 +215,7 @@ class Subscriber(Generic[R]):
         if hasattr(callable_target, "__providers__"):
             self.providers.extend(getattr(callable_target, "__providers__", []))
         self.callable_target = callable_target  # type: ignore
+        self.label = label or callable_target.__name__
         self.is_cm = False
         self.is_agen = False
         self._recompile()
@@ -290,7 +292,7 @@ class Subscriber(Generic[R]):
             self._propagates[0].dispose()
 
     @overload
-    async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]] | Subscriber[T], context: Contexts, inner: bool = False) -> T | ExitState: ...
+    async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]], context: Contexts, inner: bool = False) -> T | ExitState: ...
 
     @overload
     async def handle(self: Subscriber[Generator[T, Any, None] | AsyncGenerator[T, Any]], context: Contexts, inner: bool = False) -> AsyncGenerator[T] | ExitState: ...

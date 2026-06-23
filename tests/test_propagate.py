@@ -38,7 +38,7 @@ async def test_propagate():
     s.propagate(as_int)
 
     @s.propagate()
-    async def _(result):
+    async def p1(result):
         if result > 1:
             return le.STOP
         executed.append(1)
@@ -68,7 +68,7 @@ async def test_context_manager():
 
     @s.propagate(prepend=True)
     @asynccontextmanager
-    async def _(foo: str):
+    async def p1(foo: str):
         assert foo == "1"
         executed.append(1)
         yield {"bar": 1}
@@ -76,7 +76,7 @@ async def test_context_manager():
 
     @s.propagate(prepend=True)
     @contextmanager
-    def _(foo: str):
+    def c1(foo: str):
         assert foo == "1"
         executed.append(1)
         yield
@@ -111,7 +111,7 @@ async def test_prepend_condition():
         executed.append(1)
 
     @s.propagate(prepend=True)
-    async def _(foo: str):
+    async def p1(foo: str):
         executed.append(1)
         if foo == "1":
             return

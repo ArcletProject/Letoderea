@@ -149,13 +149,13 @@ async def test_validate():
         return ctx
 
     @le.use(validate)
-    async def _(called: str, user: str, content: str):
+    async def v1(called: str, user: str, content: str):
         """Get a message for a user."""
         assert content in ("Hello!", "World!")
         return f"{called!r} by {user}"
 
     @le.use(validate_test)
-    async def _(called: str, user: str, content: str):
+    async def v2(called: str, user: str, content: str):
         """Get a message for a user, but only if the called is 'test' and the user is 'test"""
         assert content == "Hello!"
         return f"{called!r} by {user} and must be test"

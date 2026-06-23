@@ -127,7 +127,7 @@ async def test_deref_advance():
         executed.append(1)
 
     @s2.propagate(prepend=True)
-    async def _():
+    async def p1():
         return {"user_id": 3}
 
     e6 = ShortcutEvent1()

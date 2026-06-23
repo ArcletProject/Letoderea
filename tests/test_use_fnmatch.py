@@ -29,7 +29,7 @@ async def test_fnmatch():
     results = []
 
     @le.use("use_event/*")
-    async def _(foo, bar):
+    async def f1(foo, bar):
         results.append((foo, bar))
 
     await le.publish(DeriveEventA("1"))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ class RegisterWrapper(Generic[T, TC]):
     _effect_manager: EffectManager
     _once: bool
     _skip_req_missing: bool
+    _label: str | None
 
     def if_(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
         self._propagators.append(enter_if(predicate) / priority)
@@ -55,11 +57,17 @@ class RegisterWrapper(Generic[T, TC]):
         self._propagators.extend(propagators)
         return self
 
-    def __call__(self, func: Callable, /) -> Subscriber[T]:
+    def __call__(self, func: Callable, /, _warn=True) -> Subscriber[T]:
         if isinstance(func, Subscriber):
             func = func.callable_target
         events = self._publisher[0] if self._publisher else None
-        res = Subscriber(func, priority=self._priority, providers=self._providers, dispose=self._scope.remove_subscriber, once=self._once, skip_req_missing=self._skip_req_missing, _listen=events)
+        res = Subscriber(func, priority=self._priority, providers=self._providers, dispose=self._scope.remove_subscriber, once=self._once, skip_req_missing=self._skip_req_missing, _listen=events, label=self._label)
+        if _warn and res.label == "_" or res.label == "<lambda>":  # pragma: no cover
+            warnings.warn(
+                f"{res!r} has no label, consider using a named function instead of '_'",
+                UserWarning,
+                2,
+            )
         for pro in self._propagators:
             res.propagate(pro, _skip_providers=True)
         pubs = self._publisher[1] if self._publisher else None
@@ -120,7 +128,7 @@ class Scope(Generic[TWrapper]):
         for i in reversed(indexes):
             self.subscribers.pop(i)
 
-    def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None):
+    def register(self, func: Callable[..., Any] | None = None, event: type | None = None, *, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, publisher: str | Publisher | None = None, once: bool = False, skip_req_missing: bool | None = None, label: str | None = None):
         """注册一个订阅者"""
         _skip_req_missing = self.global_skip_req_missing if skip_req_missing is None else skip_req_missing
         providers = providers or []
@@ -150,9 +158,16 @@ class Scope(Generic[TWrapper]):
 
         _propagators: list[Propagator] = [*global_propagators, *self.propagators, *propagators]
         _propagator_providers = [p for pro in _propagators for p in pro.providers()]
-        register_wrapper = self.wrapper_class()(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, self._effect_manager, once, _skip_req_missing)
+        register_wrapper = self.wrapper_class()(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, self._effect_manager, once, _skip_req_missing, label)
         if func:
-            return register_wrapper(func)
+            res = register_wrapper(func, _warn=False)
+            if res.label == "_" or res.label == "<lambda>":  # pragma: no cover
+                warnings.warn(
+                    f"{res!r} has no label, consider using a named function instead of '_'",
+                    UserWarning,
+                    3,
+                )
+            return res
         return register_wrapper
 
     def iter(self, pub_ids: set[str], pass_backend: bool = True):
@@ -183,25 +198,25 @@ def configure(skip_req_missing: bool = False):
     Scope.global_skip_req_missing = skip_req_missing
 
 
-def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None):
+def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None, label: str | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once)
-    return scope.register(func, event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once)
+        return scope.register(event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once, label=label)
+    return scope.register(func, event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once, label=label)
 
 
-def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None):
+def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None, label: str | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(event=None, priority=priority, skip_req_missing=skip_req_missing, once=once)
-    return scope.register(func, event=None, priority=priority, skip_req_missing=skip_req_missing, once=once)
+        return scope.register(event=None, priority=priority, skip_req_missing=skip_req_missing, once=once, label=label)
+    return scope.register(func, event=None, priority=priority, skip_req_missing=skip_req_missing, once=once, label=label)
 
 
-def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None):
+def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None, label: str | None = None):
     if not (scope := scope_ctx.get()):
         scope = _scopes["$global"]
     if not func:
-        return scope.register(priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub)
-    return scope.register(func, priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub)
+        return scope.register(priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub, label=label)
+    return scope.register(func, priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub, label=label)

@@ -29,11 +29,11 @@ def bind(*args: Provider | type[Provider]):
 
 
 @overload
-def propagate(*funcs: Callable[..., Any], prepend: bool = False) -> Callable[[TCallable], TCallable]: ...
+def propagate(*funcs: Propagator) -> Callable[[TCallable], TCallable]: ...
 
 
 @overload
-def propagate(*funcs: Callable[..., Any] | Propagator) -> Callable[[TCallable], TCallable]: ...
+def propagate(*funcs: Callable[..., Any], prepend: bool = False) -> Callable[[TCallable], TCallable]: ...
 
 
 def propagate(*funcs: Callable[..., Any] | Propagator, prepend: bool = False):
@@ -77,11 +77,11 @@ class Check(Propagator):
             func = predicate if is_coroutinefunction(predicate) else run_sync(predicate)
 
             @wraps(predicate)
-            async def _(*args, _func=func, **kwargs):
+            async def check(*args, _func=func, **kwargs):
                 if await _func(*args, **kwargs) is not self.result:
                     return STOP
 
-            yield _, True, self.priority
+            yield check, True, self.priority
 
     def compose(self):
         yield from self.checkers()
@@ -115,15 +115,15 @@ enter_if = _CheckBuilder(True)
 
 def allow_event(*events: type):  # pragma: no cover
     """仅允许指定事件通过"""
-    def _(ctx: Contexts) -> bool:
+    def allow(ctx: Contexts) -> bool:
         return isinstance(ctx[EVENT], events)
 
-    return enter_if(_)
+    return enter_if(allow)
 
 
 def refuse_event(*events: type):  # pragma: no cover
     """拒绝指定事件通过"""
-    def _(ctx: Contexts) -> bool:
+    def allow(ctx: Contexts) -> bool:
         return isinstance(ctx[EVENT], events)
 
-    return bypass_if(_)
+    return bypass_if(allow)

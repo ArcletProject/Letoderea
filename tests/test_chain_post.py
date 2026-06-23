@@ -92,7 +92,7 @@ async def test_inherit():
         return f"res_{foo}"
 
     @le.on(le.ExceptionEvent)
-    async def _(event: le.ExceptionEvent):
+    async def e(event: le.ExceptionEvent):
         assert event.origin is ev
         assert event.subscriber is t
         finish.append(3)
