@@ -44,6 +44,7 @@ class RegisterWrapper(Generic[T, TC]):
     _once: bool
     _skip_req_missing: bool
     _label: str | None
+    _depth: int = 2
 
     def if_(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
         self._propagators.append(enter_if(predicate) / priority)
@@ -57,16 +58,16 @@ class RegisterWrapper(Generic[T, TC]):
         self._propagators.extend(propagators)
         return self
 
-    def __call__(self, func: Callable, /, _warn=True) -> Subscriber[T]:
+    def __call__(self, func: Callable, /) -> Subscriber[T]:
         if isinstance(func, Subscriber):
             func = func.callable_target
         events = self._publisher[0] if self._publisher else None
         res = Subscriber(func, priority=self._priority, providers=self._providers, dispose=self._scope.remove_subscriber, once=self._once, skip_req_missing=self._skip_req_missing, _listen=events, label=self._label)
-        if _warn and res.label == "_" or res.label == "<lambda>":  # pragma: no cover
+        if res.label == "_" or res.label == "<lambda>":  # pragma: no cover
             warnings.warn(
                 f"{res!r} has no label, consider using a named function instead of '_'",
                 UserWarning,
-                2,
+                self._depth,
             )
         for pro in self._propagators:
             res.propagate(pro, _skip_providers=True)
@@ -160,14 +161,8 @@ class Scope(Generic[TWrapper]):
         _propagator_providers = [p for pro in _propagators for p in pro.providers()]
         register_wrapper = self.wrapper_class()(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, self._effect_manager, once, _skip_req_missing, label)
         if func:
-            res = register_wrapper(func, _warn=False)
-            if res.label == "_" or res.label == "<lambda>":  # pragma: no cover
-                warnings.warn(
-                    f"{res!r} has no label, consider using a named function instead of '_'",
-                    UserWarning,
-                    3,
-                )
-            return res
+            register_wrapper._depth += 2
+            return register_wrapper(func)
         return register_wrapper
 
     def iter(self, pub_ids: set[str], pass_backend: bool = True):
