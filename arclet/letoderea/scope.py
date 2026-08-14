@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import warnings
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
@@ -79,7 +80,12 @@ class RegisterWrapper(Generic[T, TC]):
             for pub in pubs:
                 if pub.check_subscriber(res):
                     self._scope.subscribers.append(SubscriberSlot(res, pub.id, res.priority))
-        self._effect_manager.effect(lambda: res.dispose, res.id)
+
+        async def _dispose():
+            if tasks := res.dispose():
+                await asyncio.wait(tasks)
+
+        self._effect_manager.effect(lambda: _dispose, res.id)
         return res
 
 

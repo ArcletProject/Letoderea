@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from arclet.letoderea import scope
@@ -11,7 +13,8 @@ def pytest_runtest_setup(item):
 
 
 @pytest.fixture(autouse=True, scope="function")
-def _reset_scope(request):
+@pytest.mark.asyncio
+async def _reset_scope(request):
     _scope = scope.Scope.of(f"test_scope_{request.node.name}")
     token = scope_ctx.set(_scope)
     yield
@@ -20,4 +23,5 @@ def _reset_scope(request):
     for sp in scopes:
         if sp.id == "$global":
             continue
-        sp.dispose()
+        if tasks := sp.dispose():
+            await asyncio.wait(tasks)

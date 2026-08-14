@@ -78,30 +78,56 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
     return grouped, context_map
 
 
+_CANCELLED = object()
+
+
+async def _agen_guarded(sub: Subscriber, ctx: Contexts):
+    gen = None  # type: ignore
+    try:
+        gen: AsyncGeneratorType = await sub.handle(ctx)  # type: ignore
+        async for res in gen:
+            if res is None or res is STOP:
+                continue
+            if res is BLOCK:
+                return BLOCK
+            if isinstance(res, _ExitException) and res.args[1]:
+                return BLOCK
+        return None
+    except asyncio.CancelledError:
+        if gen is not None:
+            try:
+                await asyncio.shield(gen.aclose())
+            except BaseException as e:  # pragma: no cover
+                return e
+        return _CANCELLED
+
+
 async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable[SubscriberSlot] | None = None, inherit_ctx: Contexts | None = None):
     grouped, context_map = await compute(event, scope, slots, inherit_ctx)
 
     for key, subs in grouped.items():
         contexts = context_map[key[1]]
-        tasks = [subscriber.handle(contexts.copy()) for subscriber in subs]
+        tasks = []
+        for subscriber in subs:
+            if subscriber.is_agen:
+                t = asyncio.create_task(_agen_guarded(subscriber, contexts.copy()))
+            else:
+                t = asyncio.create_task(subscriber.handle(contexts.copy()))
+            subscriber._tasks.add(t)
+            t.add_done_callback(subscriber._tasks.discard)
+            tasks.append(t)
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for _i, result in enumerate(results):
-            if result is None or result is STOP:
+            if result is None or result is STOP or result is _CANCELLED:
                 continue
             if result is BLOCK:
                 return
             if isinstance(result, BaseException):
+                if isinstance(result, asyncio.CancelledError):
+                    continue
                 if isinstance(result, _ExitException) and result.args[1]:  # pragma: no cover
                     return
                 publish_exc_event(ExceptionEvent(event, subs[_i], result))
-            elif isinstance(result, AsyncGeneratorType):  # pragma: no cover
-                async for res in result:
-                    if result is None or result is STOP:
-                        continue
-                    if res is BLOCK:
-                        return
-                    if isinstance(res, _ExitException) and res.args[1]:
-                        return
 
 
 async def serial_exec(subs: list[Subscriber], ctx: Contexts):
