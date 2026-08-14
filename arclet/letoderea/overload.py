@@ -146,11 +146,11 @@ class Overloads(Propagator):
         try:
             if func.is_cm:  # pragma: no cover
                 stack = context[STACK]
-                result = await stack.enter_async_context(func._callable_target(**arguments))
+                result = await stack.enter_async_context(func._execute(**arguments))
             elif func.is_agen:  # pragma: no cover
-                result = func._callable_target(**arguments)
+                result = func._execute(**arguments)
             else:
-                result = await func._callable_target(**arguments)
+                result = await func._execute(**arguments)
         except InnerHandlerException:  # pragma: no cover
             raise
         except Exception as e:  # pragma: no cover

@@ -197,7 +197,7 @@ class Subscriber(Generic[R]):
     providers: list[Provider | ProviderFactory]
     params: list[CompileParam]
 
-    _callable_target: Callable[..., Any]
+    _execute: Callable[..., Any]
 
     def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False, label: str | None = None, _listen: Any = None) -> None:
         self.id = str(uuid4())
@@ -218,6 +218,7 @@ class Subscriber(Generic[R]):
         self.label = label or callable_target.__name__
         self.is_cm = False
         self.is_agen = False
+        self._tasks: set[asyncio.Task] = set()
         self._recompile()
         self._disposes: list[Callable[[Self], None]] = [dispose] if dispose else []
 
@@ -240,17 +241,17 @@ class Subscriber(Generic[R]):
             self.is_cm = True
             wrapped = getattr(self.callable_target, "__wrapped__")
             if is_gen_callable(wrapped):
-                self._callable_target = asynccontextmanager(run_sync_generator(wrapped))
+                self._execute = asynccontextmanager(run_sync_generator(wrapped))
             else:
-                self._callable_target = asynccontextmanager(wrapped)  # type: ignore
+                self._execute = asynccontextmanager(wrapped)  # type: ignore
         elif is_async_gen_callable(self.callable_target):  # pragma: no cover
-            self._callable_target = self.callable_target  # type: ignore
+            self._execute = self.callable_target  # type: ignore
             self.is_agen = True
         elif is_gen_callable(self.callable_target):  # pragma: no cover
-            self._callable_target = run_sync_generator(self.callable_target)
+            self._execute = run_sync_generator(self.callable_target)
             self.is_agen = True
         else:
-            self._callable_target = self.callable_target if is_async(self.callable_target) else run_sync(self.callable_target)  # noqa: E501 # type: ignore
+            self._execute = self.callable_target if is_async(self.callable_target) else run_sync(self.callable_target)  # type: ignore
         if new_providers:
             for p in self.params:
                 if p.depend:
@@ -283,6 +284,20 @@ class Subscriber(Generic[R]):
     def _attach_disposes(self, dispose: Callable[[Subscriber], None]) -> None:
         self._disposes.append(dispose)
 
+    @property
+    def running(self) -> frozenset[asyncio.Task]:
+        """当前正在运行的订阅者任务（只读快照）"""
+        return frozenset(self._tasks)
+
+    def cancel_running(self) -> set[asyncio.Task] | None:
+        """取消所有 in-flight 任务并返回它们"""
+        current = asyncio.current_task()
+        tasks = {t for t in self._tasks if t is not current}
+        for task in tasks:
+            task.cancel()
+        self._tasks.clear()
+        return tasks or None
+
     def dispose(self):
         if self._disposes:
             for dispose in self._disposes:
@@ -313,11 +328,11 @@ class Subscriber(Generic[R]):
                 arguments[param.name] = await param.depend(context) if param.depend else await param.solve(context)
             if self.is_cm:
                 stack: AsyncExitStack = context[STACK]
-                result = await stack.enter_async_context(self._callable_target(**arguments))
+                result = await stack.enter_async_context(self._execute(**arguments))
             elif self.is_agen:
-                result = self._callable_target(**arguments)
+                result = self._execute(**arguments)
             else:
-                result = await self._callable_target(**arguments)
+                result = await self._execute(**arguments)
             if self._after_propagates:
                 context[RESULT] = result
                 propagate_result = await self._run_propagate(context, self._propagates[self._cursor :])
