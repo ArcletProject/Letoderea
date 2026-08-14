@@ -199,7 +199,7 @@ class Subscriber(Generic[R]):
 
     _execute: Callable[..., Any]
 
-    def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], None] | None = None, once: bool = False, skip_req_missing: bool = False, label: str | None = None, _listen: Any = None) -> None:
+    def __init__(self, callable_target: Callable[..., R], *, priority: int = 16, providers: TProviders | None = None, dispose: Callable[[Self], Any] | None = None, once: bool = False, skip_req_missing: bool = False, label: str | None = None, _listen: Any = None) -> None:
         self.id = str(uuid4())
         self.priority = priority
         self.skip_req_missing = skip_req_missing
@@ -220,7 +220,7 @@ class Subscriber(Generic[R]):
         self.is_agen = False
         self._tasks: set[asyncio.Task] = set()
         self._recompile()
-        self._disposes: list[Callable[[Self], None]] = [dispose] if dispose else []
+        self._disposes: list[Callable[[Self], Any]] = [dispose] if dispose else []
 
         if hasattr(callable_target, "__propagates__"):
             for slot in getattr(callable_target, "__propagates__", []):
@@ -231,11 +231,13 @@ class Subscriber(Generic[R]):
 
         finalize(self, self.dispose)
 
-    def _recompile(self, new_providers: Sequence[Provider | ProviderFactory] | None = None):
+    def _recompile(self, new_providers: Sequence[Provider | ProviderFactory] | None = None, cancel_running: bool = False):
         self.is_cm = False
         self.is_agen = False
         if new_providers:
             self.providers.extend(new_providers)
+        if cancel_running:
+            self.cancel_running()
         self.params = _compile(self.callable_target, self.providers)
         if hasattr(self.callable_target, "__code__") and self.callable_target.__code__.co_name == "helper" and self.callable_target.__code__.co_filename.endswith("contextlib.py"):  # pragma: no cover
             self.is_cm = True
@@ -281,7 +283,7 @@ class Subscriber(Generic[R]):
             return other == self.callable_target.__name__
         return False
 
-    def _attach_disposes(self, dispose: Callable[[Subscriber], None]) -> None:
+    def _attach_disposes(self, dispose: Callable[[Self], Any]) -> None:
         self._disposes.append(dispose)
 
     @property
@@ -291,20 +293,29 @@ class Subscriber(Generic[R]):
 
     def cancel_running(self) -> set[asyncio.Task] | None:
         """取消所有 in-flight 任务并返回它们"""
-        current = asyncio.current_task()
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:  # pragma: no cover
+            current = None
         tasks = {t for t in self._tasks if t is not current}
         for task in tasks:
             task.cancel()
         self._tasks.clear()
         return tasks or None
 
-    def dispose(self):
+    def dispose(self) -> set[asyncio.Task] | None:
+        tasks = self.cancel_running() or set()
         if self._disposes:
             for dispose in self._disposes:
-                dispose(self)
+                res = dispose(self)
+                if not isinstance(res, set) or any((not isinstance(t, asyncio.Task)) for t in res):
+                    continue
+                tasks.update(res)
             self._disposes.clear()
         while self._propagates:
-            self._propagates[0].dispose()
+            if res := self._propagates[0].dispose():
+                tasks |= res
+        return tasks or None
 
     @overload
     async def handle(self: Subscriber[CoroutineType[Any, Any, T]] | Subscriber[Awaitable[T]], context: Contexts, inner: bool = False) -> T | ExitState: ...
