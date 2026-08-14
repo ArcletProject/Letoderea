@@ -10,15 +10,21 @@ from types import AsyncGeneratorType
 from typing import Any, TypeVar, cast, overload
 from typing_extensions import dataclass_transform
 
-from .context import Contexts, generate_contexts
+from .context import Contexts, generate_contexts, shared_suppliers
 from .exceptions import BLOCK, STOP, _ExitException
 from .provider import get_providers, provide
 from .publisher import Publisher, _publishers, define, get_publishers
-from .scope import Scope, SubscriberSlot, _scopes, on, use  # noqa: F401
+from .scope import Scope, SubscriberSlot,scope_ctx,  _scopes, on, use  # noqa: F401
 from .subscriber import Subscriber
 from .utils import Force, Result, Resultable, add_task
 
 T = TypeVar("T")
+
+
+def add_shared_supplier(supplier: Callable[[Contexts], Awaitable[None]]):
+    if not (scp := scope_ctx.get(None)):  # pragma: no cover
+        scp = Scope.root()
+    return scp.effect(lambda: shared_suppliers.append(supplier))
 
 
 @dataclass(frozen=True)
@@ -335,6 +341,3 @@ def make_event(cls: type[C] | None = None, *, name: str | None = None, **kwargs)
     if cls is None:
         return wrapper
     return wrapper(cls)
-
-
-scope = Scope.of

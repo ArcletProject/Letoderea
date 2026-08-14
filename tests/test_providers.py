@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from arclet.letoderea import Contexts, Param, Provider, ProviderFactory, on, provide, publish
-from arclet.letoderea.context import generate_contexts, shared_suppliers
+from arclet.letoderea import Contexts, Param, Provider, ProviderFactory, on, provide, publish, add_shared_supplier
+from arclet.letoderea.context import generate_contexts
 
 
 class IntProvider(Provider[int]):
@@ -118,7 +118,7 @@ async def test_shared_supplier():
     async def _add_foo(contexts: Contexts):
         contexts["foo"] = foo
 
-    shared_suppliers.append(_add_foo)
+    add_shared_supplier(_add_foo)
     foo_provide = provide(object, call="foo", validate=lambda param: param.name.startswith("foo"))
 
     @on(ProviderEvent, providers=[foo_provide])
@@ -135,5 +135,3 @@ async def test_shared_supplier():
 
     await publish(ProviderEvent())
     assert executed == [foo, foo, foo, foo]
-
-    shared_suppliers.remove(_add_foo)

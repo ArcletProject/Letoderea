@@ -4,7 +4,7 @@ import asyncio
 import warnings
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fnmatch import filter as fnfilter
 from secrets import token_urlsafe
 from typing import Any, Generic, TypeVar
@@ -46,17 +46,28 @@ class RegisterWrapper(Generic[T, TC]):
     _skip_req_missing: bool
     _label: str | None
     _depth: int = 2
+    _predicates: list[Check] = field(default_factory=list)
 
-    def if_(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
-        self._propagators.append(enter_if(predicate) / priority)
+    def if_(self, predicate: Propagator | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
+        if isinstance(predicate, Propagator):
+            self._propagators.append((predicate / priority) if isinstance(predicate, Check) else predicate)
+        else:
+            self._predicates.append(enter_if(predicate) / priority)
         return self
 
-    def unless(self, predicate: Check | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
-        self._propagators.append(bypass_if(predicate) / priority)
+    def unless(self, predicate: Propagator | Callable[..., bool] | Callable[..., Awaitable[bool]] | bool, priority: int = 0):
+        if isinstance(predicate, Propagator):
+            self._propagators.append((predicate / priority) if isinstance(predicate, Check) else predicate)
+        else:
+            self._predicates.append(bypass_if(predicate) / priority)
         return self
 
     def propagate(self, *propagators: Propagator):
-        self._propagators.extend(propagators)
+        for pro in propagators:
+            if isinstance(pro, Check):
+                self._predicates.append(pro)
+            else:
+                self._propagators.append(pro)
         return self
 
     def __call__(self, func: Callable, /) -> Subscriber[T]:
@@ -71,7 +82,9 @@ class RegisterWrapper(Generic[T, TC]):
                 self._depth,
             )
         for pro in self._propagators:
-            res.propagate(pro, _skip_providers=True)
+            res.propagate(pro)
+        for check in self._predicates:
+            res.propagate(check, _skip_providers=True)
         pubs = self._publisher[1] if self._publisher else None
         pubs = (pubs,) if isinstance(pubs, Publisher) else pubs
         if not pubs:
@@ -201,7 +214,7 @@ def configure(skip_req_missing: bool = False):
 
 def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None, label: str | None = None):
     if not (scope := scope_ctx.get()):
-        scope = _scopes["$global"]
+        scope = Scope.root()
     if not func:
         return scope.register(event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once, label=label)
     return scope.register(func, event=event, priority=priority, providers=providers, propagators=propagators, skip_req_missing=skip_req_missing, once=once, label=label)
@@ -209,7 +222,7 @@ def on(event: type, func: Callable[..., Any] | None = None, priority: int = 16, 
 
 def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: bool = False, skip_req_missing: bool | None = None, label: str | None = None):
     if not (scope := scope_ctx.get()):
-        scope = _scopes["$global"]
+        scope = Scope.root()
     if not func:
         return scope.register(event=None, priority=priority, skip_req_missing=skip_req_missing, once=once, label=label)
     return scope.register(func, event=None, priority=priority, skip_req_missing=skip_req_missing, once=once, label=label)
@@ -217,7 +230,7 @@ def on_global(func: Callable[..., Any] | None = None, priority: int = 16, once: 
 
 def use(pub: str | Publisher, func: Callable[..., Any] | None = None, priority: int = 16, providers: TProviders | None = None, propagators: list[Propagator] | None = None, once: bool = False, skip_req_missing: bool | None = None, label: str | None = None):
     if not (scope := scope_ctx.get()):
-        scope = _scopes["$global"]
+        scope = Scope.root()
     if not func:
         return scope.register(priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub, label=label)
     return scope.register(func, priority=priority, providers=providers, propagators=propagators, once=once, skip_req_missing=skip_req_missing, publisher=pub, label=label)

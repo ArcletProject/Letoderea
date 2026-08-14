@@ -103,8 +103,7 @@ async def test_deref_advance():
         assert user.name == "test"
         executed.append(1)
 
-    @on_global
-    @enter_if(deref(User).id == 2)
+    @on_global().propagate(enter_if(deref(User).id == 2))
     async def s1(user: User):
         assert user.id == 2
         executed.append(1)

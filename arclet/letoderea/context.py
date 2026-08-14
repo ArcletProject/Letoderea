@@ -1,6 +1,8 @@
 from collections.abc import Awaitable, Callable
 from typing import Any, Generic, TypeVar, cast
 
+from .utils import DisposableList
+
 T = TypeVar("T")
 
 
@@ -15,7 +17,7 @@ class Contexts(dict[str, Any]):
 
 
 EVENT = CtxItem[Any].make("$event")
-shared_suppliers = []
+shared_suppliers = DisposableList([])
 
 
 async def generate_contexts(

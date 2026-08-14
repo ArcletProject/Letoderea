@@ -315,8 +315,7 @@ async def test_propagator_providers():
         def providers(self):
             return [_MatchResultProvider()]
 
-    @le.on(PropagateEvent)
-    @le.propagate(PrefixMatcher())
+    @le.on(PropagateEvent).if_(PrefixMatcher())
     async def s(result: MatchResult):
         executed.append(result.text)
 
@@ -354,12 +353,11 @@ async def test_propagator_empty_providers():
     class SimplePropagator(le.Propagator):
         def compose(self):
             def prepend(foo: str):
-                if foo != "go":
+                if foo == "stop":
                     return le.STOP
             yield prepend, True
 
-    @le.on(PropagateEvent)
-    @le.propagate(SimplePropagator())
+    @le.on(PropagateEvent).unless(SimplePropagator())
     async def s(foo: str):
         executed.append(foo)
 

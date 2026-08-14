@@ -3,8 +3,8 @@ from .breakpoint import step_out as step_out
 from .context import EVENT as EVENT
 from .context import Contexts as Contexts
 from .context import CtxItem as CtxItem
-from .context import shared_suppliers as shared_suppliers
 from .core import ExceptionEvent as ExceptionEvent
+from .core import add_shared_supplier as add_shared_supplier
 from .core import make_event as make_event
 from .core import post as post
 from .core import publish as publish

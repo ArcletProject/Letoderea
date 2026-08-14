@@ -2,6 +2,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Generic, TypeVar, overload
 from typing_extensions import Self
 
+from .utils import DisposableList
+
 T = TypeVar("T")
 T1 = TypeVar("T1")
 
@@ -44,6 +46,6 @@ class Contexts(dict[str, Any]):
     def __delitem__(self, key: str | CtxItem, /) -> None: ...
 
 EVENT: CtxItem[Any]
-shared_suppliers: list[Callable[[Contexts], Awaitable[None]]]
+shared_suppliers: DisposableList[Callable[[Contexts], Awaitable[None]]]
 
 async def generate_contexts(event: T, supplier:  Callable[[T, Contexts], Awaitable[Contexts | None]] | None = None, inherit_ctx: Contexts | None = None) -> Contexts: ...
