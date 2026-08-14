@@ -1,6 +1,6 @@
 [project]
 name = "arclet-letoderea"
-version = "0.21.3"
+version = "0.22.0"
 description = "A high-performance, simple-structured event system, relies on asyncio"
 authors = [
     {name = "RF-Tar-Railt", email = "rf_tar_railt@qq.com"},
@@ -12,7 +12,7 @@ dependencies = [
 requires-python = ">=3.10,<4.0"
 readme = "README.md"
 license = {text = "MIT"}
-keywords = ["asyncio", "event-system", "dispatch", "dependency-injection"]
+keywords = ["asyncio", "event-system", "dispatch", "dependency-injection", "meta-programming", "meta-framework", "framework", "python-framework", "python-event-system", "python-dispatcher", "python-dependency-injection"]
 classifiers = [
     "Operating System :: OS Independent",
     "License :: OSI Approved :: MIT License",
