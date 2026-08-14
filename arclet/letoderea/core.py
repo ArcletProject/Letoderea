@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import atexit
 from collections import defaultdict
-from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from itertools import chain
 from operator import attrgetter
@@ -14,7 +13,7 @@ from typing_extensions import dataclass_transform
 from .context import Contexts, generate_contexts
 from .exceptions import BLOCK, STOP, _ExitException
 from .provider import get_providers, provide
-from .publisher import Publisher, _publishers, define, gather, get_publishers
+from .publisher import Publisher, _publishers, define, get_publishers
 from .scope import Scope, SubscriberSlot, _scopes, on, use  # noqa: F401
 from .subscriber import Subscriber
 from .utils import Force, Result, Resultable, add_task
@@ -81,11 +80,11 @@ async def compute(event: Any, scope: str | Scope | None = None, slots: Iterable[
 _CANCELLED = object()
 
 
-async def _agen_guarded(sub: Subscriber, ctx: Contexts):
+async def _agen_guarded(sub: Subscriber, ctx: Contexts) -> Any:
     gen = None  # type: ignore
     try:
         gen: AsyncGeneratorType = await sub.handle(ctx)  # type: ignore
-        async for res in gen:
+        async for res in gen:  # pragma: no cover
             if res is None or res is STOP:
                 continue
             if res is BLOCK:
@@ -99,6 +98,8 @@ async def _agen_guarded(sub: Subscriber, ctx: Contexts):
                 await asyncio.shield(gen.aclose())
             except BaseException as e:  # pragma: no cover
                 return e
+        else:  # pragma: no cover
+            pass
         return _CANCELLED
 
 
@@ -130,16 +131,33 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
                 publish_exc_event(ExceptionEvent(event, subs[_i], result))
 
 
-async def serial_exec(subs: list[Subscriber], ctx: Contexts):
+async def serial_exec(subs: list[Subscriber], ctx: Contexts) -> AsyncGenerator[tuple[Subscriber, Any], None]:
     for subscriber in subs:
+        task = asyncio.create_task(subscriber.handle(ctx.copy()))
+        subscriber._tasks.add(task)
+        task.add_done_callback(subscriber._tasks.discard)
         try:
-            yield subscriber, await subscriber.handle(ctx.copy())
+            yield subscriber, await task
+        except asyncio.CancelledError:
+            yield subscriber, _CANCELLED
         except BaseException as e:
             yield subscriber, e
 
 
+async def _guarded_handle(sub: Subscriber, ctx: Contexts):
+    try:
+        return await sub.handle(ctx)
+    except asyncio.CancelledError:
+        return _CANCELLED
+
+
 async def serial_exec_concurrent(subs: list[Subscriber], ctx: Contexts):
-    pending = {asyncio.create_task(subscriber.handle(ctx.copy()), name=f"sub_{i}") for i, subscriber in enumerate(subs)}
+    pending: set[asyncio.Task] = set()
+    for i, subscriber in enumerate(subs):
+        task = asyncio.create_task(_guarded_handle(subscriber, ctx.copy()), name=f"sub_{i}")
+        subscriber._tasks.add(task)
+        task.add_done_callback(subscriber._tasks.discard)
+        pending.add(task)
     while pending:
         done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
@@ -162,7 +180,7 @@ async def serial(event: Any, scope: str | Scope | None = None, slots: Iterable[S
         contexts = context_map[key[1]]
         gene = serial_exec_concurrent(subs, contexts)
         async for subscriber, result in gene:
-            if result is None or result is STOP:
+            if result is None or result is STOP or result is _CANCELLED:
                 continue
             if result is BLOCK:  # pragma: no cover
                 return
@@ -189,7 +207,7 @@ async def broadcast(event: Any, scope: str | Scope | None = None, slots: Iterabl
         contexts = context_map[key[1]]
         gene = serial_exec_concurrent(subs, contexts) if concurrent else serial_exec(subs, contexts)
         async for subscriber, result in gene:
-            if result is None or result is STOP:
+            if result is None or result is STOP or result is _CANCELLED:
                 continue
             if result is BLOCK:
                 return

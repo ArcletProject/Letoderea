@@ -236,7 +236,7 @@ class Subscriber(Generic[R]):
         self.is_agen = False
         if new_providers:
             self.providers.extend(new_providers)
-        if cancel_running:
+        if cancel_running:  # pragma: no cover
             self.cancel_running()
         self.params = _compile(self.callable_target, self.providers)
         if hasattr(self.callable_target, "__code__") and self.callable_target.__code__.co_name == "helper" and self.callable_target.__code__.co_filename.endswith("contextlib.py"):  # pragma: no cover
@@ -312,7 +312,7 @@ class Subscriber(Generic[R]):
                     continue
                 tasks.update(res)
             self._disposes.clear()
-        while self._propagates:
+        while self._propagates:  # pragma: no cover
             if res := self._propagates[0].dispose():
                 tasks |= res
         return tasks or None

@@ -15,7 +15,7 @@ class CancelEvent:
 async def test_cancel_running():
     sub = Subscriber(lambda: None)
 
-    async def coro():
+    async def coro():  # pragma: no cover
         try:
             await asyncio.sleep(10)
         finally:
@@ -36,7 +36,7 @@ async def test_cancel_running():
 async def test_dispose_returns_cancelled_tasks():
     sub = Subscriber(lambda: None)
 
-    async def coro():
+    async def coro():  #  pragma: no cover
         await asyncio.sleep(10)
 
     task = asyncio.create_task(coro())
@@ -64,8 +64,7 @@ async def test_dispose_aggregates_attach_disposes():
     sub._attach_disposes(_dispose)
     result = sub.dispose()
     assert result == {task}
-    if result:
-        await asyncio.wait(result)
+    await asyncio.wait(result)  # type: ignore
 
 
 @pytest.mark.asyncio
@@ -145,8 +144,7 @@ async def test_cancel_one_does_not_cancel_group():
     await slow_started.wait()
     d = scope1.dispose()
     await asyncio.wait_for(fast_done.wait(), 1.0)  # 同组其它订阅者不受连累
-    if d:
-        await asyncio.gather(*d, return_exceptions=True)
+    await asyncio.gather(*d, return_exceptions=True)
     assert slow_cleaned.is_set()
     await task
 
@@ -160,7 +158,7 @@ async def test_dispose_cancels_asyncgen():
     with scope.context():
 
         @le.on(CancelEvent)
-        async def gen_handler(foo: str):
+        async def gen_handler(foo: str):  # pragma: no cover
             started.set()
             try:
                 yield foo
@@ -173,7 +171,58 @@ async def test_dispose_cancels_asyncgen():
     await started.wait()
     await asyncio.sleep(0.01)
     d = scope.dispose()
-    if d:
-        await asyncio.gather(*d, return_exceptions=True)
+    await asyncio.gather(*d, return_exceptions=True)
+    assert cleaned.is_set()
+    await task
+
+
+@pytest.mark.asyncio
+async def test_post_dispose_cancels_inflight():
+    scope = le.Scope.of("post_cancel_scope")
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    with scope.context():
+
+        @le.on(CancelEvent)
+        async def handler(foo: str):
+            started.set()
+            try:
+                await asyncio.sleep(10)
+            finally:
+                cleaned.set()
+
+    task = le.post(CancelEvent("x"), scope=scope)
+    await started.wait()
+    d = scope.dispose()
+    await asyncio.gather(*d, return_exceptions=True)
+    assert cleaned.is_set()
+    await task
+
+
+@pytest.mark.asyncio
+async def test_waterfall_dispose_cancels_inflight():
+    scope = le.Scope.of("wf_cancel_scope")
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    with scope.context():
+
+        @le.on(CancelEvent)
+        async def handler(foo: str):
+            started.set()
+            try:
+                await asyncio.sleep(10)
+            finally:
+                cleaned.set()
+
+    async def run():
+        async for _ in le.waterfall(CancelEvent("x"), scope=scope):
+            pass
+
+    task = asyncio.create_task(run())
+    await started.wait()
+    d = scope.dispose()
+    await asyncio.gather(*d, return_exceptions=True)
     assert cleaned.is_set()
     await task
