@@ -111,9 +111,9 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
         tasks = []
         for subscriber in subs:
             if subscriber.is_agen:
-                t = asyncio.create_task(_agen_guarded(subscriber, contexts.copy()))
+                t = add_task(_agen_guarded(subscriber, contexts.copy()))
             else:
-                t = asyncio.create_task(subscriber.handle(contexts.copy()))
+                t = add_task(subscriber.handle(contexts.copy()))
             subscriber._tasks.add(t)
             t.add_done_callback(subscriber._tasks.discard)
             tasks.append(t)
@@ -133,14 +133,14 @@ async def dispatch(event: Any, scope: str | Scope | None = None, slots: Iterable
 
 async def serial_exec(subs: list[Subscriber], ctx: Contexts) -> AsyncGenerator[tuple[Subscriber, Any], None]:
     for subscriber in subs:
-        task = asyncio.create_task(subscriber.handle(ctx.copy()))
+        task = add_task(subscriber.handle(ctx.copy()))
         subscriber._tasks.add(task)
         task.add_done_callback(subscriber._tasks.discard)
         try:
             yield subscriber, await task
         except asyncio.CancelledError:
             yield subscriber, _CANCELLED
-        except BaseException as e:
+        except BaseException as e:  # pragma: no cover
             yield subscriber, e
 
 
@@ -154,7 +154,7 @@ async def _guarded_handle(sub: Subscriber, ctx: Contexts):
 async def serial_exec_concurrent(subs: list[Subscriber], ctx: Contexts):
     pending: set[asyncio.Task] = set()
     for i, subscriber in enumerate(subs):
-        task = asyncio.create_task(_guarded_handle(subscriber, ctx.copy()), name=f"sub_{i}")
+        task = add_task(_guarded_handle(subscriber, ctx.copy()), name=f"sub_{i}")
         subscriber._tasks.add(task)
         task.add_done_callback(subscriber._tasks.discard)
         pending.add(task)

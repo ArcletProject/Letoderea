@@ -139,9 +139,9 @@ class _EventSystem:
     loop: asyncio.AbstractEventLoop | None = None
 
 
-def add_task(coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
+def add_task(coro: Coroutine[Any, Any, T], name: str | None = None) -> asyncio.Task[T]:
     loop = _EventSystem.loop or asyncio.get_running_loop()
-    task = loop.create_task(coro)
+    task = loop.create_task(coro, name=name)
     _EventSystem.ref_tasks.add(task)
     task.add_done_callback(_EventSystem.ref_tasks.discard)
     return task

@@ -1,6 +1,6 @@
 import asyncio
 
-import pytest
+import pytest_asyncio
 
 from arclet.letoderea import scope
 from arclet.letoderea.exceptions import ExceptionHandler
@@ -12,8 +12,7 @@ def pytest_runtest_setup(item):
     return None
 
 
-@pytest.fixture(autouse=True, scope="function")
-@pytest.mark.asyncio
+@pytest_asyncio.fixture(autouse=True, scope="function")
 async def _reset_scope(request):
     _scope = scope.Scope.of(f"test_scope_{request.node.name}")
     token = scope_ctx.set(_scope)

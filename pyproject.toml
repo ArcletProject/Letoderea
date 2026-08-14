@@ -41,10 +41,10 @@ includes = ["arclet"]
 
 [tool.pdm.dev-dependencies]
 dev = [
-    "isort>=5.13.2",
-    "black>=24.10.0",
-    "pytest>=8.3.4",
-    "pytest-asyncio>=0.25.3",
+    "isort>=8.0.1",
+    "black>=26.5.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "coverage>=7.6.12",
 ]
 [tool.black]

@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 import arclet.letoderea as le
-from arclet.letoderea import ExitState, Subscriber
+from arclet.letoderea import Subscriber
 
 
 @le.make_event(name="cancel")
@@ -84,6 +84,7 @@ async def test_scope_dispose_cancels_inflight():
                 cleaned.set()
 
     task = le.publish(CancelEvent("x"), scope=scope)
+    await asyncio.sleep(0.1)
     await started.wait()
 
     dispose_tasks = scope.dispose()
