@@ -16,6 +16,7 @@ from .effect import EffectManager
 from .provider import TProviders, global_providers
 from .publisher import Publisher, _publishers, filter_publisher
 from .subscriber import Propagator, Subscriber
+from .utils import DisposableList
 
 T = TypeVar("T")
 TC = TypeVar("TC")
@@ -130,12 +131,18 @@ class Scope(Generic[TWrapper]):
         self.available = True
         self.providers = []
         self.propagators = []
+        self._subscopes = DisposableList([])
 
     def __repr__(self):
         return f"{self.__class__.__name__}::{self.id}"
 
     @contextmanager
     def context(self):
+        if upper_scope := scope_ctx.get():
+            if upper_scope.id == self.id:
+                yield self
+                return
+            self._effect_manager.effect(lambda: upper_scope._subscopes.append(self))
         token = scope_ctx.set(self)
         try:
             yield self
@@ -193,16 +200,29 @@ class Scope(Generic[TWrapper]):
         self.available = False
         for slot in self.subscribers:
             slot.subscriber.available = False
+        for subscope in self._subscopes:
+            subscope.disable()
 
     def enable(self):
         self.available = True
         for slot in self.subscribers:
             slot.subscriber.available = True
+        for subscope in self._subscopes:
+            subscope.enable()
 
     def dispose(self):
         self.disable()
         _scopes.pop(self.id, None)
-        return self._effect_manager.dispose()
+        tasks = self._effect_manager.dispose()
+        for subscope in self._subscopes.clear():
+            tasks.update(subscope.dispose())
+        return tasks
+
+    async def cleanup(self):
+        self.disable()
+        _scopes.pop(self.id, None)
+        await self._effect_manager.cleanup()
+        await asyncio.gather(*(subscope.cleanup() for subscope in self._subscopes.clear()))
 
 
 _scopes["$global"] = Scope("$global")

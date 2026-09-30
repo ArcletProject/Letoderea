@@ -13,7 +13,7 @@ from .exceptions import ExitState
 from .provider import Provider, ProviderFactory, TProviders
 from .publisher import Publisher
 from .subscriber import Propagator, Subscriber
-from .utils import Resultable
+from .utils import DisposableList, Resultable
 
 T = TypeVar("T")
 TC = TypeVar("TC")
@@ -70,6 +70,7 @@ class Scope(Generic[TWrapper]):
     providers: list[Provider[Any] | ProviderFactory]
     propagators: list[Propagator]
     _effect_manager: EffectManager
+    _subscopes: DisposableList[Scope]
 
     effect = EffectManager.effect
 
@@ -91,6 +92,7 @@ class Scope(Generic[TWrapper]):
     def disable(self) -> None: ...
     def enable(self) -> None: ...
     def dispose(self) -> set[asyncio.Task]: ...
+    async def cleanup(self) -> None: ...
 
 
 def configure(skip_req_missing: bool = False) -> None: ...

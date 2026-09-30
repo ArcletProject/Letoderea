@@ -171,7 +171,7 @@ class EffectManager:
         disposables.append(self._disposables.append(wrapper))
         return wrapper  # type: ignore
 
-    def get_effects(self):
+    def get_effects(self) -> list[_Meta]:
         metas = [getattr(d, "__effect__", None) for d in self._disposables]
         return [m for m in metas if m is not None]
 
