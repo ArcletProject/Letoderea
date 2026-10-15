@@ -138,20 +138,19 @@ def _compile_single(param: CompileParam, providers: list[Provider | ProviderFact
         elif _provider.validate(param):
             param.providers.append(_provider)
     param.providers.sort(key=lambda x: x.priority)
-    if get_origin(anno) is Annotated:
-        org, *meta = get_args(anno)
-        for m in reversed(meta):
+    if param.meta:
+        for m in reversed(param.meta):
             if isinstance(m, Depend):
                 param.depend = m.fork(providers)
                 break
             if isinstance(m, Provider):
                 param.providers.insert(0, m)
             elif isinstance(m, str):
-                param.providers.insert(0, provide(org, name, lambda x: x.get(m)))
+                param.providers.insert(0, provide(anno, name, lambda x: x.get(m)))
             elif isinstance(m, Deref):
-                param.providers.insert(0, provide(org, name, generate(m)))
+                param.providers.insert(0, provide(anno, name, generate(m)))
             elif callable(m):
-                param.providers.insert(0, provide(org, name, m))
+                param.providers.insert(0, provide(anno, name, m))
     if isinstance(param.default, Deref):
         param.providers.insert(0, provide(anno, name, generate(param.default)))
         param.default = Empty
@@ -164,7 +163,10 @@ def _compile_single(param: CompileParam, providers: list[Provider | ProviderFact
 def _compile(target: Callable, providers: list[Provider | ProviderFactory]) -> list[CompileParam]:
     res = []
     for name, anno, default in signatures(target):
-        res.append(_compile_single(CompileParam(name, anno, default, [], None, None), providers))
+        meta = []
+        if get_origin(anno) is Annotated:
+            anno, *meta = get_args(anno)
+        res.append(_compile_single(CompileParam(name, anno, default, tuple(meta), [], None, None), providers))
     return res
 
 
@@ -513,7 +515,10 @@ def get_params(ctx: Contexts | Subscriber | None = None):  # pragma: no cover
 
 class ParamDepend(Depend):
     def __init__(self, name: str, anno: Any = Empty, default: Any = Empty, cache: bool = False):
-        self.param = CompileParam(name, anno, default, [], None, None)
+        meta = []
+        if anno is not Empty and get_origin(anno) is Annotated:
+            anno, *meta = get_args(anno)
+        self.param = CompileParam(name, anno, default, tuple(meta), [], None, None)
         super().__init__(self.param.solve, cache)
 
     def fork(self, provider: list[Provider | ProviderFactory]):

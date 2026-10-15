@@ -24,6 +24,8 @@ class Param:
     name: str
     annotation: Any
     default: Any
+    meta: tuple[Any, ...]
+    """当 annotation 为 `Annotated` 时，meta 为其附加的元信息"""
     providers: list[Provider]
     """该参数下已有的其他 Provider"""
 
