@@ -205,7 +205,7 @@ class Subscriber(Generic[R]):
         self.id = str(uuid4())
         self.priority = priority
         self.skip_req_missing = skip_req_missing
-        self.auxiliaries = {}
+        self.local_use = {}
         providers = providers or []
         self.providers = [p() if isinstance(p, type) else p for p in providers]
         self._propagates: list[Subscriber] = []
@@ -222,7 +222,9 @@ class Subscriber(Generic[R]):
         self.is_agen = False
         self._tasks: set[asyncio.Task] = set()
         self._recompile()
-        self._disposes: list[Callable[[Self], Any]] = [dispose] if dispose else []
+        self._disposes: list[Callable[[Self], Any]] = [lambda s: s.local_use.clear()]
+        if dispose:
+            self._disposes.append(dispose)
 
         if hasattr(callable_target, "__propagates__"):
             for slot in getattr(callable_target, "__propagates__", []):
@@ -314,6 +316,7 @@ class Subscriber(Generic[R]):
                     continue
                 tasks.update(res)
             self._disposes.clear()
+        self.local_use.clear()
         while self._propagates:  # pragma: no cover
             if res := self._propagates[0].dispose():
                 tasks |= res
@@ -513,10 +516,23 @@ def get_params(ctx: Contexts | Subscriber | None = None):  # pragma: no cover
     return sub.params
 
 
+def local_use(ctx: Contexts | Subscriber | None = None) -> dict[str, Any]:  # pragma: no cover
+    if isinstance(ctx, dict):
+        sub = ctx[SUBSCRIBER]
+    elif isinstance(ctx, Subscriber):
+        sub = ctx
+    else:
+        try:
+            sub = current_subscriber.get()
+        except LookupError:
+            raise TypeError(f"Unsupported type {type(ctx)}") from None
+    return sub.local_use
+
+
 class ParamDepend(Depend):
     def __init__(self, name: str, anno: Any = Empty, default: Any = Empty, cache: bool = False):
         meta = []
-        if anno is not Empty and get_origin(anno) is Annotated:
+        if anno is not Empty and get_origin(anno) is Annotated:  # pragma: no cover
             anno, *meta = get_args(anno)
         self.param = CompileParam(name, anno, default, tuple(meta), [], None, None)
         super().__init__(self.param.solve, cache)

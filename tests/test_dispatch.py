@@ -37,12 +37,12 @@ class TestEvent1:
 @pytest.mark.asyncio
 async def test_param_solve():
     from arclet.letoderea.subscriber import CompileParam
-    p = CompileParam("p", None, None, [], None, None)
+    p = CompileParam("p", None, None, (), [], None, None)
     assert await p.solve({"p": "1"}) == "1"
     pro = RandomProvider()
-    p1 = CompileParam("p", None, None, [pro], None, None)
+    p1 = CompileParam("p", None, None, (), [pro], None, None)
     assert await p1.solve({}) == "P_dispatcher"
-    f = CompileParam("f", None, None, [pro], None, None)
+    f = CompileParam("f", None, None, (), [pro], None, None)
     assert await f.solve({}) == "2"
 
 
@@ -52,7 +52,7 @@ async def test_unresolve():
     from arclet.letoderea.exceptions import UnresolvedRequirement
     from arclet.letoderea.subscriber import CompileParam, Empty
 
-    p = CompileParam("p", None, Empty, [], None, None)
+    p = CompileParam("p", None, Empty, (), [], None, None)
     with pytest.raises(UnresolvedRequirement):
         await p.solve({})
 

@@ -61,10 +61,8 @@ async def test_check():
             else:
                 t = anno
             documentation = ""
-            if get_origin(t) is Annotated:  # pragma: no cover
-                t, *meta = get_args(t)
-                if doc := next((i for i in meta if isinstance(i, Doc)), None):
-                    documentation = doc.documentation
+            if param.meta and (doc := next((i for i in param.meta if isinstance(i, Doc)), None)):
+                documentation = doc.documentation
             properties[param.name] = {
                 "title": param.name.title(),
                 "type": mapping.get(get_origin(t), "object"),

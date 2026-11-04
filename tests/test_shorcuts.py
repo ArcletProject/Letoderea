@@ -3,7 +3,7 @@ from typing import Annotated
 
 import pytest
 
-from arclet.letoderea import bypass_if, enter_if, es, on, on_global, param, provide
+from arclet.letoderea import Contexts, local_use, enter_if, es, on, on_global, param, provide
 from arclet.letoderea.ref import deref
 
 
@@ -34,12 +34,31 @@ class ShortcutEvent1:
 
 
 @pytest.mark.asyncio
+async def test_local_use():
+
+    @on(ShortcutEvent)
+    async def s(flag: Annotated[bool, "flag"], ctx: Contexts):
+        vars_0 = local_use()
+        vars_1 = local_use(ctx)
+        assert vars_0 == vars_1
+        vars_0.setdefault("test", []).append(flag)
+
+    e1 = ShortcutEvent()
+    e1.flag = True
+    await es.publish(e1)
+    await es.publish(ShortcutEvent())
+
+    assert s.local_use["test"] == [True, False]
+
+
+
+@pytest.mark.asyncio
 async def test_annotated():
     executed = []
 
     @on(ShortcutEvent)
-    async def s(flag: Annotated[bool, "flag"]):
-        assert flag is False
+    async def s(event_flag: Annotated[bool, "flag"]):
+        assert event_flag is False
         executed.append(1)
 
     def func(x): return x["msg"] + "!"
