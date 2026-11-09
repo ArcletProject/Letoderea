@@ -139,8 +139,10 @@ class AsyncExitStackProvider(Provider[AsyncExitStack]):
     def validate(self, param: Param):
         return param.annotation is AsyncExitStack or is_optional(param.annotation, AsyncExitStack)
 
-    async def __call__(self, context: Contexts):
-        return context.get("$exit_stack")
+    async def __call__(self, context: Contexts):  # pragma: no cover
+        if "$exit_stack" not in context:
+            context["$exit_stack"] = AsyncExitStack()
+        return context["$exit_stack"]
 
 
 global_providers.extend([EventProvider(), ContextProvider(), AsyncExitStackProvider()])

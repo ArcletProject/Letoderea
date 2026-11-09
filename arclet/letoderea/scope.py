@@ -13,7 +13,7 @@ from tarina import ContextModel
 
 from .decorate import Check, bypass_if, enter_if
 from .effect import EffectManager
-from .provider import TProviders, global_providers
+from .provider import TProviders
 from .publisher import Publisher, _publishers, filter_publisher
 from .subscriber import Propagator, Subscriber
 from .utils import DisposableList
@@ -25,7 +25,6 @@ _scopes: dict[str, Scope] = {}
 
 
 scope_ctx: ContextModel[Scope] = ContextModel("scope_ctx")
-global_propagators: list[Propagator] = []
 
 
 @dataclass(slots=True, frozen=True)
@@ -183,9 +182,7 @@ class Scope(Generic[TWrapper]):
             event_providers = _pub.providers
             slots = (event, _pub)
 
-        _propagators: list[Propagator] = [*global_propagators, *self.propagators, *propagators]
-        _propagator_providers = [p for pro in _propagators for p in pro.providers()]
-        register_wrapper = self.wrapper_class()(self, slots, priority, [*global_providers, *event_providers, *self.providers, *providers, *_propagator_providers], _propagators, self._effect_manager, once, _skip_req_missing, label)
+        register_wrapper = self.wrapper_class()(self, slots, priority, [*event_providers, *self.providers, *providers], [*self.propagators, *propagators], self._effect_manager, once, _skip_req_missing, label)
         if func:
             register_wrapper._depth += 2
             return register_wrapper(func)

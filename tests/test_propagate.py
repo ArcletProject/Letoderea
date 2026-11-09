@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -397,3 +397,53 @@ async def test_propagator_recompile():
     s.propagate(RecompilePropagator())
     await le.core.run_handler(s, PropagateEvent("1"))
     assert executed == [2, 3, 4]
+
+
+@pytest.mark.asyncio
+async def test_propagator_providers_contextmanager():
+    executed = []
+
+    class Session:
+        def __init__(self, foo):
+            self.foo = foo
+
+        async def __aenter__(self):
+            executed.append(f"enter {self.foo}")
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            executed.append(f"exit {self.foo}")
+
+    class SessionProvider(le.Provider[Session]):
+        priority = 10
+
+        async def __call__(self, context: le.Contexts):
+            return context["$session"]
+
+    class SessionPropagator(le.Propagator):
+        def validate(self, subscriber: le.Subscriber):
+            params = subscriber.params
+            if any(issubclass(p.annotation, Session) for p in params):
+                return True
+            return False
+
+        def providers(self):
+            return [SessionProvider()]
+
+        async def supply(self, ctx: le.Contexts, stack: AsyncExitStack):
+            session = await stack.enter_async_context(Session("test"))
+            return {"$session": session}
+
+        def compose(self):
+            yield self.supply, True, 20
+
+    @le.on(PropagateEvent).propagate(SessionPropagator())
+    async def s(session: Session):
+        executed.append(f"session {session.foo}")
+
+    @le.on(PropagateEvent, priority=20).propagate(SessionPropagator())
+    async def s1(event: PropagateEvent):
+        executed.append(f"event {event.foo}")
+
+    await le.publish(PropagateEvent("test"))
+    assert executed == ["enter test", "session test", "exit test", "event test"]

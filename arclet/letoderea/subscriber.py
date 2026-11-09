@@ -29,7 +29,7 @@ from .exceptions import (
     UnresolvedRequirement,
     _ExitException,
 )
-from .provider import Param, Provider, ProviderFactory, TProviders, provide
+from .provider import Param, Provider, ProviderFactory, TProviders, provide, global_providers
 from .utils import Force, Result, TTarget
 
 R = TypeVar("R")
@@ -39,6 +39,7 @@ STACK = CtxItem[AsyncExitStack[Any]].make("$exit_stack")
 SUBSCRIBER: CtxItem[Subscriber] = CtxItem.make("$subscriber")
 
 current_subscriber: ContextVar[Subscriber] = ContextVar("_current_subscriber")
+global_propagators: list[Propagator] = []
 
 
 class ResultProvider(Provider[Any]):
@@ -206,8 +207,7 @@ class Subscriber(Generic[R]):
         self.priority = priority
         self.skip_req_missing = skip_req_missing
         self.local_use = {}
-        providers = providers or []
-        self.providers = [p() if isinstance(p, type) else p for p in providers]
+        self.providers = [p() if isinstance(p, type) else p for p in [*global_providers, *(providers or [])]]
         self._propagates: list[Subscriber] = []
         self._propagator_cache: WeakSet[Propagator] = WeakSet()
         self._cursor = 0
@@ -225,6 +225,9 @@ class Subscriber(Generic[R]):
         self._disposes: list[Callable[[Self], Any]] = [lambda s: s.local_use.clear()]
         if dispose:
             self._disposes.append(dispose)
+
+        for pro in global_propagators:
+            self.propagate(pro)
 
         if hasattr(callable_target, "__propagates__"):
             for slot in getattr(callable_target, "__propagates__", []):
@@ -335,7 +338,6 @@ class Subscriber(Generic[R]):
         token = current_subscriber.set(self)
         if not inner:
             context[SUBSCRIBER] = self
-            context[STACK] = AsyncExitStack()
         try:
             if self._cursor and (ans := await self._run_propagate(context, self._propagates[: self._cursor])):
                 return ans
@@ -343,7 +345,7 @@ class Subscriber(Generic[R]):
             for param in self.params:
                 arguments[param.name] = await param.depend(context) if param.depend else await param.solve(context)
             if self.is_cm:
-                stack: AsyncExitStack = context[STACK]
+                stack = context.setdefault(STACK, AsyncExitStack())
                 result = await stack.enter_async_context(self._execute(**arguments))
             elif self.is_agen:
                 result = self._execute(**arguments)
@@ -369,7 +371,7 @@ class Subscriber(Generic[R]):
         finally:
             current_subscriber.reset(token)  # type: ignore
             if not inner:
-                if STACK in context:  # pragma: no cover
+                if STACK in context:
                     typ, e, tb = sys.exc_info()
                     await context[STACK].__aexit__(typ, e, tb)
                 context.clear()

@@ -20,7 +20,6 @@ TC = TypeVar("TC")
 T1 = TypeVar("T1")
 _scopes: dict[str, Scope]
 scope_ctx: ContextModel[Scope]
-global_propagators: list[Propagator]
 
 
 @dataclass(slots=True, frozen=True)

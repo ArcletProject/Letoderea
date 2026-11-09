@@ -49,5 +49,6 @@ from .subscriber import depends as depends
 from .subscriber import get_params as get_params
 from .subscriber import param as param
 from .subscriber import local_use as local_use
+from .subscriber import global_propagators as global_propagators
 from .utils import Force as Force
 from .utils import Result as Result
